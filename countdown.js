@@ -64,3 +64,55 @@
     // Update every second
     setInterval(updateCountdown, 1000);
 })();
+
+// Email Signup Form Handler
+(function() {
+    const form = document.getElementById('signup-form');
+    const emailInput = document.getElementById('email-input');
+    const submitBtn = document.getElementById('submit-btn');
+    const widgetPanel = document.querySelector('.widget-panel');
+    const successMessage = document.getElementById('success-message');
+
+    // Google Apps Script Web App URL (same as spooky-agent)
+    const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzA6B_i4IACy-EcDsz_bdMu5wHmJ-pNe-z2rUl67xevVgRWP4svueHGNMs2l2A2DEGPDg/exec';
+
+    form.addEventListener('submit', async function(e) {
+        e.preventDefault();
+
+        const email = emailInput.value.trim();
+        if (!email) return;
+
+        // Disable form during submission
+        emailInput.disabled = true;
+        submitBtn.disabled = true;
+
+        try {
+            await fetch(GOOGLE_SCRIPT_URL, {
+                method: 'POST',
+                mode: 'no-cors',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ email })
+            });
+
+            // Show success state
+            widgetPanel.classList.add('submitted');
+            successMessage.classList.add('visible');
+            emailInput.value = '';
+
+            // Reset after 3 seconds
+            setTimeout(() => {
+                widgetPanel.classList.remove('submitted');
+                successMessage.classList.remove('visible');
+                emailInput.disabled = false;
+                submitBtn.disabled = false;
+            }, 3000);
+
+        } catch (error) {
+            console.error('Error submitting email:', error);
+            emailInput.disabled = false;
+            submitBtn.disabled = false;
+        }
+    });
+})();

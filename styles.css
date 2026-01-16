@@ -234,6 +234,191 @@ body {
     text-shadow: 0 0 10px rgba(255, 215, 0, 0.8);
 }
 
+/* Email Signup Widget */
+.signup-widget {
+    max-width: 500px;
+    width: 90vw;
+}
+
+.widget-panel {
+    position: relative;
+    padding: 2.5rem;
+    background: linear-gradient(180deg, #1a1a1a 0%, #0d0d0d 100%);
+    border: 2px solid #333;
+    transition: border-color 0.5s ease;
+}
+
+.widget-panel.submitted {
+    border-color: #FF6B00;
+}
+
+/* Corner Brackets */
+.corner-bracket {
+    position: absolute;
+    width: 12px;
+    height: 12px;
+    transition: border-color 0.5s ease;
+}
+
+.corner-bracket.top-left {
+    top: 0;
+    left: 0;
+    border-top: 1px solid #555;
+    border-left: 1px solid #555;
+}
+
+.corner-bracket.top-right {
+    top: 0;
+    right: 0;
+    border-top: 1px solid #555;
+    border-right: 1px solid #555;
+}
+
+.corner-bracket.bottom-left {
+    bottom: 0;
+    left: 0;
+    border-bottom: 1px solid #555;
+    border-left: 1px solid #555;
+}
+
+.corner-bracket.bottom-right {
+    bottom: 0;
+    right: 0;
+    border-bottom: 1px solid #555;
+    border-right: 1px solid #555;
+}
+
+.widget-panel.submitted .corner-bracket {
+    border-color: #FF6B00;
+}
+
+/* Plus Signs */
+.plus-sign {
+    position: absolute;
+    font-size: 0.75rem;
+    color: #555;
+    transition: color 0.5s ease;
+}
+
+.plus-sign::before {
+    content: '+';
+}
+
+.plus-sign.top {
+    top: 0;
+    left: 50%;
+    transform: translate(-50%, -50%);
+}
+
+.plus-sign.bottom {
+    bottom: 0;
+    left: 50%;
+    transform: translate(-50%, 50%);
+}
+
+.plus-sign.left {
+    top: 50%;
+    left: 0;
+    transform: translate(-50%, -50%);
+}
+
+.plus-sign.right {
+    top: 50%;
+    right: 0;
+    transform: translate(50%, -50%);
+}
+
+.widget-panel.submitted .plus-sign {
+    color: #FF6B00;
+}
+
+/* Success Message */
+.success-message {
+    position: absolute;
+    inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    background: rgba(13, 13, 13, 0.95);
+    z-index: 10;
+}
+
+.success-message.visible {
+    display: flex;
+    animation: pulse-glow 2s ease-in-out infinite;
+}
+
+.success-message span {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #FFD700;
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+    text-shadow: 0 0 20px rgba(255, 215, 0, 0.5);
+}
+
+/* Input Container */
+.input-container {
+    display: flex;
+    align-items: stretch;
+    border: 1px solid #555;
+    background: #0a0a0a;
+    height: 3.5rem;
+    transition: border-color 0.5s ease;
+}
+
+.widget-panel.submitted .input-container {
+    border-color: #FF6B00;
+}
+
+.input-container input {
+    flex: 1;
+    padding: 0 1rem;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: #888;
+    font-family: 'Titillium Web', monospace;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+}
+
+.input-container input::placeholder {
+    color: #555;
+}
+
+.input-container input:disabled {
+    opacity: 0.5;
+}
+
+.input-container button {
+    padding: 0 1.5rem;
+    background: linear-gradient(180deg, #FF6B00 0%, #CC5500 100%);
+    border: none;
+    border-left: 1px solid #555;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.input-container button:hover {
+    background: linear-gradient(180deg, #FF8C00 0%, #FF6B00 100%);
+}
+
+.input-container button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.input-container button span {
+    color: #FFF;
+    font-family: 'Titillium Web', monospace;
+    font-size: 0.85rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
     .logo {
@@ -274,6 +459,31 @@ body {
 
     .countdown-group {
         min-width: 40px;
+    }
+
+    .widget-panel {
+        padding: 1.5rem;
+    }
+
+    .input-container {
+        flex-direction: column;
+        height: auto;
+    }
+
+    .input-container input {
+        height: 3rem;
+        text-align: center;
+    }
+
+    .input-container button {
+        height: 3rem;
+        border-left: none;
+        border-top: 1px solid #555;
+    }
+
+    .success-message span {
+        font-size: 1rem;
+        letter-spacing: 0.1em;
     }
 }
 
