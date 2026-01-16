@@ -1,0 +1,1187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Factorio Mission Control</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            /* Backgrounds - Layered depth */
+            --bg-deep: #0a0a0a;
+            --bg-base: #0d0d0d;
+            --bg-surface: #151515;
+            --bg-elevated: #1a1a1a;
+            --bg-hover: #222222;
+
+            /* Text hierarchy */
+            --text-primary: #e8e8e8;
+            --text-secondary: #a0a0a0;
+            --text-muted: #606060;
+
+            /* Factorio orange accent */
+            --accent: #ff6b00;
+            --accent-dim: #cc5500;
+            --accent-glow: rgba(255, 107, 0, 0.15);
+            --accent-subtle: rgba(255, 107, 0, 0.08);
+
+            /* Status colors */
+            --status-success: #4caf50;
+            --status-warning: #ff9800;
+            --status-error: #f44336;
+            --status-idle: #555555;
+
+            /* Typography */
+            --font-mono: 'JetBrains Mono', 'SF Mono', 'Consolas', monospace;
+            --font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+
+            /* Spacing */
+            --space-xs: 4px;
+            --space-sm: 8px;
+            --space-md: 12px;
+            --space-lg: 16px;
+            --space-xl: 24px;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: var(--bg-deep);
+            color: var(--text-primary);
+            font-family: var(--font-ui);
+            font-size: 14px;
+            line-height: 1.4;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* ===== HEADER BAR ===== */
+        .header {
+            background: var(--bg-base);
+            border-bottom: 1px solid var(--accent);
+            padding: 0 var(--space-lg);
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .header-title {
+            font-family: var(--font-mono);
+            font-weight: 600;
+            font-size: 13px;
+            color: var(--accent);
+            letter-spacing: 1px;
+            display: flex;
+            align-items: center;
+            gap: var(--space-sm);
+        }
+
+        .header-title::before {
+            content: '';
+            width: 8px;
+            height: 8px;
+            background: var(--accent);
+            border-radius: 2px;
+        }
+
+        .header-status {
+            display: flex;
+            align-items: center;
+            gap: var(--space-lg);
+            font-family: var(--font-mono);
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+
+        .status-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .status-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: var(--status-success);
+        }
+
+        .status-dot.offline { background: var(--status-error); }
+        .status-dot.warning { background: var(--status-warning); }
+
+        .status-dot.pulse {
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+
+        /* ===== HERO METRICS ===== */
+        .hero-metrics {
+            background: var(--bg-base);
+            border-bottom: 1px solid #1f1f1f;
+            padding: var(--space-md) var(--space-lg);
+            display: flex;
+            gap: var(--space-xl);
+        }
+
+        .metric-card {
+            flex: 1;
+            max-width: 160px;
+        }
+
+        .metric-label {
+            font-family: var(--font-mono);
+            font-size: 10px;
+            font-weight: 500;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 2px;
+        }
+
+        .metric-value {
+            font-family: var(--font-mono);
+            font-size: 24px;
+            font-weight: 600;
+            color: var(--text-primary);
+            line-height: 1.1;
+        }
+
+        .metric-value .unit {
+            font-size: 12px;
+            font-weight: 400;
+            color: var(--text-muted);
+            margin-left: 2px;
+        }
+
+        .metric-delta {
+            font-family: var(--font-mono);
+            font-size: 10px;
+            color: var(--text-muted);
+            margin-top: 2px;
+        }
+
+        .metric-delta.positive { color: var(--status-success); }
+        .metric-delta.negative { color: var(--status-error); }
+
+        .metric-spark {
+            height: 16px;
+            margin-top: 4px;
+            background: linear-gradient(to right, var(--accent-subtle), var(--accent-glow));
+            border-radius: 2px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .metric-spark-fill {
+            position: absolute;
+            left: 0;
+            top: 0;
+            height: 100%;
+            background: var(--accent);
+            opacity: 0.6;
+            border-radius: 2px;
+        }
+
+        /* ===== MAIN GRID ===== */
+        .main-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            grid-template-rows: auto auto;
+            gap: 1px;
+            background: #1a1a1a;
+            padding: 1px;
+        }
+
+        .panel {
+            background: var(--bg-base);
+            min-height: 280px;
+        }
+
+        .panel-header {
+            padding: var(--space-sm) var(--space-md);
+            border-bottom: 1px solid #1f1f1f;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .panel-title {
+            font-family: var(--font-mono);
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .panel-meta {
+            font-family: var(--font-mono);
+            font-size: 10px;
+            color: var(--text-muted);
+        }
+
+        .panel-content {
+            padding: var(--space-md);
+            height: calc(100% - 36px);
+            overflow: auto;
+        }
+
+        /* ===== FACTORY VIEW PANEL ===== */
+        .factory-view {
+            position: relative;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .factory-screenshot {
+            flex: 1;
+            background: var(--bg-deep);
+            border-radius: 4px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .factory-screenshot img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+
+        .factory-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding-top: var(--space-sm);
+            font-family: var(--font-mono);
+            font-size: 10px;
+            color: var(--text-muted);
+        }
+
+        .live-indicator {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .live-indicator::before {
+            content: '';
+            width: 6px;
+            height: 6px;
+            background: var(--status-success);
+            border-radius: 50%;
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+
+        /* ===== PRODUCTION FLOW ===== */
+        .production-flow {
+            display: flex;
+            flex-direction: column;
+            gap: var(--space-md);
+        }
+
+        .flow-header {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: var(--space-sm);
+            padding-bottom: var(--space-sm);
+            border-bottom: 1px solid #1f1f1f;
+        }
+
+        .flow-stage-label {
+            font-family: var(--font-mono);
+            font-size: 9px;
+            font-weight: 500;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            text-align: center;
+        }
+
+        .flow-row {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: var(--space-sm);
+            align-items: center;
+        }
+
+        .flow-cell {
+            background: var(--bg-surface);
+            border-radius: 4px;
+            padding: var(--space-sm);
+            text-align: center;
+            position: relative;
+        }
+
+        .flow-cell::after {
+            content: '';
+            position: absolute;
+            right: -8px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 0;
+            height: 0;
+            border-top: 4px solid transparent;
+            border-bottom: 4px solid transparent;
+            border-left: 4px solid var(--text-muted);
+        }
+
+        .flow-cell:last-child::after {
+            display: none;
+        }
+
+        .flow-cell.empty {
+            background: transparent;
+        }
+
+        .flow-cell.empty::after {
+            border-left-color: transparent;
+        }
+
+        .flow-item-name {
+            font-family: var(--font-mono);
+            font-size: 10px;
+            color: var(--text-secondary);
+            margin-bottom: 4px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .flow-item-rate {
+            font-family: var(--font-mono);
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--accent);
+        }
+
+        .flow-item-rate .unit {
+            font-size: 9px;
+            font-weight: 400;
+            color: var(--text-muted);
+        }
+
+        .flow-bar {
+            height: 3px;
+            background: var(--bg-elevated);
+            border-radius: 2px;
+            margin-top: 4px;
+            overflow: hidden;
+        }
+
+        .flow-bar-fill {
+            height: 100%;
+            background: var(--accent);
+            border-radius: 2px;
+            transition: width 0.3s ease;
+        }
+
+        /* ===== ENTITY STATUS GRID ===== */
+        .entity-grid {
+            display: flex;
+            flex-direction: column;
+            gap: var(--space-md);
+        }
+
+        .entity-group {
+            background: var(--bg-surface);
+            border-radius: 4px;
+            padding: var(--space-sm) var(--space-md);
+        }
+
+        .entity-group-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: var(--space-sm);
+        }
+
+        .entity-group-name {
+            font-family: var(--font-mono);
+            font-size: 10px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .entity-group-count {
+            font-family: var(--font-mono);
+            font-size: 10px;
+            color: var(--text-muted);
+        }
+
+        .entity-tiles {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+
+        .entity-tile {
+            width: 44px;
+            height: 36px;
+            background: var(--bg-elevated);
+            border-radius: 3px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 2px;
+            border: 1px solid transparent;
+            transition: all 0.15s ease;
+        }
+
+        .entity-tile:hover {
+            background: var(--bg-hover);
+            border-color: var(--accent-dim);
+        }
+
+        .entity-tile .status-dot {
+            width: 5px;
+            height: 5px;
+        }
+
+        .entity-tile-value {
+            font-family: var(--font-mono);
+            font-size: 9px;
+            color: var(--text-muted);
+        }
+
+        .entity-tile.working { border-left: 2px solid var(--status-success); }
+        .entity-tile.idle { border-left: 2px solid var(--status-idle); }
+        .entity-tile.warning { border-left: 2px solid var(--status-warning); }
+        .entity-tile.error { border-left: 2px solid var(--status-error); }
+
+        .entity-summary {
+            display: flex;
+            gap: var(--space-md);
+            padding-top: var(--space-sm);
+            margin-top: var(--space-sm);
+            border-top: 1px solid #1f1f1f;
+            font-family: var(--font-mono);
+            font-size: 10px;
+            color: var(--text-muted);
+        }
+
+        .entity-summary-item {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        /* ===== AGENT ACTIVITY ===== */
+        .agent-panel {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+        }
+
+        .agent-tabs {
+            display: flex;
+            gap: 2px;
+            padding-bottom: var(--space-sm);
+            border-bottom: 1px solid #1f1f1f;
+            overflow-x: auto;
+        }
+
+        .agent-tab {
+            font-family: var(--font-mono);
+            font-size: 10px;
+            padding: 4px 10px;
+            background: var(--bg-surface);
+            border: 1px solid transparent;
+            border-radius: 3px;
+            color: var(--text-muted);
+            cursor: pointer;
+            white-space: nowrap;
+            transition: all 0.15s ease;
+        }
+
+        .agent-tab:hover {
+            background: var(--bg-elevated);
+            color: var(--text-secondary);
+        }
+
+        .agent-tab.active {
+            background: var(--accent);
+            color: var(--bg-deep);
+            font-weight: 500;
+        }
+
+        .agent-tab.has-activity {
+            border-color: var(--status-success);
+        }
+
+        .agent-output {
+            flex: 1;
+            background: var(--bg-deep);
+            border-radius: 4px;
+            margin-top: var(--space-sm);
+            padding: var(--space-sm);
+            overflow-y: auto;
+            font-family: var(--font-mono);
+            font-size: 11px;
+            line-height: 1.5;
+        }
+
+        .log-line {
+            display: flex;
+            gap: var(--space-sm);
+            padding: 2px 0;
+        }
+
+        .log-time {
+            color: var(--text-muted);
+            flex-shrink: 0;
+            font-size: 10px;
+        }
+
+        .log-content {
+            color: var(--text-secondary);
+            word-break: break-word;
+        }
+
+        .log-content.tool-call {
+            color: var(--accent);
+        }
+
+        .log-content.success {
+            color: var(--status-success);
+        }
+
+        .log-content.error {
+            color: var(--status-error);
+        }
+
+        /* ===== TIMELINE ===== */
+        .timeline {
+            background: var(--bg-base);
+            border-top: 1px solid #1f1f1f;
+            padding: var(--space-md) var(--space-lg);
+            height: 100px;
+        }
+
+        .timeline-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: var(--space-sm);
+        }
+
+        .timeline-title {
+            font-family: var(--font-mono);
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .timeline-track {
+            position: relative;
+            height: 50px;
+            background: var(--bg-surface);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .timeline-line {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            right: 20px;
+            height: 2px;
+            background: #2a2a2a;
+        }
+
+        .timeline-events {
+            position: absolute;
+            top: 0;
+            left: 20px;
+            right: 20px;
+            height: 100%;
+            display: flex;
+            align-items: flex-start;
+            padding-top: 14px;
+        }
+
+        .timeline-event {
+            position: absolute;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            cursor: pointer;
+            transition: transform 0.15s ease;
+        }
+
+        .timeline-event:hover {
+            transform: translateY(-2px);
+        }
+
+        .timeline-event-dot {
+            width: 12px;
+            height: 12px;
+            background: var(--accent);
+            border: 2px solid var(--bg-base);
+            border-radius: 50%;
+        }
+
+        .timeline-event-label {
+            font-family: var(--font-mono);
+            font-size: 9px;
+            color: var(--text-muted);
+            margin-top: 4px;
+            white-space: nowrap;
+            max-width: 60px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            text-align: center;
+        }
+
+        .timeline-event-time {
+            font-family: var(--font-mono);
+            font-size: 8px;
+            color: var(--text-muted);
+            opacity: 0.6;
+        }
+
+        .timeline-now {
+            position: absolute;
+            right: 10px;
+            top: 8px;
+            font-family: var(--font-mono);
+            font-size: 9px;
+            color: var(--accent);
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .timeline-now::before {
+            content: '';
+            width: 6px;
+            height: 6px;
+            background: var(--accent);
+            border-radius: 50%;
+            animation: pulse 1s ease-in-out infinite;
+        }
+
+        /* ===== SCROLLBAR ===== */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--bg-surface);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #333;
+            border-radius: 3px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--accent-dim);
+        }
+
+        /* ===== UTILITIES ===== */
+        .loading {
+            color: var(--text-muted);
+            font-style: italic;
+            font-size: 12px;
+        }
+
+        .error {
+            color: var(--status-error);
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <!-- HEADER -->
+    <header class="header">
+        <div class="header-title">FACTORIO MISSION CONTROL</div>
+        <div class="header-status">
+            <span id="current-time">--:--:--</span>
+            <div class="status-item">
+                <div class="status-dot pulse" id="fle-status"></div>
+                <span>FLE</span>
+            </div>
+            <div class="status-item">
+                <div class="status-dot pulse" id="gt-status"></div>
+                <span>GT</span>
+            </div>
+            <div class="status-item" id="agents-count">
+                <span>--/-- agents</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- HERO METRICS -->
+    <div class="hero-metrics">
+        <div class="metric-card">
+            <div class="metric-label">Iron / min</div>
+            <div class="metric-value" id="metric-iron">--<span class="unit">/m</span></div>
+            <div class="metric-delta" id="metric-iron-delta"></div>
+            <div class="metric-spark"><div class="metric-spark-fill" id="metric-iron-spark" style="width: 0%"></div></div>
+        </div>
+        <div class="metric-card">
+            <div class="metric-label">Copper / min</div>
+            <div class="metric-value" id="metric-copper">--<span class="unit">/m</span></div>
+            <div class="metric-delta" id="metric-copper-delta"></div>
+            <div class="metric-spark"><div class="metric-spark-fill" id="metric-copper-spark" style="width: 0%"></div></div>
+        </div>
+        <div class="metric-card">
+            <div class="metric-label">Power</div>
+            <div class="metric-value" id="metric-power">--<span class="unit">kW</span></div>
+            <div class="metric-delta" id="metric-power-delta"></div>
+            <div class="metric-spark"><div class="metric-spark-fill" id="metric-power-spark" style="width: 0%"></div></div>
+        </div>
+        <div class="metric-card">
+            <div class="metric-label">Research</div>
+            <div class="metric-value" id="metric-research">--%</div>
+            <div class="metric-delta" id="metric-research-name"></div>
+            <div class="metric-spark"><div class="metric-spark-fill" id="metric-research-spark" style="width: 0%"></div></div>
+        </div>
+        <div class="metric-card">
+            <div class="metric-label">Entities</div>
+            <div class="metric-value" id="metric-entities">--</div>
+            <div class="metric-delta" id="metric-entities-delta"></div>
+            <div class="metric-spark"><div class="metric-spark-fill" id="metric-entities-spark" style="width: 0%"></div></div>
+        </div>
+    </div>
+
+    <!-- MAIN GRID -->
+    <div class="main-grid">
+        <!-- Factory View -->
+        <div class="panel">
+            <div class="panel-header">
+                <span class="panel-title">Factory</span>
+                <span class="panel-meta" id="screenshot-time">--</span>
+            </div>
+            <div class="panel-content">
+                <div class="factory-view">
+                    <div class="factory-screenshot">
+                        <img id="factory-screenshot" src="" alt="Factory View">
+                    </div>
+                    <div class="factory-footer">
+                        <span id="player-position">Position: (-, -)</span>
+                        <span class="live-indicator">Live</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Production Flow -->
+        <div class="panel">
+            <div class="panel-header">
+                <span class="panel-title">Production Flow</span>
+                <span class="panel-meta">items/min</span>
+            </div>
+            <div class="panel-content">
+                <div class="production-flow" id="production-flow">
+                    <div class="flow-header">
+                        <div class="flow-stage-label">Mining</div>
+                        <div class="flow-stage-label">Smelting</div>
+                        <div class="flow-stage-label">Crafting</div>
+                        <div class="flow-stage-label">Output</div>
+                    </div>
+                    <div class="loading">Loading production data...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Entity Status -->
+        <div class="panel">
+            <div class="panel-header">
+                <span class="panel-title">Entities</span>
+                <span class="panel-meta" id="entity-total">-- total</span>
+            </div>
+            <div class="panel-content">
+                <div class="entity-grid" id="entity-grid">
+                    <div class="loading">Loading entities...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Agent Activity -->
+        <div class="panel">
+            <div class="panel-header">
+                <span class="panel-title">Agents</span>
+                <span class="panel-meta" id="agent-status">--</span>
+            </div>
+            <div class="panel-content">
+                <div class="agent-panel">
+                    <div class="agent-tabs" id="agent-tabs"></div>
+                    <div class="agent-output" id="agent-output">
+                        <div class="loading">Select an agent...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- TIMELINE -->
+    <div class="timeline">
+        <div class="timeline-header">
+            <span class="timeline-title">Timeline</span>
+        </div>
+        <div class="timeline-track">
+            <div class="timeline-line"></div>
+            <div class="timeline-events" id="timeline-events"></div>
+            <div class="timeline-now">NOW</div>
+        </div>
+    </div>
+
+    <script>
+        // State
+        let currentAgent = 'factorio/slit';
+        let polecatList = [];
+        let lastMetrics = {};
+
+        // ===== UTILITIES =====
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        async function fetchJSON(endpoint) {
+            try {
+                const resp = await fetch(endpoint);
+                return await resp.json();
+            } catch (e) {
+                return { error: e.message };
+            }
+        }
+
+        function formatNumber(n, decimals = 1) {
+            if (n === null || n === undefined || isNaN(n)) return '--';
+            return Number(n).toFixed(decimals);
+        }
+
+        // ===== HEADER =====
+        function updateTime() {
+            document.getElementById('current-time').textContent =
+                new Date().toLocaleTimeString('en-US', { hour12: false });
+        }
+
+        // ===== HERO METRICS =====
+        async function updateHeroMetrics() {
+            const metrics = await fetchJSON('/api/game/metrics');
+            const inventory = await fetchJSON('/api/game/inventory');
+            const entities = await fetchJSON('/api/game/entities/summary');
+
+            // Iron
+            const ironRate = metrics.output?.['iron-plate'] || 0;
+            document.getElementById('metric-iron').innerHTML =
+                `${formatNumber(ironRate)}<span class="unit">/m</span>`;
+            document.getElementById('metric-iron-spark').style.width =
+                `${Math.min(ironRate / 20 * 100, 100)}%`;
+
+            // Copper
+            const copperRate = metrics.output?.['copper-plate'] || 0;
+            document.getElementById('metric-copper').innerHTML =
+                `${formatNumber(copperRate)}<span class="unit">/m</span>`;
+            document.getElementById('metric-copper-spark').style.width =
+                `${Math.min(copperRate / 20 * 100, 100)}%`;
+
+            // Power (mock for now)
+            document.getElementById('metric-power').innerHTML = `--<span class="unit">kW</span>`;
+
+            // Research (mock for now)
+            document.getElementById('metric-research').textContent = '--%';
+
+            // Entities
+            const entityCount = entities.total || 0;
+            document.getElementById('metric-entities').textContent = entityCount;
+            document.getElementById('metric-entities-delta').textContent =
+                `${entities.working || 0} working`;
+            document.getElementById('metric-entities-spark').style.width =
+                `${Math.min(entityCount / 50 * 100, 100)}%`;
+        }
+
+        // ===== FACTORY VIEW =====
+        async function updateFactoryView() {
+            const data = await fetchJSON('/api/screenshots');
+            if (data.screenshots && data.screenshots.length > 0) {
+                const latest = data.screenshots[0];
+                const img = document.getElementById('factory-screenshot');
+                img.src = latest.url + '?t=' + Date.now();
+                document.getElementById('screenshot-time').textContent = latest.timestamp;
+            }
+
+            const pos = await fetchJSON('/api/game/position');
+            if (!pos.error) {
+                const x = pos.x?.toFixed(1) || pos.position?.x?.toFixed(1) || '-';
+                const y = pos.y?.toFixed(1) || pos.position?.y?.toFixed(1) || '-';
+                document.getElementById('player-position').textContent = `Position: (${x}, ${y})`;
+            }
+        }
+
+        // ===== PRODUCTION FLOW =====
+        async function updateProductionFlow() {
+            const metrics = await fetchJSON('/api/game/metrics');
+            const container = document.getElementById('production-flow');
+
+            // Build flow rows based on available data
+            const flows = [
+                {
+                    mining: { name: 'Iron Ore', rate: metrics.harvested?.['iron-ore'] || 0 },
+                    smelting: { name: 'Iron Plate', rate: metrics.output?.['iron-plate'] || 0 },
+                    crafting: { name: 'Gear', rate: metrics.crafted?.find(c => c.includes('gear'))?.split(':')[1] || 0 },
+                    output: { name: 'Storage', rate: 0 }
+                },
+                {
+                    mining: { name: 'Copper Ore', rate: metrics.harvested?.['copper-ore'] || 0 },
+                    smelting: { name: 'Copper Plate', rate: metrics.output?.['copper-plate'] || 0 },
+                    crafting: { name: 'Cable', rate: 0 },
+                    output: { name: 'Assembler', rate: 0 }
+                },
+                {
+                    mining: { name: 'Coal', rate: metrics.harvested?.['coal'] || 0 },
+                    smelting: null,
+                    crafting: null,
+                    output: { name: 'Fuel', rate: 0 }
+                }
+            ];
+
+            let html = `
+                <div class="flow-header">
+                    <div class="flow-stage-label">Mining</div>
+                    <div class="flow-stage-label">Smelting</div>
+                    <div class="flow-stage-label">Crafting</div>
+                    <div class="flow-stage-label">Output</div>
+                </div>
+            `;
+
+            for (const flow of flows) {
+                html += '<div class="flow-row">';
+                for (const stage of ['mining', 'smelting', 'crafting', 'output']) {
+                    const cell = flow[stage];
+                    if (cell) {
+                        const maxRate = 20;
+                        const pct = Math.min((cell.rate / maxRate) * 100, 100);
+                        html += `
+                            <div class="flow-cell">
+                                <div class="flow-item-name">${cell.name}</div>
+                                <div class="flow-item-rate">${formatNumber(cell.rate)}<span class="unit">/m</span></div>
+                                <div class="flow-bar"><div class="flow-bar-fill" style="width: ${pct}%"></div></div>
+                            </div>
+                        `;
+                    } else {
+                        html += '<div class="flow-cell empty"></div>';
+                    }
+                }
+                html += '</div>';
+            }
+
+            container.innerHTML = html;
+        }
+
+        // ===== ENTITY STATUS =====
+        async function updateEntityStatus() {
+            const data = await fetchJSON('/api/game/entities/summary');
+            const container = document.getElementById('entity-grid');
+
+            if (data.error || !data.groups) {
+                container.innerHTML = '<div class="loading">No entity data</div>';
+                return;
+            }
+
+            document.getElementById('entity-total').textContent = `${data.total || 0} total`;
+
+            let html = '';
+            for (const group of data.groups || []) {
+                html += `
+                    <div class="entity-group">
+                        <div class="entity-group-header">
+                            <span class="entity-group-name">${group.name}</span>
+                            <span class="entity-group-count">${group.entities?.length || 0}</span>
+                        </div>
+                        <div class="entity-tiles">
+                `;
+
+                for (const entity of group.entities || []) {
+                    const statusClass = entity.working ? 'working' : 'idle';
+                    const dotClass = entity.working ? '' : 'status-dot';
+                    html += `
+                        <div class="entity-tile ${statusClass}" title="${entity.name || ''}">
+                            <div class="status-dot" style="background: var(--status-${entity.working ? 'success' : 'idle'})"></div>
+                            <div class="entity-tile-value">${entity.fuel || '--'}%</div>
+                        </div>
+                    `;
+                }
+
+                html += `
+                        </div>
+                    </div>
+                `;
+            }
+
+            // Summary
+            html += `
+                <div class="entity-summary">
+                    <div class="entity-summary-item">
+                        <div class="status-dot" style="background: var(--status-success)"></div>
+                        <span>${data.working || 0} working</span>
+                    </div>
+                    <div class="entity-summary-item">
+                        <div class="status-dot" style="background: var(--status-idle)"></div>
+                        <span>${data.idle || 0} idle</span>
+                    </div>
+                </div>
+            `;
+
+            container.innerHTML = html;
+        }
+
+        // ===== AGENTS =====
+        async function updateAgents() {
+            const data = await fetchJSON('/api/gastown/polecats');
+
+            if (data.error) {
+                document.getElementById('gt-status').classList.add('offline');
+                return;
+            }
+
+            document.getElementById('gt-status').classList.remove('offline');
+            polecatList = data.polecats || [];
+
+            const activeCount = polecatList.filter(p => p.active).length;
+            document.getElementById('agents-count').innerHTML =
+                `<span>${activeCount}/${polecatList.length} agents</span>`;
+            document.getElementById('agent-status').textContent =
+                `${activeCount} active`;
+
+            // Tabs
+            const tabsContainer = document.getElementById('agent-tabs');
+            let tabsHtml = '';
+            for (const p of polecatList) {
+                const active = p.name === currentAgent ? 'active' : '';
+                const activity = p.active ? 'has-activity' : '';
+                tabsHtml += `
+                    <div class="agent-tab ${active} ${activity}" onclick="selectAgent('${p.name}')">
+                        ${p.short_name || p.name}
+                    </div>
+                `;
+            }
+            tabsContainer.innerHTML = tabsHtml;
+
+            await updateAgentOutput();
+        }
+
+        async function selectAgent(agent) {
+            currentAgent = agent;
+            await updateAgents();
+        }
+
+        async function updateAgentOutput() {
+            const container = document.getElementById('agent-output');
+            const data = await fetchJSON(`/api/gastown/peek/${currentAgent}`);
+
+            if (data.error || !data.output || data.output.length === 0) {
+                container.innerHTML = `<div class="loading">No active session for ${currentAgent}</div>`;
+                return;
+            }
+
+            let html = '';
+            for (const line of data.output) {
+                const time = new Date().toLocaleTimeString('en-US', {
+                    hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit'
+                });
+
+                let contentClass = '';
+                if (line.includes('place_entity') || line.includes('move_to') ||
+                    line.includes('connect_entities') || line.includes('insert_item')) {
+                    contentClass = 'tool-call';
+                } else if (line.includes('Placed') || line.includes('Created') ||
+                           line.includes('Connected') || line.includes('success')) {
+                    contentClass = 'success';
+                } else if (line.includes('Error') || line.includes('error') ||
+                           line.includes('Failed') || line.includes('failed')) {
+                    contentClass = 'error';
+                }
+
+                html += `
+                    <div class="log-line">
+                        <span class="log-content ${contentClass}">${escapeHtml(line)}</span>
+                    </div>
+                `;
+            }
+
+            container.innerHTML = html;
+            container.scrollTop = container.scrollHeight;
+        }
+
+        // ===== TIMELINE =====
+        async function updateTimeline() {
+            const data = await fetchJSON('/api/timeline');
+            const container = document.getElementById('timeline-events');
+
+            if (data.error || !data.events || data.events.length === 0) {
+                container.innerHTML = '';
+                return;
+            }
+
+            const events = data.events.slice(-10);
+            const width = container.offsetWidth - 40;
+            const spacing = width / (events.length + 1);
+
+            let html = '';
+            events.forEach((event, i) => {
+                const left = spacing * (i + 1);
+                html += `
+                    <div class="timeline-event" style="left: ${left}px" title="${event.description || ''}">
+                        <div class="timeline-event-dot"></div>
+                        <div class="timeline-event-label">${event.label || ''}</div>
+                        <div class="timeline-event-time">${event.time || ''}</div>
+                    </div>
+                `;
+            });
+
+            container.innerHTML = html;
+        }
+
+        // ===== STATUS CHECKS =====
+        async function updateStatus() {
+            const fleData = await fetchJSON('/api/game/position');
+            document.getElementById('fle-status').classList.toggle('offline', !!fleData.error);
+        }
+
+        // ===== MAIN UPDATE LOOP =====
+        async function updateAll() {
+            await Promise.all([
+                updateStatus(),
+                updateHeroMetrics(),
+                updateFactoryView(),
+                updateProductionFlow(),
+                updateEntityStatus(),
+                updateAgents(),
+                updateTimeline()
+            ]);
+        }
+
+        // Initialize
+        updateTime();
+        setInterval(updateTime, 1000);
+        updateAll();
+        setInterval(updateAll, 5000);
+    </script>
+</body>
+</html>
