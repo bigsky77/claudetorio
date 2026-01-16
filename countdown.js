@@ -1,26 +1,9 @@
 // Countdown Timer for Claudetorio
-// Target: 3 days from now
+// Target: January 21, 2026
 
 (function() {
-    // Calculate target date: 3 days from now
-    const now = new Date();
-    const targetDate = new Date(now.getTime() + (3 * 24 * 60 * 60 * 1000));
-
-    // Store target in localStorage so it persists across refreshes
-    const storedTarget = localStorage.getItem('claudetorio-countdown-target');
-    let countdownTarget;
-
-    if (storedTarget) {
-        countdownTarget = new Date(parseInt(storedTarget, 10));
-        // If stored target has passed, reset to 3 days from now
-        if (countdownTarget <= new Date()) {
-            countdownTarget = targetDate;
-            localStorage.setItem('claudetorio-countdown-target', targetDate.getTime().toString());
-        }
-    } else {
-        countdownTarget = targetDate;
-        localStorage.setItem('claudetorio-countdown-target', targetDate.getTime().toString());
-    }
+    // Fixed launch date: January 21, 2026 at midnight PST
+    const countdownTarget = new Date('2026-01-21T00:00:00-08:00');
 
     // DOM elements
     const daysEl = document.getElementById('days');
