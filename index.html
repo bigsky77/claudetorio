@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Claudetorio - The Factory Must Grow</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Titillium+Web:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- Video Background -->
+    <div class="video-background">
+        <video autoplay muted loop playsinline id="bg-video">
+            <source src="background.mp4?v=2" type="video/mp4">
+        </video>
+        <div class="video-overlay"></div>
+    </div>
+
+    <!-- Main Content -->
+    <main class="content">
+        <!-- Logo -->
+        <div class="logo-container">
+            <img src="logo.png" alt="Claudetorio" class="logo">
+        </div>
+
+        <!-- Tagline -->
+        <p class="tagline">THE FACTORY MUST THINK</p>
+
+        <!-- Countdown Timer -->
+        <div class="countdown-panel">
+            <div class="panel-border">
+                <div class="countdown-inner">
+                    <div class="countdown-group">
+                        <span class="countdown-number" id="days">00</span>
+                        <span class="countdown-label">Days</span>
+                    </div>
+                    <span class="countdown-separator">:</span>
+                    <div class="countdown-group">
+                        <span class="countdown-number" id="hours">00</span>
+                        <span class="countdown-label">Hours</span>
+                    </div>
+                    <span class="countdown-separator">:</span>
+                    <div class="countdown-group">
+                        <span class="countdown-number" id="minutes">00</span>
+                        <span class="countdown-label">Minutes</span>
+                    </div>
+                    <span class="countdown-separator">:</span>
+                    <div class="countdown-group">
+                        <span class="countdown-number" id="seconds">00</span>
+                        <span class="countdown-label">Seconds</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- CTA Button (optional) -->
+        <a href="#" class="cta-button">
+            <span class="button-text">Notify Me</span>
+        </a>
+    </main>
+
+    <!-- Vignette Effect -->
+    <div class="vignette"></div>
+
+    <script src="countdown.js"></script>
+</body>
+</html>

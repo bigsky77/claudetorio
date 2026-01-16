@@ -1,0 +1,13 @@
+# Virtual environment
+.venv/
+
+# Source video files (too large)
+*.mov
+new-video.mov
+source-video.mov
+
+# OS files
+.DS_Store
+
+# Temp files
+*.tmp
