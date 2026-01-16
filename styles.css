@@ -223,7 +223,7 @@ body {
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.15em;
-    padding: 3rem 3rem 8rem 3rem;
+    padding: 1rem 2.5rem;
     border-radius: 2px;
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
     transition: all 0.2s ease;
@@ -275,6 +275,18 @@ body {
     .countdown-group {
         min-width: 40px;
     }
+}
+
+/* Bottom cover bar - hides developer logo */
+.bottom-cover {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 260px;
+    background: linear-gradient(180deg, transparent 0%, rgba(13, 13, 13, 0.95) 40%, #0d0d0d 100%);
+    pointer-events: none;
+    z-index: 5;
 }
 
 /* Reduced motion */
