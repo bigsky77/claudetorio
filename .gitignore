@@ -1,13 +1,34 @@
 # Virtual environment
 .venv/
+venv/
+ENV/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
 
 # Source video files (too large)
 *.mov
-new-video.mov
-source-video.mov
 
-# OS files
+# Logs
+*.log
+
+# OS
 .DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Environment
+.env
+.env.local
 
 # Temp files
 *.tmp
