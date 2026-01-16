@@ -1,0 +1,16 @@
+# Large source video files
+*.mov
+new-video.mov
+source-video.mov
+
+# Virtual environment
+.venv/
+
+# Original PNG with bad transparency
+tmprjs9_epn.png
+
+# Python script (not needed for deploy)
+fix_transparency.py
+
+# Git
+.git/
