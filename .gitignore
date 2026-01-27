@@ -1,0 +1,31 @@
+# Dependencies
+node_modules/
+.venv/
+__pycache__/
+*.pyc
+
+# Environment
+.env
+*.env.local
+
+# Data directories (runtime, not code)
+data/
+logs/
+saves/
+
+# Build artifacts
+.next/
+dist/
+build/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Nested git repos (external dependencies)
+fle/
