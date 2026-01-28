@@ -406,6 +406,18 @@ async def session_timeout_checker():
 
                 for session in expired:
                     print(f"Expiring session {session['session_id']} for {session['username']}")
+
+                    # Get final score before expiring
+                    score_data = await get_slot_score(session['slot'])
+                    final_score = score_data.get('score', 0)
+
+                    # Calculate playtime
+                    session_row = await conn.fetchrow(
+                        "SELECT started_at FROM sessions WHERE session_id = $1",
+                        session['session_id']
+                    )
+                    playtime_seconds = int((datetime.utcnow() - session_row['started_at'].replace(tzinfo=None)).total_seconds())
+
                     # Auto-save before expiring
                     save_name = f"autosave_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}"
                     save_path = config.SAVES_DIR / session['username'] / f"{save_name}.zip"
@@ -413,20 +425,28 @@ async def session_timeout_checker():
                     try:
                         await save_slot_state(session['slot'], save_path)
                         await conn.execute("""
-                            INSERT INTO saves (username, save_name, file_path, score_at_save)
-                            VALUES ($1, $2, $3, 0)
+                            INSERT INTO saves (username, save_name, file_path, score_at_save, playtime_seconds)
+                            VALUES ($1, $2, $3, $4, $5)
                             ON CONFLICT (username, save_name) DO UPDATE
-                            SET last_played = NOW()
-                        """, session['username'], save_name, str(save_path))
+                            SET last_played = NOW(), score_at_save = $4
+                        """, session['username'], save_name, str(save_path), final_score, playtime_seconds)
                     except Exception as e:
                         print(f"Error auto-saving: {e}")
 
-                    # Mark session as expired
+                    # Mark session as expired with final score
                     await conn.execute("""
                         UPDATE sessions
-                        SET status = 'expired', ended_at = NOW()
+                        SET status = 'expired', ended_at = NOW(), final_score = $2
                         WHERE session_id = $1
-                    """, session['session_id'])
+                    """, session['session_id'], final_score)
+
+                    # Update user's best score
+                    await conn.execute("""
+                        UPDATE users
+                        SET best_score = GREATEST(best_score, $1),
+                            total_playtime_seconds = total_playtime_seconds + $2
+                        WHERE username = $3
+                    """, final_score, playtime_seconds, session['username'])
 
                     await release_slot_lock(session['slot'])
 
