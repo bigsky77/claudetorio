@@ -3,6 +3,7 @@ set -e
 
 # Configuration - UPDATE THIS
 SERVER="https://app.claudetorio.ai"
+FLE_REPO="git+https://github.com/bigsky77/factorio-learning-environment.git"
 
 # Colors
 RED='\033[0;31m'
@@ -20,6 +21,31 @@ echo -e "${NC}"
 # Check dependencies
 command -v curl >/dev/null 2>&1 || { echo -e "${RED}Error: curl is required${NC}"; exit 1; }
 command -v jq >/dev/null 2>&1 || { echo -e "${RED}Error: jq is required. Install with: sudo apt install jq${NC}"; exit 1; }
+command -v python3 >/dev/null 2>&1 || { echo -e "${RED}Error: python3 is required${NC}"; exit 1; }
+
+# Setup Python virtual environment and install FLE
+setup_fle() {
+    echo -e "${YELLOW}Setting up Factorio Learning Environment...${NC}"
+
+    # Create venv if it doesn't exist
+    if [ ! -d ".venv" ]; then
+        echo "Creating virtual environment..."
+        python3 -m venv .venv
+    fi
+
+    # Activate venv
+    source .venv/bin/activate
+
+    # Check if FLE is installed and has remote support
+    if python3 -c "from fle.commons.cluster_ips import get_local_container_ips; import os; os.environ['FLE_SERVER_HOST']='test'; get_local_container_ips()" 2>/dev/null; then
+        echo -e "${GREEN}FLE with remote support is installed${NC}"
+    else
+        echo "Installing FLE from Claudetorio fork..."
+        pip install --upgrade pip wheel >/dev/null 2>&1
+        pip install "${FLE_REPO}" 2>&1 | tail -5
+        echo -e "${GREEN}FLE installed successfully${NC}"
+    fi
+}
 
 # Check for existing session
 if [ -f .claudetorio_session ]; then
@@ -49,6 +75,9 @@ if [ -f .claudetorio_session ]; then
         rm .claudetorio_session
     fi
 fi
+
+# Setup FLE before claiming session
+setup_fle
 
 # Get username
 echo ""
@@ -106,7 +135,11 @@ MCP_CONFIG=$(echo "$RESPONSE" | jq '.mcp_config')
 # Save session info
 echo "$SESSION_ID" > .claudetorio_session
 
-# Generate Claude Code MCP config
+# Generate Claude Code MCP config - use .venv python
+# Update the MCP config to use the venv's python
+VENV_PYTHON="$(pwd)/.venv/bin/python"
+MCP_CONFIG=$(echo "$MCP_CONFIG" | jq --arg py "$VENV_PYTHON" '.mcpServers.factorio.command = $py')
+
 mkdir -p .claude
 echo "$MCP_CONFIG" > .claude/settings.json
 

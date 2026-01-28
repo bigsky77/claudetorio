@@ -1,0 +1,162 @@
+diff --git a/fle/cluster/run_envs.py b/fle/cluster/run_envs.py
+index bfb902a1..22940327 100755
+--- a/fle/cluster/run_envs.py
++++ b/fle/cluster/run_envs.py
+@@ -12,9 +12,9 @@ import zipfile
+ import importlib.resources as ir
+ from platformdirs import user_state_dir
+ 
+-START_RCON_PORT = 27000
++START_RCON_PORT = int(os.environ.get("FLE_RCON_PORT", 27000))
+ START_GAME_PORT = 34197
+-RCON_PASSWORD = "factorio"
++RCON_PASSWORD = os.environ.get("FLE_RCON_PASSWORD", "factorio")
+ 
+ 
+ def resolve_state_dir() -> Path:
+@@ -111,8 +111,6 @@ class ComposeGenerator:
+             "--map-settings /opt/factorio/config/map-settings.json",
+             "--server-adminlist /opt/factorio/config/server-adminlist.json",
+             "--server-banlist /opt/factorio/config/server-banlist.json",
+-            "--server-whitelist /opt/factorio/config/server-whitelist.json",
+-            "--use-server-whitelist",
+         ]
+         if self.scenario == "open_world":
+             args.append(f"--map-gen-seed {self.map_gen_seed}")
+@@ -190,7 +188,9 @@ class ComposeGenerator:
+             raise ValueError(f"Scenarios directory '{scenarios_dir}' does not exist.")
+         return {
+             "source": str(scenarios_dir.resolve()),
+-            "target": "/opt/factorio/scenarios",
++            # Use /factorio/scenarios instead of /opt/factorio/scenarios because
++            # /opt/factorio/scenarios is a symlink which cannot be mounted over
++            "target": "/factorio/scenarios",
+             "type": "bind",
+         }
+ 
+diff --git a/fle/commons/cluster_ips.py b/fle/commons/cluster_ips.py
+index b9dae22c..840e6d24 100644
+--- a/fle/commons/cluster_ips.py
++++ b/fle/commons/cluster_ips.py
+@@ -1,10 +1,31 @@
+ import subprocess
+ import json
++import os
+ from typing import List
+ 
+ 
+ def get_local_container_ips() -> tuple[List[str], List[int], List[int]]:
+-    """Get IP addresses of running Factorio containers in the local Docker setup."""
++    """Get IP addresses of running Factorio containers.
++
++    If FLE_SERVER_HOST and FLE_RCON_PORT environment variables are set,
++    uses those for remote connection instead of local Docker discovery.
++    """
++    # Check for remote server configuration via environment variables
++    remote_host = os.environ.get("FLE_SERVER_HOST")
++    remote_rcon_port = os.environ.get("FLE_RCON_PORT")
++
++    if remote_host and remote_rcon_port:
++        # Remote mode - use environment variables
++        try:
++            tcp_port = int(remote_rcon_port)
++            # Calculate UDP port from RCON port (UDP = RCON - 27000 + 34197)
++            udp_port = tcp_port - 27000 + 34197
++            return [remote_host], [udp_port], [tcp_port]
++        except ValueError:
++            print(f"Invalid FLE_RCON_PORT: {remote_rcon_port}")
++            return [], [], []
++
++    # Local mode - use Docker discovery
+     # Get container IDs for factorio containers
+     cmd = ["docker", "ps", "--filter", "name=factorio_", "--format", '"{{.ID}}"']
+     result = subprocess.run(cmd, capture_output=True, text=True)
+@@ -13,7 +34,7 @@ def get_local_container_ips() -> tuple[List[str], List[int], List[int]]:
+ 
+     if not container_ids or container_ids[0] == "":
+         print("No running Factorio containers found")
+-        return []
++        return [], [], []
+ 
+     ips = []
+     udp_ports = []
+diff --git a/fle/env/protocols/_mcp/state.py b/fle/env/protocols/_mcp/state.py
+index 9c863e9e..f2441505 100644
+--- a/fle/env/protocols/_mcp/state.py
++++ b/fle/env/protocols/_mcp/state.py
+@@ -1,15 +1,14 @@
+ import json
++import os
+ import time
+ from pathlib import Path
+ from typing import Dict, List, Optional, Any
+ 
+ from fle.env import FactorioInstance
+ from fle.commons.cluster_ips import get_local_container_ips
+-from fle.env.gym_env.registry import list_available_environments
+ 
+ from fle.env.protocols._mcp.models import FactorioServer, Recipe, ResourcePatch
+ from fle.env.protocols._mcp.repository import FactorioMCPRepository
+-import gym
+ 
+ 
+ class FactorioMCPState:
+@@ -36,11 +35,20 @@ class FactorioMCPState:
+         self.vcs_repos: Dict[
+             int, "FactorioMCPRepository"
+         ] = {}  # instance_id -> VCS repo
++        self.gym_env = None
+ 
++        # Skip gym initialization in remote mode (when FLE_SERVER_HOST is set)
++        # This allows the MCP server to work without local gym/gymnasium dependencies
++        if os.environ.get("FLE_SERVER_HOST"):
++            print("Remote mode: Skipping gym environment initialization", file=__import__('sys').stderr)
++            return
++
++        # Local mode - try to initialize gym environment
+         try:
++            from fle.env.gym_env.registry import list_available_environments
++            import gym
++
+             env_ids = list_available_environments()
+-            # print(f"DEBUG: Available environment IDs: {env_ids}")
+-            # print(f"DEBUG: Number of environments found: {len(env_ids)}")
+ 
+             if not env_ids:
+                 raise Exception("No environments found")
+@@ -52,32 +60,11 @@ class FactorioMCPState:
+                     self.gym_env.reset()
+                     return
+ 
+-            # print(f"DEBUG: No open environment found, using first available: {env_ids[0]}")
+             self.gym_env = gym.make(env_ids[0], run_idx=0)
+-
+-            # program = await self.create_program_from_policy(
+-            #     policy=policy,
+-            #     agent_idx=agent_idx,
+-            #     reward=reward,
+-            #     response=obs_dict["raw_text"],
+-            #     error_occurred=info["error_occurred"],
+-            #     game_state=output_game_state
+-            # )
+-            #
+-        except IndexError as e:
+-            print(f"IndexError in __init__: {e}")
+-            print(
+-                f"env_ids length: {len(env_ids) if 'env_ids' in locals() else 'Not available'}"
+-            )
+-            print("Falling back to steel_plate_throughput environment")
+-            self.gym_env = gym.make("steel_plate_throughput", run_idx=0)
++            self.gym_env.reset()
+         except Exception as e:
+-            print(f"Error in __init__: {e}")
+-            print(f"Error type: {type(e)}")
+-            print("Falling back to steel_plate_throughput environment")
+-            self.gym_env = gym.make("steel_plate_throughput", run_idx=0)
+-
+-        self.gym_env.reset()
++            print(f"Warning: Could not initialize gym environment: {e}", file=__import__('sys').stderr)
++            # In remote mode, this is fine - we don't need gym
+ 
+     def create_factorio_instance(self, instance_id: int) -> FactorioInstance:
+         """Create a single Factorio instance"""

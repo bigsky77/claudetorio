@@ -516,8 +516,8 @@ async def claim_session(request: ClaimRequest, background_tasks: BackgroundTasks
         mcp_config = {
             "mcpServers": {
                 "factorio": {
-                    "command": "fle",
-                    "args": ["mcp", "--port-offset", str(slot)],
+                    "command": "python",
+                    "args": ["-m", "fle.env.protocols._mcp"],
                     "env": {
                         "FLE_SERVER_HOST": config.SERVER_HOST,
                         "FLE_RCON_PORT": str(rcon_port),
