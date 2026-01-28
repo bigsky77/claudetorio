@@ -9,6 +9,7 @@ interface LeaderboardEntry {
   total_playtime_hours: number;
   sessions_played: number;
   last_played: string | null;
+  best_session_id: string | null;
 }
 
 interface ActiveSession {
@@ -600,6 +601,7 @@ export default function Home() {
         username: entry.username,
         score: entry.best_score,
         isLive: false,
+        session_id: entry.best_session_id || undefined,
         total_playtime_hours: entry.total_playtime_hours,
         sessions_played: entry.sessions_played,
       }));
@@ -742,14 +744,14 @@ export default function Home() {
                 {unifiedLeaderboard.map((entry, index) => (
                   <tr
                     key={entry.username}
-                    onClick={() => entry.isLive && entry.session_id && setSelectedSession({
+                    onClick={() => entry.session_id && setSelectedSession({
                       sessionId: entry.session_id,
                       username: entry.username,
-                      isLive: true,
+                      isLive: entry.isLive,
                     })}
                     className={`border-t border-gray-700 hover:bg-gray-700/50 ${
-                      entry.isLive ? 'bg-green-900/20 cursor-pointer' : ''
-                    }`}
+                      entry.isLive ? 'bg-green-900/20' : ''
+                    } ${entry.session_id ? 'cursor-pointer' : ''}`}
                   >
                     <td className="px-4 py-3">
                       {index < 3 ? (

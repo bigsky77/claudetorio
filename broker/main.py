@@ -89,6 +89,7 @@ class LeaderboardEntry(BaseModel):
     total_playtime_hours: float
     sessions_played: int
     last_played: Optional[datetime]
+    best_session_id: Optional[str] = None
 
 class UserSave(BaseModel):
     save_name: str
@@ -170,6 +171,18 @@ async def init_db():
                 recorded_at TIMESTAMPTZ DEFAULT NOW(),
                 score REAL,
                 items_produced JSONB
+            );
+
+            -- Session snapshots - stores full game state when session ends
+            CREATE TABLE IF NOT EXISTS session_snapshots (
+                session_id TEXT PRIMARY KEY REFERENCES sessions(session_id),
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                final_score REAL,
+                playtime_seconds INTEGER,
+                research_data JSONB,
+                production_data JSONB,
+                inventory_data JSONB,
+                factory_data JSONB
             );
 
             -- Indexes
@@ -596,6 +609,29 @@ async def release_session(session_id: str, request: ReleaseRequest):
         # Calculate playtime
         playtime_seconds = int((datetime.utcnow() - started_at.replace(tzinfo=None)).total_seconds())
 
+        # Capture game state snapshot before releasing
+        try:
+            research_data = _sync_get_research(slot)
+            production_data = _sync_get_production(slot)
+            inventory_data = _sync_get_inventory(slot)
+            factory_data = _sync_get_factory_data(slot)
+
+            # Store snapshot
+            await conn.execute("""
+                INSERT INTO session_snapshots
+                (session_id, final_score, playtime_seconds, research_data, production_data, inventory_data, factory_data)
+                VALUES ($1, $2, $3, $4, $5, $6, $7)
+                ON CONFLICT (session_id) DO UPDATE
+                SET final_score = $2, playtime_seconds = $3, research_data = $4,
+                    production_data = $5, inventory_data = $6, factory_data = $7
+            """, session_id, final_score, playtime_seconds,
+                json.dumps(research_data), json.dumps(production_data),
+                json.dumps(inventory_data), json.dumps(factory_data))
+            print(f"Saved snapshot for session {session_id}")
+        except Exception as e:
+            print(f"Warning: Failed to capture snapshot for session {session_id}: {e}")
+            # Continue with release even if snapshot fails
+
         # Save if requested
         if request.save_name:
             save_path = config.SAVES_DIR / username / f"{request.save_name}.zip"
@@ -879,24 +915,6 @@ def _sync_get_entities_list(slot: int, radius: int = 50) -> dict:
         return {"entities": [], "total": 0, "error": str(e)}
 
 
-@app.get("/api/session/{session_id}/factory")
-async def get_session_factory(session_id: str, radius: int = 50):
-    """Get factory entity data for a session."""
-    async with db_pool.acquire() as conn:
-        session = await conn.fetchrow(
-            "SELECT slot, status FROM sessions WHERE session_id = $1",
-            session_id
-        )
-        if not session:
-            raise HTTPException(status_code=404, detail="Session not found")
-        if session['status'] != 'active':
-            raise HTTPException(status_code=400, detail="Session is not active")
-
-    # Get factory data synchronously (RCON uses signals)
-    factory_data = _sync_get_factory_data(session['slot'], radius)
-    return factory_data
-
-
 @app.get("/api/session/{session_id}/score")
 async def get_session_score(session_id: str):
     """Get detailed score breakdown for a session."""
@@ -958,7 +976,7 @@ async def download_session(session_id: str):
 
 @app.get("/api/session/{session_id}/inventory")
 async def get_session_inventory(session_id: str):
-    """Get player inventory for a session."""
+    """Get player inventory for a session (live or from snapshot)."""
     async with db_pool.acquire() as conn:
         session = await conn.fetchrow(
             "SELECT slot, status FROM sessions WHERE session_id = $1",
@@ -966,15 +984,23 @@ async def get_session_inventory(session_id: str):
         )
         if not session:
             raise HTTPException(status_code=404, detail="Session not found")
-        if session['status'] != 'active':
-            raise HTTPException(status_code=400, detail="Session is not active")
 
-    return _sync_get_inventory(session['slot'])
+        if session['status'] == 'active':
+            return _sync_get_inventory(session['slot'])
+        else:
+            # Get from snapshot
+            snapshot = await conn.fetchrow(
+                "SELECT inventory_data FROM session_snapshots WHERE session_id = $1",
+                session_id
+            )
+            if snapshot and snapshot['inventory_data']:
+                return json.loads(snapshot['inventory_data'])
+            return {"items": {}, "total": 0, "note": "No snapshot available"}
 
 
 @app.get("/api/session/{session_id}/research")
 async def get_session_research(session_id: str):
-    """Get research progress for a session."""
+    """Get research progress for a session (live or from snapshot)."""
     async with db_pool.acquire() as conn:
         session = await conn.fetchrow(
             "SELECT slot, status FROM sessions WHERE session_id = $1",
@@ -982,15 +1008,23 @@ async def get_session_research(session_id: str):
         )
         if not session:
             raise HTTPException(status_code=404, detail="Session not found")
-        if session['status'] != 'active':
-            raise HTTPException(status_code=400, detail="Session is not active")
 
-    return _sync_get_research(session['slot'])
+        if session['status'] == 'active':
+            return _sync_get_research(session['slot'])
+        else:
+            # Get from snapshot
+            snapshot = await conn.fetchrow(
+                "SELECT research_data FROM session_snapshots WHERE session_id = $1",
+                session_id
+            )
+            if snapshot and snapshot['research_data']:
+                return json.loads(snapshot['research_data'])
+            return {"current_research": None, "progress": 0, "researched": [], "note": "No snapshot available"}
 
 
 @app.get("/api/session/{session_id}/production")
 async def get_session_production(session_id: str):
-    """Get production statistics for a session."""
+    """Get production statistics for a session (live or from snapshot)."""
     async with db_pool.acquire() as conn:
         session = await conn.fetchrow(
             "SELECT slot, status FROM sessions WHERE session_id = $1",
@@ -998,15 +1032,47 @@ async def get_session_production(session_id: str):
         )
         if not session:
             raise HTTPException(status_code=404, detail="Session not found")
-        if session['status'] != 'active':
-            raise HTTPException(status_code=400, detail="Session is not active")
 
-    return _sync_get_production(session['slot'])
+        if session['status'] == 'active':
+            return _sync_get_production(session['slot'])
+        else:
+            # Get from snapshot
+            snapshot = await conn.fetchrow(
+                "SELECT production_data FROM session_snapshots WHERE session_id = $1",
+                session_id
+            )
+            if snapshot and snapshot['production_data']:
+                return json.loads(snapshot['production_data'])
+            return {"produced": {}, "consumed": {}, "net": {}, "note": "No snapshot available"}
+
+
+@app.get("/api/session/{session_id}/factory")
+async def get_session_factory(session_id: str, radius: int = 50):
+    """Get factory entity data for a session (live or from snapshot)."""
+    async with db_pool.acquire() as conn:
+        session = await conn.fetchrow(
+            "SELECT slot, status FROM sessions WHERE session_id = $1",
+            session_id
+        )
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        if session['status'] == 'active':
+            return _sync_get_factory_data(session['slot'], radius)
+        else:
+            # Get from snapshot
+            snapshot = await conn.fetchrow(
+                "SELECT factory_data FROM session_snapshots WHERE session_id = $1",
+                session_id
+            )
+            if snapshot and snapshot['factory_data']:
+                return json.loads(snapshot['factory_data'])
+            return {"total_entities": 0, "entity_counts": {}, "note": "No snapshot available"}
 
 
 @app.get("/api/session/{session_id}/entities")
 async def get_session_entities(session_id: str, radius: int = 50):
-    """Get detailed entity list for a session."""
+    """Get detailed entity list for a session (live only - too large to store)."""
     async with db_pool.acquire() as conn:
         session = await conn.fetchrow(
             "SELECT slot, status FROM sessions WHERE session_id = $1",
@@ -1015,7 +1081,7 @@ async def get_session_entities(session_id: str, radius: int = 50):
         if not session:
             raise HTTPException(status_code=404, detail="Session not found")
         if session['status'] != 'active':
-            raise HTTPException(status_code=400, detail="Session is not active")
+            return {"entities": [], "total": 0, "note": "Entity list only available for active sessions"}
 
     return _sync_get_entities_list(session['slot'], radius)
 
@@ -1061,7 +1127,10 @@ async def get_leaderboard(limit: int = 50):
                 u.best_score,
                 u.total_playtime_seconds,
                 COUNT(s.session_id) as sessions_played,
-                MAX(s.started_at) as last_played
+                MAX(s.started_at) as last_played,
+                (SELECT session_id FROM sessions
+                 WHERE username = u.username AND final_score = u.best_score
+                 ORDER BY ended_at DESC LIMIT 1) as best_session_id
             FROM users u
             LEFT JOIN sessions s ON s.username = u.username
             WHERE u.best_score > 0
@@ -1078,6 +1147,7 @@ async def get_leaderboard(limit: int = 50):
                 total_playtime_hours=row['total_playtime_seconds'] / 3600,
                 sessions_played=row['sessions_played'],
                 last_played=row['last_played'],
+                best_session_id=row['best_session_id'],
             )
             for i, row in enumerate(rows)
         ]
