@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 
 interface LeaderboardEntry {
   rank: number;
@@ -18,12 +18,32 @@ interface ActiveSession {
   started_at: string;
 }
 
+interface LiveSessionWithScore {
+  session_id: string;
+  username: string;
+  slot: number;
+  started_at: string;
+  current_score: number;
+}
+
 interface SystemStatus {
   total_slots: number;
   available_slots: number;
   active_sessions: ActiveSession[];
   total_users: number;
   total_sessions_all_time: number;
+}
+
+// Unified leaderboard entry - can be live or historical
+interface UnifiedLeaderboardEntry {
+  username: string;
+  score: number;
+  isLive: boolean;
+  // Historical fields
+  total_playtime_hours?: number;
+  sessions_played?: number;
+  // Live fields
+  started_at?: string;
 }
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || '';
@@ -46,6 +66,7 @@ function formatElapsedTime(startedAt: string): string {
 export default function Home() {
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [status, setStatus] = useState<SystemStatus | null>(null);
+  const [liveSessions, setLiveSessions] = useState<LiveSessionWithScore[]>([]);
   const [loading, setLoading] = useState(true);
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
   const [, setTick] = useState(0);
@@ -56,8 +77,48 @@ export default function Home() {
         fetch(`${API_BASE}/api/leaderboard`),
         fetch(`${API_BASE}/api/status`),
       ]);
-      setLeaderboard(await lbRes.json());
-      setStatus(await statusRes.json());
+      const leaderboardData = await lbRes.json();
+      const statusData: SystemStatus = await statusRes.json();
+
+      setLeaderboard(leaderboardData);
+      setStatus(statusData);
+
+      // Fetch current scores for all active sessions
+      if (statusData.active_sessions.length > 0) {
+        const sessionScores = await Promise.all(
+          statusData.active_sessions.map(async (session) => {
+            try {
+              const res = await fetch(`${API_BASE}/api/session/${session.session_id}`);
+              if (res.ok) {
+                const data = await res.json();
+                console.log(`Session ${session.username} score:`, data.current_score);
+                return {
+                  session_id: session.session_id,
+                  username: session.username,
+                  slot: session.slot,
+                  started_at: session.started_at,
+                  current_score: data.current_score || 0,
+                };
+              } else {
+                console.error(`Failed to fetch session ${session.session_id}:`, res.status);
+              }
+            } catch (err) {
+              console.error(`Error fetching session ${session.session_id}:`, err);
+            }
+            return {
+              session_id: session.session_id,
+              username: session.username,
+              slot: session.slot,
+              started_at: session.started_at,
+              current_score: 0,
+            };
+          })
+        );
+        setLiveSessions(sessionScores);
+      } else {
+        setLiveSessions([]);
+      }
+
       setLastUpdate(new Date());
     } catch (error) {
       console.error('Failed to fetch data:', error);
@@ -65,6 +126,33 @@ export default function Home() {
       setLoading(false);
     }
   }, []);
+
+  // Build unified leaderboard: merge historical + live, sorted by score
+  const unifiedLeaderboard = useMemo(() => {
+    const liveUsernames = new Set(liveSessions.map(s => s.username));
+
+    // Start with historical entries (excluding users who are currently live)
+    const historical: UnifiedLeaderboardEntry[] = leaderboard
+      .filter(entry => !liveUsernames.has(entry.username))
+      .map(entry => ({
+        username: entry.username,
+        score: entry.best_score,
+        isLive: false,
+        total_playtime_hours: entry.total_playtime_hours,
+        sessions_played: entry.sessions_played,
+      }));
+
+    // Add live sessions
+    const live: UnifiedLeaderboardEntry[] = liveSessions.map(session => ({
+      username: session.username,
+      score: session.current_score,
+      isLive: true,
+      started_at: session.started_at,
+    }));
+
+    // Combine and sort by score descending
+    return [...historical, ...live].sort((a, b) => b.score - a.score);
+  }, [leaderboard, liveSessions]);
 
   useEffect(() => {
     fetchData();
@@ -129,7 +217,7 @@ export default function Home() {
           </div>
         )}
 
-        {/* Active Sessions */}
+        {/* Live Games */}
         {status && status.active_sessions.length > 0 && (
           <div className="mb-8">
             <h2 className="text-2xl font-bold mb-4 flex items-center">
@@ -140,7 +228,7 @@ export default function Home() {
               </span>
             </h2>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {status.active_sessions.map((session) => (
+              {liveSessions.map((session) => (
                 <div
                   key={session.session_id}
                   className="bg-gray-800 rounded-lg p-4 border border-green-500/30 hover:border-green-500/50 transition-colors"
@@ -150,6 +238,9 @@ export default function Home() {
                     <div className="text-green-400 font-mono text-sm">
                       {formatElapsedTime(session.started_at)}
                     </div>
+                  </div>
+                  <div className="text-2xl font-mono text-green-400 mt-2">
+                    {session.current_score.toLocaleString()}
                   </div>
                   <div className="text-gray-400 text-sm mt-1">
                     Slot {session.slot}
@@ -166,7 +257,7 @@ export default function Home() {
           </div>
         )}
 
-        {/* Leaderboard */}
+        {/* Unified Leaderboard */}
         <div>
           <h2 className="text-2xl font-bold mb-4">Leaderboard</h2>
           <div className="bg-gray-800 rounded-lg overflow-hidden">
@@ -175,46 +266,59 @@ export default function Home() {
                 <tr>
                   <th className="px-4 py-3 text-left">Rank</th>
                   <th className="px-4 py-3 text-left">Player</th>
-                  <th className="px-4 py-3 text-right">Best Score</th>
-                  <th className="px-4 py-3 text-right">Playtime</th>
-                  <th className="px-4 py-3 text-right">Sessions</th>
+                  <th className="px-4 py-3 text-right">Score</th>
+                  <th className="px-4 py-3 text-right">Status</th>
                 </tr>
               </thead>
               <tbody>
-                {leaderboard.map((entry) => (
+                {unifiedLeaderboard.map((entry, index) => (
                   <tr
                     key={entry.username}
-                    className="border-t border-gray-700 hover:bg-gray-700/50"
+                    className={`border-t border-gray-700 hover:bg-gray-700/50 ${
+                      entry.isLive ? 'bg-green-900/20' : ''
+                    }`}
                   >
                     <td className="px-4 py-3">
-                      {entry.rank <= 3 ? (
+                      {index < 3 ? (
                         <span className="text-2xl">
-                          {entry.rank === 1 && '1st'}
-                          {entry.rank === 2 && '2nd'}
-                          {entry.rank === 3 && '3rd'}
+                          {index === 0 && '1st'}
+                          {index === 1 && '2nd'}
+                          {index === 2 && '3rd'}
                         </span>
                       ) : (
-                        <span className="text-gray-400">#{entry.rank}</span>
+                        <span className="text-gray-400">#{index + 1}</span>
                       )}
                     </td>
-                    <td className="px-4 py-3 font-medium">{entry.username}</td>
-                    <td className="px-4 py-3 text-right font-mono text-orange-400">
-                      {entry.best_score.toLocaleString()}
+                    <td className="px-4 py-3 font-medium">
+                      <div className="flex items-center">
+                        {entry.isLive && (
+                          <span className="w-2 h-2 bg-green-500 rounded-full mr-2 animate-pulse"></span>
+                        )}
+                        {entry.username}
+                      </div>
                     </td>
-                    <td className="px-4 py-3 text-right text-gray-400">
-                      {entry.total_playtime_hours.toFixed(1)}h
+                    <td className={`px-4 py-3 text-right font-mono ${
+                      entry.isLive ? 'text-green-400' : 'text-orange-400'
+                    }`}>
+                      {entry.score.toLocaleString()}
                     </td>
-                    <td className="px-4 py-3 text-right text-gray-400">
-                      {entry.sessions_played}
+                    <td className="px-4 py-3 text-right">
+                      {entry.isLive ? (
+                        <span className="text-green-400 text-sm">
+                          Playing ({formatElapsedTime(entry.started_at!)})
+                        </span>
+                      ) : (
+                        <span className="text-gray-500 text-sm">
+                          {entry.sessions_played} sessions
+                        </span>
+                      )}
                     </td>
                   </tr>
                 ))}
-                {leaderboard.length === 0 && (
+                {unifiedLeaderboard.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="px-4 py-8 text-center text-gray-500">
-                      {status && status.active_sessions.length > 0
-                        ? 'Games in progress - scores update when sessions complete!'
-                        : 'No scores yet. Be the first to play!'}
+                    <td colSpan={4} className="px-4 py-8 text-center text-gray-500">
+                      No scores yet. Be the first to play!
                     </td>
                   </tr>
                 )}

@@ -199,33 +199,49 @@ def get_rcon_connection(slot: int) -> MCRcon:
 async def get_slot_score(slot: int) -> dict:
     """
     Query FLE for current production statistics.
-    Returns dict with score and production details.
+    Returns dict with score from FLE's production_score system.
     """
-    try:
-        # Use RCON to query game state
-        # This is a simplified version - actual implementation depends on FLE's Lua API
-        with get_rcon_connection(slot) as rcon:
-            # FLE should have commands to get production stats
-            # Example command (adjust based on FLE's actual API):
-            response = rcon.command("/silent-command rcon.print(game.json_encode(game.forces['player'].item_production_statistics.input_counts))")
+    # Run synchronously since RCON uses signals that don't work in thread pools
+    # RCON calls are fast enough that this is acceptable
+    return _sync_get_slot_score(slot)
 
-            # Parse response and calculate score
-            # For now, return placeholder
-            try:
-                data = json.loads(response) if response else {}
-                # Calculate science per minute or other metric
-                # This needs to be adjusted based on FLE's actual output
-                science_items = ['automation-science-pack', 'logistic-science-pack', 'military-science-pack',
-                                'chemical-science-pack', 'production-science-pack', 'utility-science-pack']
-                total_science = sum(data.get(item, 0) for item in science_items)
-                return {
-                    "score": total_science,
-                    "items": data
-                }
-            except json.JSONDecodeError:
-                return {"score": 0, "items": {}}
+
+def _sync_get_slot_score(slot: int) -> dict:
+    """Synchronous RCON call to get score."""
+    import re
+    try:
+        port = config.BASE_RCON_PORT + slot
+        # Create connection without using context manager to avoid signal issues
+        rcon = MCRcon("localhost", config.RCON_PASSWORD, port=port)
+        rcon.connect()
+        try:
+            # Call FLE's score action which returns production-based score
+            response = rcon.command("/silent-command rcon.print(global.actions.score())")
+        finally:
+            rcon.disconnect()
+
+        if not response:
+            return {"score": 0, "items": {}}
+
+        # Response format from FLE's dump() is like: { ["player"] = 12345, }
+        # Parse the Lua table format
+        try:
+            # Try to extract the player score from the Lua dump format
+            # Format: { ["player"] = 12345, }
+            match = re.search(r'\["player"\]\s*=\s*(-?\d+)', response)
+            if match:
+                score = int(match.group(1))
+                return {"score": score, "items": {}, "raw": response}
+
+            # Fallback: try parsing as JSON (in case format changes)
+            data = json.loads(response)
+            return {"score": data.get("player", 0), "items": data}
+        except (json.JSONDecodeError, ValueError):
+            # If all parsing fails, log and return 0
+            print(f"Could not parse score response for slot {slot}: {response[:200]}")
+            return {"score": 0, "items": {}, "raw": response}
     except Exception as e:
-        print(f"Error getting score for slot {slot}: {e}")
+        print(f"RCON error for slot {slot}: {e}")
         return {"score": 0, "items": {}, "error": str(e)}
 
 
