@@ -94,14 +94,17 @@ fi
 echo ""
 echo "Checking for existing saves..."
 SAVES=$(curl -s "$SERVER/api/users/$USERNAME/saves" 2>/dev/null || echo '[]')
-SAVE_COUNT=$(echo "$SAVES" | jq 'length')
 
+# Check if response is an array (not an error object)
 SAVE_NAME=""
-if [ "$SAVE_COUNT" -gt "0" ] && [ "$SAVE_COUNT" != "null" ]; then
-    echo -e "${GREEN}Found ${SAVE_COUNT} save(s):${NC}"
-    echo "$SAVES" | jq -r '.[] | "  -> \(.save_name) (score: \(.score_at_save | floor), \(.playtime_hours | floor)h played)"'
-    echo ""
-    read -p "Enter save name to resume (or press Enter for new game): " SAVE_NAME
+if echo "$SAVES" | jq -e 'type == "array"' > /dev/null 2>&1; then
+    SAVE_COUNT=$(echo "$SAVES" | jq 'length')
+    if [ "$SAVE_COUNT" -gt "0" ]; then
+        echo -e "${GREEN}Found ${SAVE_COUNT} save(s):${NC}"
+        echo "$SAVES" | jq -r '.[] | "  -> \(.save_name) (score: \(.score_at_save | floor), \(.playtime_hours | floor)h played)"'
+        echo ""
+        read -p "Enter save name to resume (or press Enter for new game): " SAVE_NAME
+    fi
 fi
 
 # Claim session
