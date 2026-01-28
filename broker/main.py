@@ -6,7 +6,11 @@ Integrates with FLE cluster via RCON for game control.
 """
 
 from fastapi import FastAPI, HTTPException, BackgroundTasks, WebSocket, WebSocketDisconnect
+from fastapi.responses import Response, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
+import base64
+import tempfile
+import io
 from pydantic import BaseModel, Field
 from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Any
@@ -662,6 +666,358 @@ async def get_session(session_id: str):
             current_score=current_score,
             status=session['status'],
         )
+
+
+def _sync_get_factory_data(slot: int, radius: int = 50) -> dict:
+    """Get factory state data from FLE via RCON."""
+    try:
+        port = config.BASE_RCON_PORT + slot
+        rcon = MCRcon("localhost", config.RCON_PASSWORD, port=port)
+        rcon.connect()
+        try:
+            # Get entity data from FLE
+            response = rcon.command(f"/silent-command rcon.print(game.table_to_json(global.actions.render(1, true, {radius}, 'none')))")
+        finally:
+            rcon.disconnect()
+
+        if not response or 'Error' in response:
+            return {"error": response or "No data returned"}
+
+        try:
+            data = json.loads(response)
+            # Count entities by type
+            entity_counts = {}
+            if 'entities' in data:
+                for entity in data['entities']:
+                    name = entity.get('name', 'unknown').strip('"')
+                    entity_counts[name] = entity_counts.get(name, 0) + 1
+
+            return {
+                "total_entities": len(data.get('entities', [])),
+                "entity_counts": entity_counts,
+                "has_water": len(data.get('water_runs', [])) > 0 if 'water_runs' in data else False,
+            }
+        except json.JSONDecodeError as e:
+            return {"error": f"JSON parse error: {str(e)}"}
+    except Exception as e:
+        print(f"Factory data error for slot {slot}: {e}")
+        return {"error": str(e)}
+
+
+def _sync_get_detailed_score(slot: int) -> dict:
+    """Get detailed score breakdown from FLE."""
+    import re
+    try:
+        port = config.BASE_RCON_PORT + slot
+        rcon = MCRcon("localhost", config.RCON_PASSWORD, port=port)
+        rcon.connect()
+        try:
+            # Get production stats
+            score_response = rcon.command("/silent-command rcon.print(global.actions.score())")
+        finally:
+            rcon.disconnect()
+
+        result = {"score": 0, "breakdown": {}}
+
+        if score_response:
+            # Parse player score
+            match = re.search(r'\["player"\]\s*=\s*(-?\d+)', score_response)
+            if match:
+                result["score"] = int(match.group(1))
+            result["raw"] = score_response
+
+        return result
+    except Exception as e:
+        print(f"Detailed score error for slot {slot}: {e}")
+        return {"score": 0, "error": str(e)}
+
+
+def _sync_get_inventory(slot: int) -> dict:
+    """Get player inventory from FLE."""
+    try:
+        port = config.BASE_RCON_PORT + slot
+        rcon = MCRcon("localhost", config.RCON_PASSWORD, port=port)
+        rcon.connect()
+        try:
+            response = rcon.command("/silent-command rcon.print(game.table_to_json(game.players[1].get_main_inventory().get_contents()))")
+        finally:
+            rcon.disconnect()
+
+        if not response or 'Error' in response:
+            return {"items": {}, "total": 0}
+
+        try:
+            items = json.loads(response)
+            return {
+                "items": items,
+                "total": sum(items.values()) if items else 0
+            }
+        except json.JSONDecodeError:
+            return {"items": {}, "total": 0, "error": "Parse error"}
+    except Exception as e:
+        print(f"Inventory error for slot {slot}: {e}")
+        return {"items": {}, "total": 0, "error": str(e)}
+
+
+def _sync_get_research(slot: int) -> dict:
+    """Get research progress from FLE."""
+    try:
+        port = config.BASE_RCON_PORT + slot
+        rcon = MCRcon("localhost", config.RCON_PASSWORD, port=port)
+        rcon.connect()
+        try:
+            # Get current research
+            current_response = rcon.command("/silent-command if game.forces.player.current_research then rcon.print(game.forces.player.current_research.name) else rcon.print('none') end")
+            progress_response = rcon.command("/silent-command rcon.print(game.forces.player.research_progress or 0)")
+
+            # Get list of researched technologies
+            researched_response = rcon.command("/silent-command local t={} for name,tech in pairs(game.forces.player.technologies) do if tech.researched then table.insert(t, name) end end rcon.print(game.table_to_json(t))")
+        finally:
+            rcon.disconnect()
+
+        result = {
+            "current_research": current_response.strip() if current_response and current_response.strip() != 'none' else None,
+            "progress": 0,
+            "researched": []
+        }
+
+        try:
+            result["progress"] = float(progress_response.strip()) if progress_response else 0
+        except ValueError:
+            pass
+
+        try:
+            if researched_response:
+                result["researched"] = json.loads(researched_response)
+        except json.JSONDecodeError:
+            pass
+
+        return result
+    except Exception as e:
+        print(f"Research error for slot {slot}: {e}")
+        return {"current_research": None, "progress": 0, "researched": [], "error": str(e)}
+
+
+def _sync_get_production(slot: int) -> dict:
+    """Get production statistics from FLE."""
+    try:
+        port = config.BASE_RCON_PORT + slot
+        rcon = MCRcon("localhost", config.RCON_PASSWORD, port=port)
+        rcon.connect()
+        try:
+            # Get item production input counts (produced)
+            produced_response = rcon.command("/silent-command rcon.print(game.table_to_json(game.forces.player.item_production_statistics.input_counts))")
+            # Get item production output counts (consumed)
+            consumed_response = rcon.command("/silent-command rcon.print(game.table_to_json(game.forces.player.item_production_statistics.output_counts))")
+        finally:
+            rcon.disconnect()
+
+        result = {"produced": {}, "consumed": {}, "net": {}}
+
+        try:
+            if produced_response and 'Error' not in produced_response:
+                result["produced"] = json.loads(produced_response)
+        except json.JSONDecodeError:
+            pass
+
+        try:
+            if consumed_response and 'Error' not in consumed_response:
+                result["consumed"] = json.loads(consumed_response)
+        except json.JSONDecodeError:
+            pass
+
+        # Calculate net production
+        all_items = set(result["produced"].keys()) | set(result["consumed"].keys())
+        for item in all_items:
+            produced = result["produced"].get(item, 0)
+            consumed = result["consumed"].get(item, 0)
+            net = produced - consumed
+            if net != 0:
+                result["net"][item] = net
+
+        return result
+    except Exception as e:
+        print(f"Production error for slot {slot}: {e}")
+        return {"produced": {}, "consumed": {}, "net": {}, "error": str(e)}
+
+
+def _sync_get_entities_list(slot: int, radius: int = 50) -> dict:
+    """Get detailed entity list from FLE."""
+    try:
+        port = config.BASE_RCON_PORT + slot
+        rcon = MCRcon("localhost", config.RCON_PASSWORD, port=port)
+        rcon.connect()
+        try:
+            response = rcon.command(f"/silent-command rcon.print(game.table_to_json(global.actions.render(1, true, {radius}, 'none')))")
+        finally:
+            rcon.disconnect()
+
+        if not response or 'Error' in response:
+            return {"entities": [], "total": 0}
+
+        try:
+            data = json.loads(response)
+            entities = data.get('entities', [])
+
+            # Clean up entity data
+            clean_entities = []
+            for e in entities[:200]:  # Limit to 200 entities for performance
+                clean_entities.append({
+                    "name": e.get('name', 'unknown').strip('"'),
+                    "position": e.get('position', {}),
+                    "direction": e.get('direction', 0),
+                })
+
+            return {
+                "entities": clean_entities,
+                "total": len(entities)
+            }
+        except json.JSONDecodeError:
+            return {"entities": [], "total": 0, "error": "Parse error"}
+    except Exception as e:
+        print(f"Entities list error for slot {slot}: {e}")
+        return {"entities": [], "total": 0, "error": str(e)}
+
+
+@app.get("/api/session/{session_id}/factory")
+async def get_session_factory(session_id: str, radius: int = 50):
+    """Get factory entity data for a session."""
+    async with db_pool.acquire() as conn:
+        session = await conn.fetchrow(
+            "SELECT slot, status FROM sessions WHERE session_id = $1",
+            session_id
+        )
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
+        if session['status'] != 'active':
+            raise HTTPException(status_code=400, detail="Session is not active")
+
+    # Get factory data synchronously (RCON uses signals)
+    factory_data = _sync_get_factory_data(session['slot'], radius)
+    return factory_data
+
+
+@app.get("/api/session/{session_id}/score")
+async def get_session_score(session_id: str):
+    """Get detailed score breakdown for a session."""
+    async with db_pool.acquire() as conn:
+        session = await conn.fetchrow(
+            "SELECT slot, status, username, started_at, final_score FROM sessions WHERE session_id = $1",
+            session_id
+        )
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+    if session['status'] == 'active':
+        score_data = _sync_get_detailed_score(session['slot'])
+        playtime_seconds = int((datetime.utcnow() - session['started_at'].replace(tzinfo=None)).total_seconds())
+    else:
+        score_data = {"score": session['final_score'] or 0}
+        playtime_seconds = 0  # Would need to calculate from session end time
+
+    return {
+        "session_id": session_id,
+        "username": session['username'],
+        "status": session['status'],
+        "score": score_data.get("score", 0),
+        "playtime_seconds": playtime_seconds,
+        "playtime_formatted": f"{playtime_seconds // 3600}h {(playtime_seconds % 3600) // 60}m",
+    }
+
+
+@app.get("/api/session/{session_id}/download")
+async def download_session(session_id: str):
+    """Download the current game state as a save file."""
+    async with db_pool.acquire() as conn:
+        session = await conn.fetchrow(
+            "SELECT slot, status, username FROM sessions WHERE session_id = $1",
+            session_id
+        )
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
+        if session['status'] != 'active':
+            raise HTTPException(status_code=400, detail="Session is not active - cannot download")
+
+    # Create a temporary save file
+    slot = session['slot']
+    username = session['username']
+    temp_dir = Path(tempfile.mkdtemp())
+    save_path = temp_dir / f"{username}_{session_id}.zip"
+
+    try:
+        await save_slot_state(slot, save_path)
+        return FileResponse(
+            path=save_path,
+            filename=f"{username}_{session_id}.zip",
+            media_type="application/zip"
+        )
+    except Exception as e:
+        print(f"Download error for session {session_id}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to create save file")
+
+
+@app.get("/api/session/{session_id}/inventory")
+async def get_session_inventory(session_id: str):
+    """Get player inventory for a session."""
+    async with db_pool.acquire() as conn:
+        session = await conn.fetchrow(
+            "SELECT slot, status FROM sessions WHERE session_id = $1",
+            session_id
+        )
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
+        if session['status'] != 'active':
+            raise HTTPException(status_code=400, detail="Session is not active")
+
+    return _sync_get_inventory(session['slot'])
+
+
+@app.get("/api/session/{session_id}/research")
+async def get_session_research(session_id: str):
+    """Get research progress for a session."""
+    async with db_pool.acquire() as conn:
+        session = await conn.fetchrow(
+            "SELECT slot, status FROM sessions WHERE session_id = $1",
+            session_id
+        )
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
+        if session['status'] != 'active':
+            raise HTTPException(status_code=400, detail="Session is not active")
+
+    return _sync_get_research(session['slot'])
+
+
+@app.get("/api/session/{session_id}/production")
+async def get_session_production(session_id: str):
+    """Get production statistics for a session."""
+    async with db_pool.acquire() as conn:
+        session = await conn.fetchrow(
+            "SELECT slot, status FROM sessions WHERE session_id = $1",
+            session_id
+        )
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
+        if session['status'] != 'active':
+            raise HTTPException(status_code=400, detail="Session is not active")
+
+    return _sync_get_production(session['slot'])
+
+
+@app.get("/api/session/{session_id}/entities")
+async def get_session_entities(session_id: str, radius: int = 50):
+    """Get detailed entity list for a session."""
+    async with db_pool.acquire() as conn:
+        session = await conn.fetchrow(
+            "SELECT slot, status FROM sessions WHERE session_id = $1",
+            session_id
+        )
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
+        if session['status'] != 'active':
+            raise HTTPException(status_code=400, detail="Session is not active")
+
+    return _sync_get_entities_list(session['slot'], radius)
 
 
 @app.websocket("/api/session/{session_id}/stream")
