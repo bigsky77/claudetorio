@@ -37,11 +37,12 @@ setup_fle() {
     source .venv/bin/activate
 
     # Check if FLE is installed and has remote support
-    if python3 -c "from fle.commons.cluster_ips import get_local_container_ips; import os; os.environ['FLE_SERVER_HOST']='test'; get_local_container_ips()" 2>/dev/null; then
-        echo -e "${GREEN}FLE with remote support is installed${NC}"
+    if python3 -c "from fle.env.protocols._mcp import mcp; import os; os.environ['FLE_SERVER_HOST']='test'" 2>/dev/null; then
+        echo -e "${GREEN}FLE with MCP support is installed${NC}"
     else
         echo "Installing FLE from Claudetorio fork..."
         pip install --upgrade pip wheel >/dev/null 2>&1
+        pip install fastmcp 2>&1 | tail -3
         pip install "${FLE_REPO}" 2>&1 | tail -5
         echo -e "${GREEN}FLE installed successfully${NC}"
     fi
@@ -145,6 +146,21 @@ echo "$MCP_CONFIG" > .claude/settings.json
 
 # Also create a standalone MCP config file
 echo "$MCP_CONFIG" > mcp-config.json
+
+# Test MCP server can import correctly
+echo ""
+echo -e "${YELLOW}Testing MCP server...${NC}"
+FLE_SERVER_HOST=$(echo "$MCP_CONFIG" | jq -r '.mcpServers.factorio.env.FLE_SERVER_HOST')
+FLE_RCON_PORT=$(echo "$MCP_CONFIG" | jq -r '.mcpServers.factorio.env.FLE_RCON_PORT')
+FLE_RCON_PASSWORD=$(echo "$MCP_CONFIG" | jq -r '.mcpServers.factorio.env.FLE_RCON_PASSWORD')
+
+export FLE_SERVER_HOST FLE_RCON_PORT FLE_RCON_PASSWORD
+if $VENV_PYTHON -c "from fle.env.protocols._mcp import mcp; print('MCP module loaded successfully')" 2>&1; then
+    echo -e "${GREEN}MCP server ready!${NC}"
+else
+    echo -e "${RED}MCP server failed to load. Try reinstalling:${NC}"
+    echo -e "  rm -rf .venv && ./connect.sh"
+fi
 
 echo ""
 echo -e "${GREEN}=============================================================${NC}"
