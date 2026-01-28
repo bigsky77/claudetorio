@@ -515,7 +515,7 @@ async def claim_session(request: ClaimRequest, background_tasks: BackgroundTasks
         # MCP config that users will put in their Claude Code settings
         mcp_config = {
             "mcpServers": {
-                "factorio": {
+                "factorio-fle": {
                     "command": "python",
                     "args": ["-m", "fle.env.protocols._mcp"],
                     "env": {

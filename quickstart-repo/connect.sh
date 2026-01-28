@@ -139,7 +139,7 @@ echo "$SESSION_ID" > .claudetorio_session
 # Generate Claude Code MCP config - use .venv python
 # Update the MCP config to use the venv's python
 VENV_PYTHON="$(pwd)/.venv/bin/python"
-MCP_CONFIG=$(echo "$MCP_CONFIG" | jq --arg py "$VENV_PYTHON" '.mcpServers.factorio.command = $py')
+MCP_CONFIG=$(echo "$MCP_CONFIG" | jq --arg py "$VENV_PYTHON" '.mcpServers["factorio-fle"].command = $py')
 
 mkdir -p .claude
 echo "$MCP_CONFIG" > .claude/settings.json
@@ -150,9 +150,9 @@ echo "$MCP_CONFIG" > mcp-config.json
 # Test MCP server can import correctly
 echo ""
 echo -e "${YELLOW}Testing MCP server...${NC}"
-FLE_SERVER_HOST=$(echo "$MCP_CONFIG" | jq -r '.mcpServers.factorio.env.FLE_SERVER_HOST')
-FLE_RCON_PORT=$(echo "$MCP_CONFIG" | jq -r '.mcpServers.factorio.env.FLE_RCON_PORT')
-FLE_RCON_PASSWORD=$(echo "$MCP_CONFIG" | jq -r '.mcpServers.factorio.env.FLE_RCON_PASSWORD')
+FLE_SERVER_HOST=$(echo "$MCP_CONFIG" | jq -r '.mcpServers["factorio-fle"].env.FLE_SERVER_HOST')
+FLE_RCON_PORT=$(echo "$MCP_CONFIG" | jq -r '.mcpServers["factorio-fle"].env.FLE_RCON_PORT')
+FLE_RCON_PASSWORD=$(echo "$MCP_CONFIG" | jq -r '.mcpServers["factorio-fle"].env.FLE_RCON_PASSWORD')
 
 export FLE_SERVER_HOST FLE_RCON_PORT FLE_RCON_PASSWORD
 if $VENV_PYTHON -c "from fle.env.protocols._mcp import mcp; print('MCP module loaded successfully')" 2>&1; then
