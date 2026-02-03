@@ -45,6 +45,9 @@ services:
       - DATABASE_URL=postgresql://claudetorio:${POSTGRES_PASSWORD}@postgres:5432/claudetorio
       - REDIS_URL=redis://redis:6379
       - FACTORIO_RCON_PASSWORD=${RCON_PASSWORD}
+      # Stream server configuration - used to generate stream URLs for each slot
+      - STREAM_BASE_URL=https://157.254.222.104
+      - STREAM_BASE_PORT=3003
     depends_on:
       postgres:
         condition: service_healthy

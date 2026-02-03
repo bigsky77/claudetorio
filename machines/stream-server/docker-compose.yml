@@ -1,16 +1,17 @@
 version: '3.8'
 
 services:
-  factorio-stream:
+  # Stream client for Slot 0 (UDP 34197) -> HTTPS port 3003
+  factorio-stream-0:
     build:
       context: ../../packages/stream-client
-    container_name: factorio-stream
+    container_name: factorio-stream-0
     restart: unless-stopped
 
     environment:
       - SERVER_HOST=157.254.222.103
-      - SERVER_PORT=34197
-      - TITLE=ClaudeTorio Live
+      - SERVER_PORT=34197  # Slot 0
+      - TITLE=ClaudeTorio Slot 0
       - CUSTOM_USER=viewer
       - PASSWORD=${STREAM_PASSWORD}
       - DISABLE_AUTH=true
@@ -23,12 +24,42 @@ services:
 
     volumes:
       - /opt/factorio:/opt/factorio
-      - /var/claudetorio/factorio-data:/config/factorio-data
+      - /var/claudetorio/factorio-data-0:/config/factorio-data
 
     ports:
       - "3002:3000"  # KasmVNC HTTP
       - "3003:3001"  # KasmVNC HTTPS
 
-# Future: Add more stream clients for pool
-#  factorio-stream-2:
-#    ...
+  # Stream client for Slot 1 (UDP 34198) -> HTTPS port 3004
+  factorio-stream-1:
+    build:
+      context: ../../packages/stream-client
+    container_name: factorio-stream-1
+    restart: unless-stopped
+
+    environment:
+      - SERVER_HOST=157.254.222.103
+      - SERVER_PORT=34198  # Slot 1
+      - TITLE=ClaudeTorio Slot 1
+      - CUSTOM_USER=viewer
+      - PASSWORD=${STREAM_PASSWORD}
+      - DISABLE_AUTH=true
+      - DISPLAY_WIDTH=1280
+      - DISPLAY_HEIGHT=720
+      - DISPLAY_REFRESH_RATE=30
+      - PUID=1000
+      - PGID=1000
+      - TZ=UTC
+
+    volumes:
+      - /opt/factorio:/opt/factorio
+      - /var/claudetorio/factorio-data-1:/config/factorio-data
+
+    ports:
+      - "3004:3001"  # KasmVNC HTTPS (slot 1 = base port 3003 + 1)
+
+# Port mapping: Slot N uses HTTPS port (3003 + N)
+# To add more slots, follow the pattern:
+# factorio-stream-N:
+#   SERVER_PORT: 34197 + N  (game server UDP port)
+#   HTTPS port: 3003 + N    (stream viewer port)

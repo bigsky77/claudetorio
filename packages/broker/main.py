@@ -44,6 +44,15 @@ class Config:
     POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "claudetorio_secret_123")
     REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
     SCORE_POLL_INTERVAL = 30  # seconds
+    # Stream server configuration - each slot gets its own stream client on a different port
+    STREAM_BASE_URL = os.getenv("STREAM_BASE_URL", "https://localhost")
+    STREAM_BASE_PORT = int(os.getenv("STREAM_BASE_PORT", "3003"))  # Slot 0 = 3003, Slot 1 = 3004, etc.
+
+    @classmethod
+    def get_stream_url(cls, slot: int) -> str:
+        """Get the stream URL for a given slot."""
+        port = cls.STREAM_BASE_PORT + slot
+        return f"{cls.STREAM_BASE_URL}:{port}/"
 
 config = Config()
 
@@ -68,6 +77,7 @@ class ClaimResponse(BaseModel):
     udp_port: int
     mcp_config: dict
     spectate_address: str
+    stream_url: str  # URL to watch this game's stream
     expires_at: datetime
 
 class ReleaseRequest(BaseModel):
@@ -588,6 +598,7 @@ async def claim_session(request: ClaimRequest, background_tasks: BackgroundTasks
             udp_port=udp_port,
             mcp_config=mcp_config,
             spectate_address=f"{config.SERVER_HOST}:{udp_port}",
+            stream_url=config.get_stream_url(slot),
             expires_at=expires_at,
         )
 
@@ -1259,6 +1270,7 @@ async def get_status():
                 "username": s['username'],
                 "slot": s['slot'],
                 "started_at": s['started_at'].isoformat(),
+                "stream_url": config.get_stream_url(s['slot']),
             }
             for s in active_sessions
         ],

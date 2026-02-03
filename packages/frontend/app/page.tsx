@@ -17,6 +17,7 @@ interface ActiveSession {
   username: string;
   slot: number;
   started_at: string;
+  stream_url: string;
 }
 
 interface LiveSessionWithScore {
@@ -25,6 +26,7 @@ interface LiveSessionWithScore {
   slot: number;
   started_at: string;
   current_score: number;
+  stream_url: string;
 }
 
 interface SystemStatus {
@@ -95,16 +97,15 @@ interface EntitiesData {
 
 type TabType = 'factory' | 'entities' | 'inventory' | 'research' | 'production' | 'score' | 'download';
 
-// Stream URL for live game viewing (hardcoded for now - all games point to same stream)
-const STREAM_URL = 'https://157.254.222.103:3003/';
-
 // Stream Viewer Modal Component
 function StreamModal({
   username,
+  streamUrl,
   onClose,
   onViewDetails,
 }: {
   username: string;
+  streamUrl: string;
   onClose: () => void;
   onViewDetails: () => void;
 }) {
@@ -151,7 +152,7 @@ function StreamModal({
         {/* Stream iframe */}
         <div className="flex-1 bg-black rounded-b-lg overflow-hidden">
           <iframe
-            src={STREAM_URL}
+            src={streamUrl}
             className="w-full h-full border-0"
             allow="autoplay; fullscreen"
             title={`Live stream: ${username}`}
@@ -603,6 +604,7 @@ export default function Home() {
   const [streamSession, setStreamSession] = useState<{
     sessionId: string;
     username: string;
+    streamUrl: string;
   } | null>(null);
 
   const fetchData = useCallback(async () => {
@@ -632,6 +634,7 @@ export default function Home() {
                   slot: session.slot,
                   started_at: session.started_at,
                   current_score: data.current_score || 0,
+                  stream_url: session.stream_url,
                 };
               } else {
                 console.error(`Failed to fetch session ${session.session_id}:`, res.status);
@@ -645,6 +648,7 @@ export default function Home() {
               slot: session.slot,
               started_at: session.started_at,
               current_score: 0,
+              stream_url: session.stream_url,
             };
           })
         );
@@ -770,6 +774,7 @@ export default function Home() {
                   onClick={() => setStreamSession({
                     sessionId: session.session_id,
                     username: session.username,
+                    streamUrl: session.stream_url,
                   })}
                   className="bg-gray-800 rounded-lg p-4 border border-green-500/30 hover:border-green-500/50 transition-colors cursor-pointer"
                 >
@@ -903,6 +908,7 @@ cd claudetorio-quickstart
       {streamSession && (
         <StreamModal
           username={streamSession.username}
+          streamUrl={streamSession.streamUrl}
           onClose={() => setStreamSession(null)}
           onViewDetails={() => {
             // Close stream and open session details
