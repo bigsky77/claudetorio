@@ -95,6 +95,73 @@ interface EntitiesData {
 
 type TabType = 'factory' | 'entities' | 'inventory' | 'research' | 'production' | 'score' | 'download';
 
+// Stream URL for live game viewing (hardcoded for now - all games point to same stream)
+const STREAM_URL = 'https://157.254.222.103:3003/';
+
+// Stream Viewer Modal Component
+function StreamModal({
+  username,
+  onClose,
+  onViewDetails,
+}: {
+  username: string;
+  onClose: () => void;
+  onViewDetails: () => void;
+}) {
+  // Handle ESC key to close
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
+  return (
+    <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-50" onClick={onClose}>
+      <div
+        className="relative w-full h-full max-w-7xl max-h-[95vh] flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between p-4 bg-gray-800/80 backdrop-blur rounded-t-lg">
+          <div className="flex items-center">
+            <span className="w-3 h-3 bg-green-500 rounded-full mr-3 animate-pulse"></span>
+            <h2 className="text-xl font-bold">Watching: {username}</h2>
+          </div>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={onViewDetails}
+              className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded text-sm transition-colors"
+            >
+              View Details
+            </button>
+            <button
+              onClick={onClose}
+              className="w-10 h-10 flex items-center justify-center text-gray-400 hover:text-white hover:bg-gray-700 rounded-full text-2xl leading-none transition-colors"
+              title="Close (Esc)"
+            >
+              &times;
+            </button>
+          </div>
+        </div>
+
+        {/* Stream iframe */}
+        <div className="flex-1 bg-black rounded-b-lg overflow-hidden">
+          <iframe
+            src={STREAM_URL}
+            className="w-full h-full border-0"
+            allow="autoplay; fullscreen"
+            title={`Live stream: ${username}`}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function SessionModal({
   sessionId,
   username,
@@ -533,6 +600,10 @@ export default function Home() {
     username: string;
     isLive: boolean;
   } | null>(null);
+  const [streamSession, setStreamSession] = useState<{
+    sessionId: string;
+    username: string;
+  } | null>(null);
 
   const fetchData = useCallback(async () => {
     try {
@@ -648,7 +719,7 @@ export default function Home() {
             Claudetorio
           </h1>
           <p className="text-xl text-gray-400">
-            Autonomous Factorio Arena - Let Claude build your factory
+            Live-streamed AI evaluation for complex reasoning tasks
           </p>
         </div>
 
@@ -696,10 +767,9 @@ export default function Home() {
               {liveSessions.map((session) => (
                 <div
                   key={session.session_id}
-                  onClick={() => setSelectedSession({
+                  onClick={() => setStreamSession({
                     sessionId: session.session_id,
                     username: session.username,
-                    isLive: true,
                   })}
                   className="bg-gray-800 rounded-lg p-4 border border-green-500/30 hover:border-green-500/50 transition-colors cursor-pointer"
                 >
@@ -828,6 +898,26 @@ cd claudetorio-quickstart
           </a>
         </div>
       </div>
+
+      {/* Stream Viewer Modal */}
+      {streamSession && (
+        <StreamModal
+          username={streamSession.username}
+          onClose={() => setStreamSession(null)}
+          onViewDetails={() => {
+            // Close stream and open session details
+            const session = liveSessions.find(s => s.session_id === streamSession.sessionId);
+            if (session) {
+              setStreamSession(null);
+              setSelectedSession({
+                sessionId: session.session_id,
+                username: session.username,
+                isLive: true,
+              });
+            }
+          }}
+        />
+      )}
 
       {/* Session Detail Modal */}
       {selectedSession && (
