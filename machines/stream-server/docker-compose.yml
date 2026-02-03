@@ -1,7 +1,26 @@
 version: '3.8'
 
 services:
-  # Stream client for Slot 0 (UDP 34197) -> HTTPS port 3003
+  # Caddy reverse proxy - terminates TLS and routes to stream clients
+  caddy:
+    image: caddy:2-alpine
+    container_name: caddy-proxy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - stream-network
+    depends_on:
+      - factorio-stream-0
+      - factorio-stream-1
+      - factorio-stream-2
+
+  # Stream client for Slot 0 (UDP 34197) -> HTTP port 3000 (internal)
   factorio-stream-0:
     build:
       context: ../../packages/stream-client
@@ -13,8 +32,7 @@ services:
       - SERVER_PORT=34197  # Slot 0
       - TITLE=ClaudeTorio Slot 0
       - CUSTOM_USER=viewer
-      - PASSWORD=${STREAM_PASSWORD}
-      - DISABLE_AUTH=true
+      # NOTE: Do NOT set PASSWORD - it triggers nginx auth even with DISABLE_AUTH=true
       - DISPLAY_WIDTH=1280
       - DISPLAY_HEIGHT=720
       - DISPLAY_REFRESH_RATE=30
@@ -26,11 +44,13 @@ services:
       - /opt/factorio:/opt/factorio
       - /var/claudetorio/factorio-data-0:/config/factorio-data
 
-    ports:
-      - "3002:3000"  # KasmVNC HTTP
-      - "3003:3001"  # KasmVNC HTTPS
+    # Only expose HTTP internally for reverse proxy
+    expose:
+      - "3000"
+    networks:
+      - stream-network
 
-  # Stream client for Slot 1 (UDP 34198) -> HTTPS port 3004
+  # Stream client for Slot 1 (UDP 34198) -> HTTP port 3000 (internal)
   factorio-stream-1:
     build:
       context: ../../packages/stream-client
@@ -42,8 +62,7 @@ services:
       - SERVER_PORT=34198  # Slot 1
       - TITLE=ClaudeTorio Slot 1
       - CUSTOM_USER=viewer
-      - PASSWORD=${STREAM_PASSWORD}
-      - DISABLE_AUTH=true
+      # NOTE: Do NOT set PASSWORD - it triggers nginx auth even with DISABLE_AUTH=true
       - DISPLAY_WIDTH=1280
       - DISPLAY_HEIGHT=720
       - DISPLAY_REFRESH_RATE=30
@@ -55,11 +74,48 @@ services:
       - /opt/factorio:/opt/factorio
       - /var/claudetorio/factorio-data-1:/config/factorio-data
 
-    ports:
-      - "3004:3001"  # KasmVNC HTTPS (slot 1 = base port 3003 + 1)
+    expose:
+      - "3000"
+    networks:
+      - stream-network
 
-# Port mapping: Slot N uses HTTPS port (3003 + N)
-# To add more slots, follow the pattern:
-# factorio-stream-N:
-#   SERVER_PORT: 34197 + N  (game server UDP port)
-#   HTTPS port: 3003 + N    (stream viewer port)
+  # Stream client for Slot 2 (UDP 34199) -> HTTP port 3000 (internal)
+  factorio-stream-2:
+    build:
+      context: ../../packages/stream-client
+    container_name: factorio-stream-2
+    restart: unless-stopped
+
+    environment:
+      - SERVER_HOST=157.254.222.103
+      - SERVER_PORT=34199  # Slot 2
+      - TITLE=ClaudeTorio Slot 2
+      - CUSTOM_USER=viewer
+      # NOTE: Do NOT set PASSWORD - it triggers nginx auth even with DISABLE_AUTH=true
+      - DISPLAY_WIDTH=1280
+      - DISPLAY_HEIGHT=720
+      - DISPLAY_REFRESH_RATE=30
+      - PUID=1000
+      - PGID=1000
+      - TZ=UTC
+
+    volumes:
+      - /opt/factorio:/opt/factorio
+      - /var/claudetorio/factorio-data-2:/config/factorio-data
+
+    expose:
+      - "3000"
+    networks:
+      - stream-network
+
+networks:
+  stream-network:
+    driver: bridge
+
+volumes:
+  caddy_data:
+  caddy_config:
+
+# Port mapping: All stream clients expose HTTP on port 3000 internally
+# Caddy routes /streams/{slot}/* to the appropriate container
+# To add more slots, follow the pattern and update the Caddyfile
