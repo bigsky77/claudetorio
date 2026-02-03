@@ -1,0 +1,31 @@
+name: Update Leaderboard
+
+on:
+  pull_request:
+    types: [closed]
+    paths: ['docs/leaderboard/results/**']
+  push:
+    branches:
+      - leaderboard
+  workflow_dispatch:
+
+jobs:
+  process:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+      - name: Process and build
+        run: |
+            node .github/scripts/process-results.js
+      - name: Commit and push processed results
+        run: |
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add docs/leaderboard/processed/combined-results.json
+            git diff --staged --quiet || (git commit -m "chore: update leaderboard results" && git push)
+        env:
+            GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

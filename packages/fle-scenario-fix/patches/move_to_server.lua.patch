@@ -1,0 +1,20 @@
+--- Original move_to/server.lua
++++ Modified move_to/server.lua
+@@ -1,11 +1,9 @@
+ -- move_to
+
+--- Register the tick handler when the module is loaded
+-if not global.fast then
+-    script.on_nth_tick(5, function(event)
+-        if global.walking_queues then
+-            global.actions.update_walking_queues()
+-        end
+-    end)
+-end
++-- NOTE: Event registration moved to scenario control.lua
++-- The scenario pre-registers on_nth_tick(5) which calls
++-- global.actions.update_walking_queues()
++-- This prevents multiplayer script-event-mismatch errors
++-- when clients join a server that has RCON-injected scripts.
+
+ -- Rest of the file remains unchanged...

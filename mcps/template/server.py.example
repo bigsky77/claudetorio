@@ -1,0 +1,46 @@
+#!/usr/bin/env python3
+"""
+Template MCP Server
+
+Copy this file and customize for your MCP implementation.
+"""
+
+import os
+import json
+from typing import Any
+
+
+def handle_request(method: str, params: dict) -> Any:
+    """Handle incoming MCP requests."""
+    if method == "example_method":
+        return {"result": "success", "data": params}
+    else:
+        raise ValueError(f"Unknown method: {method}")
+
+
+def main():
+    """Main entry point for the MCP server."""
+    # Read configuration from environment
+    api_key = os.environ.get("MY_API_KEY", "")
+    host = os.environ.get("MY_HOST", "localhost")
+
+    print(f"Starting MCP server with host={host}", flush=True)
+
+    # Your MCP server implementation here
+    # This could be a JSON-RPC server, stdin/stdout protocol, etc.
+
+    # Example: Simple stdin/stdout loop
+    while True:
+        try:
+            line = input()
+            request = json.loads(line)
+            response = handle_request(request.get("method"), request.get("params", {}))
+            print(json.dumps({"result": response}), flush=True)
+        except EOFError:
+            break
+        except Exception as e:
+            print(json.dumps({"error": str(e)}), flush=True)
+
+
+if __name__ == "__main__":
+    main()

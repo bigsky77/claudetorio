@@ -1,0 +1,39 @@
+--- Original harvest_resource/server.lua
++++ Modified harvest_resource/server.lua
+
+REMOVE THIS BLOCK (around line 105):
+---
+script.on_nth_tick(15, function(event)
+    -- ... entire function body ...
+end)
+---
+
+REPLACE WITH:
+---
+-- NOTE: Event registration moved to scenario control.lua
+-- The scenario pre-registers on_nth_tick(15) which calls
+-- global.actions.update_harvesting()
+
+-- Define the harvesting update function that the scenario will call
+global.actions.update_harvesting = function(event)
+    -- If no queues at all, just return
+    if not global.harvest_queues then return end
+
+    for player_index, queue in pairs(global.harvest_queues) do
+        local player = global.agent_characters[player_index]
+        -- Skip if player not valid
+        if not player or not player.valid then goto continue end
+
+        -- Already reached or exceeded our target?
+        if queue.total_yield >= queue.target_yield then
+            -- Remove this player's queue
+            global.harvest_queues[player_index] = nil
+            goto continue
+        end
+
+        -- ... rest of original function body ...
+
+        ::continue::
+    end
+end
+---

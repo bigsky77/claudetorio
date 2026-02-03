@@ -1,0 +1,34 @@
+version: '3.8'
+
+services:
+  factorio-stream:
+    build:
+      context: ../../packages/stream-client
+    container_name: factorio-stream
+    restart: unless-stopped
+
+    environment:
+      - SERVER_HOST=157.254.222.103
+      - SERVER_PORT=34197
+      - TITLE=ClaudeTorio Live
+      - CUSTOM_USER=viewer
+      - PASSWORD=${STREAM_PASSWORD}
+      - DISABLE_AUTH=true
+      - DISPLAY_WIDTH=1280
+      - DISPLAY_HEIGHT=720
+      - DISPLAY_REFRESH_RATE=30
+      - PUID=1000
+      - PGID=1000
+      - TZ=UTC
+
+    volumes:
+      - /opt/factorio:/opt/factorio
+      - /var/claudetorio/factorio-data:/config/factorio-data
+
+    ports:
+      - "3002:3000"  # KasmVNC HTTP
+      - "3003:3001"  # KasmVNC HTTPS
+
+# Future: Add more stream clients for pool
+#  factorio-stream-2:
+#    ...

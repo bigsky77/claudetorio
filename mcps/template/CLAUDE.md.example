@@ -1,0 +1,32 @@
+# Template MCP Instructions
+
+This file provides instructions to Claude on how to use this MCP.
+
+## Overview
+
+[Describe what this MCP does and when to use it]
+
+## Available Tools
+
+### tool_name
+
+[Description of the tool]
+
+**Parameters:**
+- `param1` (required): Description
+- `param2` (optional): Description
+
+**Example:**
+```
+[Example usage]
+```
+
+## Best Practices
+
+- [Tip 1]
+- [Tip 2]
+
+## Limitations
+
+- [Limitation 1]
+- [Limitation 2]

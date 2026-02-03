@@ -1,0 +1,42 @@
+services:
+  factorio-stream:
+    build: .
+    container_name: factorio-stream
+
+    # Allow container to reach host's other containers
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+    environment:
+      # Server to connect to (use host.docker.internal to reach host's containers)
+      # Example: fle-factorio_0 is on port 34197, fle-factorio_1 is on 34198, etc.
+      - SERVER_HOST=host.docker.internal
+      - SERVER_PORT=34197
+
+      # KasmVNC settings
+      - TITLE=ClaudeTorio Live
+      - CUSTOM_USER=viewer
+      - PASSWORD=factorio123
+
+      # Resolution - adjust based on your server's capability
+      - DISPLAY_WIDTH=1280
+      - DISPLAY_HEIGHT=720
+      - DISPLAY_REFRESH_RATE=30
+
+      # LinuxServer standard env vars
+      - PUID=1000
+      - PGID=1000
+      - TZ=UTC
+
+    volumes:
+      # Mount your Factorio installation (FULL version with graphics, not headless!)
+      # Note: Not read-only so we can disable Steam API at runtime
+      - ./factorio:/opt/factorio
+
+      # Persistent data (config, etc)
+      - ./factorio-data:/config/factorio-data
+
+    ports:
+      - "3002:3000"  # KasmVNC web UI
+
+    restart: unless-stopped

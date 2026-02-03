@@ -1,0 +1,29 @@
+--- Original request_path/server.lua
++++ Modified request_path/server.lua
+
+REMOVE THIS BLOCK (at the end of the file):
+---
+script.on_event(defines.events.on_script_path_request_finished, function(event)
+    local request_data = global.path_requests[event.id]
+    if not request_data then
+        game.print("No request data found for ID: " .. event.id)
+        return
+    end
+
+    if event.path then
+        global.paths[event.id] = event.path
+    elseif event.try_again_later then
+        global.paths[event.id] = "busy"
+    else
+        global.paths[event.id] = "not_found"
+    end
+end)
+---
+
+REPLACE WITH:
+---
+-- NOTE: Event registration moved to scenario control.lua
+-- The scenario pre-registers on_script_path_request_finished
+-- and handles path request completion directly.
+-- This prevents multiplayer script-event-mismatch errors.
+---

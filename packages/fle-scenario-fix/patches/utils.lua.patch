@@ -1,0 +1,18 @@
+--- Original mods/utils.lua
++++ Modified mods/utils.lua
+
+FIND (the on_tick registration):
+---
+script.on_event(defines.events.on_tick, function(event)
+    ...
+end)
+---
+
+REPLACE WITH:
+---
+-- NOTE: Event registration moved to scenario control.lua
+-- Store the on_tick function for the scenario to call
+global.utils.on_tick = function(event)
+    -- Original on_tick logic here
+end
+---

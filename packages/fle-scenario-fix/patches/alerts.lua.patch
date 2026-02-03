@@ -1,0 +1,15 @@
+--- Original mods/alerts.lua
++++ Modified mods/alerts.lua
+
+FIND (at the end of the file):
+---
+-- Register the on_tick function to the on_tick event
+script.on_event(defines.events.on_tick, on_tick)
+---
+
+REPLACE WITH:
+---
+-- NOTE: Event registration moved to scenario control.lua
+-- Store the on_tick function for the scenario to call
+global.alerts.on_tick = on_tick
+---

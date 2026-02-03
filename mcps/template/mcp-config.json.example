@@ -1,0 +1,17 @@
+{
+  "name": "template-mcp",
+  "description": "Template MCP server - copy and customize",
+  "version": "1.0.0",
+  "server": {
+    "command": "python",
+    "args": ["server.py"],
+    "cwd": "."
+  },
+  "environment": {
+    "MY_API_KEY": "${MY_API_KEY}",
+    "MY_HOST": "localhost"
+  },
+  "capabilities": [
+    "example_capability"
+  ]
+}

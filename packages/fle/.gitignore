@@ -1,0 +1,86 @@
+# Python/venv
+.venv/
+.env
+.fle/
+api_keys.json
+**/.claude/settings.local.json
+
+# Python cache
+__pycache__/
+*.pyc
+uv.lock
+
+# IDE/editor
+.idea/
+.vscode/
+.DS_Store
+
+# Generated/build files
+/dist/
+/build/
+*.egg-info/
+
+# Docker
+**/docker-compose.yml
+
+# Misc
+trajectory_logs/
+wandb/
+summary_cache/
+**/.claude/settings.local.json
+*.mp4
+*.jsonl
+*.db
+CLAUDE.md
+
+# API
+api_keys.json
+/log/
+*.log
+*.trace
+*.jsonl
+
+# Database
+.fle/
+
+.ipynb_checkpoints/
+*.db
+
+# Experiment tracking
+wandb/
+summary_cache/
+
+# Jack's stuff.
+/docker-compose.yml
+/data/plans/factorio_guides/
+/docs/assets/videos/
+/fle/agents/data/blueprints_to_policies/blueprints/
+/fle/eval/open/plots/technology_icons/
+/data/icons/
+/eval/open/plots/
+
+/data/vqa/logs/
+/data/vqa/tasks/spatial_reasoning/.compose.yaml
+/data/vqa/tasks/spatial_reasoning/logs/
+/data/vqa/tasks/logs/
+/data/vqa/images/
+/data/vqa/dataset/images/
+/data/vqa/tasks/basic/logs/
+/data/vqa/tasks/contrastive_alignment/logs/
+/data/vqa/tasks/contrastive_alignment/logs/
+/data/logs/
+/data/logs/
+/.factorio_mcp_repo/
+/.claude-code/
+/claude-code.zip
+
+# Claude Code
+/.claude-code/
+/.factorio_mcp_repo/
+/claude-code.zip
+
+# Misc
+cortex
+CLAUDE.md
+/server/CLAUDE.md
+configs

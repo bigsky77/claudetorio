@@ -1,0 +1,5 @@
+#!/bin/bash
+# This file is sourced by the LinuxServer Selkies base image
+# It should launch the application we want to stream
+
+exec /scripts/start-factorio.sh

@@ -1,0 +1,63 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: claudetorio-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: claudetorio
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: claudetorio
+    volumes:
+      - /var/claudetorio/data/postgres:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U claudetorio"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: claudetorio-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - /var/claudetorio/data/redis:/data
+    ports:
+      - "127.0.0.1:6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  broker:
+    build:
+      context: ../../packages/broker
+    container_name: claudetorio-broker
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      - DATABASE_URL=postgresql://claudetorio:${POSTGRES_PASSWORD}@postgres:5432/claudetorio
+      - REDIS_URL=redis://redis:6379
+      - FACTORIO_RCON_PASSWORD=${RCON_PASSWORD}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ../../packages/frontend
+    container_name: claudetorio-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://157.254.222.103:8080
+      - NEXT_PUBLIC_STREAM_URL=https://157.254.222.104:3003

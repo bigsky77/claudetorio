@@ -1,0 +1,60 @@
+# Dependencies
+node_modules/
+.venv/
+__pycache__/
+*.pyc
+.pip-packages/
+
+# Build outputs
+.next/
+dist/
+build/
+*.egg-info/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+docker-compose.override.yml
+
+# Factorio data (too large for repo)
+factorio/
+factorio-data/
+*.zip
+
+# Logs
+*.log
+logs/
+
+# Game saves (managed separately)
+saves/
+
+# Local dev data volumes
+dev/postgres_data/
+dev/redis_data/
+dev/factorio_data/
+dev/factorio-client/
+
+# NixOS
+result
+result-*
+
+# Secrets
+*.pem
+*.key
+credentials.json
+backups/
+*.qcow2

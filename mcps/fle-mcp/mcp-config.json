@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "factorio-fle": {
+      "command": "/home/bigsky/dev/claudetorio-quickstart/run-mcp.sh",
+      "args": [],
+      "env": {
+        "FLE_SERVER_HOST": "157.254.222.103",
+        "FLE_RCON_PORT": "27004",
+        "FLE_RCON_PASSWORD": "factorio"
+      }
+    }
+  }
+}

@@ -1,0 +1,33 @@
+name: Build Documentation
+
+on:
+  push:
+    branches: [main]
+    paths: ['docs/sphinx/source/**']
+
+jobs:
+  build-docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          pip install sphinx sphinx-rtd-theme sphinx-autodoc-typehints
+          pip install -e .
+      - name: Build Sphinx documentation
+        run: |
+          cd docs/sphinx
+          rm -rf build
+          sphinx-build -b html source build/html
+      - name: Commit and push built docs
+        run: |
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add docs/sphinx/build/html/
+            git commit -m "docs: rebuild from source" || exit 0
+            git push
+        env:
+            GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

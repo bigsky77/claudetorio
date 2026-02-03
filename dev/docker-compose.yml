@@ -1,0 +1,109 @@
+# Simulates BOTH servers in one compose for local dev
+version: '3.8'
+
+services:
+  # === DATABASE LAYER ===
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: claudetorio
+      POSTGRES_PASSWORD: dev_password
+      POSTGRES_DB: claudetorio
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./seed-data.sql:/docker-entrypoint-initdb.d/seed.sql
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U claudetorio"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # === GAME SERVER COMPONENTS ===
+
+  # Single headless Factorio for local testing
+  factorio:
+    image: factoriotools/factorio:1.1.110
+    ports:
+      - "34197:34197/udp"
+      - "27015:27015/tcp"  # RCON
+    volumes:
+      - factorio_data:/factorio
+      - ../config/factorio:/factorio/config:ro
+    environment:
+      - LOAD_LATEST_SAVE=true
+      - GENERATE_NEW_SAVE=true
+      - SAVE_NAME=dev_world
+
+  broker:
+    build:
+      context: ../packages/broker
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      - DATABASE_URL=postgresql://claudetorio:dev_password@postgres:5432/claudetorio
+      - REDIS_URL=redis://redis:6379
+      - FACTORIO_RCON_HOST=factorio
+      - FACTORIO_RCON_PORT=27015
+      - FACTORIO_RCON_PASSWORD=dev_rcon_password
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ../packages/frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8080
+      - NEXT_PUBLIC_STREAM_URL=http://localhost:3002
+    depends_on:
+      - broker
+
+  # === STREAM SERVER COMPONENTS ===
+  # Uncomment if you have Factorio client installed locally
+
+  # stream-client:
+  #   build:
+  #     context: ../packages/stream-client
+  #     dockerfile: Dockerfile
+  #   ports:
+  #     - "3002:3000"   # KasmVNC HTTP
+  #     - "3003:3001"   # KasmVNC HTTPS
+  #   environment:
+  #     - SERVER_HOST=factorio
+  #     - SERVER_PORT=34197
+  #     - TITLE=ClaudeTorio Dev
+  #     - CUSTOM_USER=viewer
+  #     - PASSWORD=dev123
+  #     - DISABLE_AUTH=true
+  #     - DISPLAY_WIDTH=1280
+  #     - DISPLAY_HEIGHT=720
+  #   volumes:
+  #     - ./factorio-client:/opt/factorio  # Must provide Factorio install
+  #   depends_on:
+  #     - factorio
+
+volumes:
+  postgres_data:
+  redis_data:
+  factorio_data:

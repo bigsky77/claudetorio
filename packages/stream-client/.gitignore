@@ -1,0 +1,6 @@
+# Factorio installation (must be provided separately - not in repo)
+factorio/
+factorio-data/
+
+# Runtime files
+*.log

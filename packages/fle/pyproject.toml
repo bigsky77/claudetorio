@@ -1,0 +1,143 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "factorio-learning-environment"
+version = "0.3.0"
+description = "Factorio Learning Environment"
+authors = [
+    {name = "Jack Hopkins", email = "jack.hopkins@me.com"},
+    {name = "Mart Bakler", email = "martbakler50@gmail.com"},
+    {name = "Neel Kant", email = "contact@neelkant.io"},
+    {name = "Harshit Sharma", email = "harshsha64@gmail.com"},
+    {name = "Kian Kyars", email = "kiankyars@gmail.com"},
+]
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+# Core dependencies - everything needed for FactorioInstance and tools
+dependencies = [
+    "python-dotenv>=1.0.1",
+    "pydantic>=2.10.6",
+    "lupa>=2.4",
+    "slpp>=1.2.3",
+    "factorio-rcon-py==1.2.1",
+    "numpy>=2.2.3",
+    "tenacity>=9.0.0",
+    "pillow>=11.1.0",
+    "pyyaml>=6.0.2",
+    "platformdirs>=4.3.8",
+    "a2a-sdk", # send_message tool + multiagent,
+    "huggingface-hub>=0.35.3",
+    "memoization>=0.4.0",
+]
+
+[project.optional-dependencies]
+# For running experiments/evaluations (fle eval command)
+eval = [
+    "gym",
+    "openai>=1.66.3",
+    "anthropic>=0.49.0",
+    "fastapi>=0.68.0", # multiagent
+    "aiohttp>=3.8.0", # multiagent
+    "uvicorn>=0.15.0", # multiagent
+]
+
+# For MCP protocol support
+mcp = [
+    "mcp[cli]",
+    "dulwich",
+]
+
+# For PostgreSQL database support
+psql = [
+    "psycopg2>=2.9.10",
+]
+
+[project.scripts]
+fle = "fle.run:main"
+fle-mcp = "fle.server:main"
+
+[tool.hatch.version]
+path = "fle/__init__.py"
+
+[tool.hatch.build]
+exclude = [
+    "fle/**/__pycache__",
+    "fle/**/*.pyc",
+    "fle/**/*.pyo",
+    "fle/**/*.pyd",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["fle"]
+
+[tool.pytest.ini_options]
+pythonpath = "fle/env"
+testpaths = "tests"
+python_files = "test_*.py"
+
+[tool.ruff]
+# Ignore module-import-at-top to allow early warning suppression before imports
+ignore = ["E402"]
+
+[project.urls]
+homepage = "https://jackhopkins.github.io/factorio-learning-environment/"
+leaderboard = "https://jackhopkins.github.io/factorio-learning-environment/leaderboard/"
+
+[[tool.uv.index]]
+name = "pypi"
+url = "https://pypi.org/simple"
+publish-url = "https://upload.pypi.org/legacy/"
+
+[[tool.uv.index]]
+name = "testpypi"
+url = "https://test.pypi.org/legacy/"
+publish-url = "https://test.pypi.org/legacy/"
+
+[dependency-groups]
+# Development tools
+dev = [
+    "pytest>=7.0.0",
+    "black>=23.0.0",
+    "isort>=5.12.0",
+    "pytest-xdist>=3.8.0",
+    "pre-commit",
+    "ipykernel>=6.30.1",
+    "sphinx",
+    "sphinx-rtd-theme",
+    "sphinx-autodoc-typehints",
+]
+
+# Research/internal evaluation development
+eval-dev = [
+    "matplotlib>=3.10.6",
+    "neptune", # For experiment tracking
+    "questionary>=2.1.0", # Interactive prompts
+    "rich>=14.0.0", # Pretty printing
+    "scipy>=1.15.3",
+    "seaborn>=0.13.2",
+    "wandb>=0.22.0",
+]
+
+# Remote AWS cluster management
+remote = [
+    "docker>=6.0.0",
+    "boto3>=1.26.0",
+    "pyautogui>=0.9.54",
+    "psutil>=5.9.0",
+]
