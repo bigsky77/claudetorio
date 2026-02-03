@@ -15,7 +15,7 @@ HEADLESS_HOST="${HEADLESS_HOST:-factorio-server}"
 HEADLESS_PATH="${HEADLESS_PATH:-/var/claudetorio/fle/fle/cluster/scenarios/open_world}"
 
 VIEWER_HOST="${VIEWER_HOST:-factorio-server-mini}"
-VIEWER_PATH="${VIEWER_PATH:-/var/claudetorio-stream-server/scenarios/open_world}"
+VIEWER_PATH="${VIEWER_PATH:-/var/claudetorio-stream-server/factorio/scenarios/open_world}"
 
 # Colors for output
 RED='\033[0;31m'
