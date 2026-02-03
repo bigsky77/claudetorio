@@ -1,0 +1,17 @@
+#!/bin/bash
+# Start Factorio in the background after a delay
+# This runs during container init before the display is fully ready,
+# so we start a background process that waits and then launches Factorio
+
+(
+    # Wait for the display to be ready
+    sleep 15
+
+    # Export display for Factorio
+    export DISPLAY=:1
+
+    # Start Factorio
+    /scripts/start-factorio.sh &
+) &
+
+echo "Factorio startup scheduled"
