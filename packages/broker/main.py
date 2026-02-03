@@ -44,15 +44,23 @@ class Config:
     POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "claudetorio_secret_123")
     REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
     SCORE_POLL_INTERVAL = 30  # seconds
-    # Stream server configuration - each slot gets its own stream client on a different port
-    STREAM_BASE_URL = os.getenv("STREAM_BASE_URL", "https://localhost")
-    STREAM_BASE_PORT = int(os.getenv("STREAM_BASE_PORT", "3003"))  # Slot 0 = 3003, Slot 1 = 3004, etc.
+    # Stream server configuration
+    # New: path-based routing through Caddy reverse proxy (e.g., https://stream.claudetorio.ai/streams/0/)
+    # Legacy: port-based routing (e.g., https://host:3003/) - used if STREAM_DOMAIN is not set
+    STREAM_DOMAIN = os.getenv("STREAM_DOMAIN", "")  # e.g., "stream.claudetorio.ai"
+    STREAM_BASE_URL = os.getenv("STREAM_BASE_URL", "https://localhost")  # Legacy fallback
+    STREAM_BASE_PORT = int(os.getenv("STREAM_BASE_PORT", "3003"))  # Legacy: Slot 0 = 3003, Slot 1 = 3004, etc.
 
     @classmethod
     def get_stream_url(cls, slot: int) -> str:
         """Get the stream URL for a given slot."""
-        port = cls.STREAM_BASE_PORT + slot
-        return f"{cls.STREAM_BASE_URL}:{port}/"
+        if cls.STREAM_DOMAIN:
+            # New path-based routing through Caddy
+            return f"https://{cls.STREAM_DOMAIN}/streams/{slot}/"
+        else:
+            # Legacy port-based routing
+            port = cls.STREAM_BASE_PORT + slot
+            return f"{cls.STREAM_BASE_URL}:{port}/"
 
 config = Config()
 

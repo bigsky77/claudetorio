@@ -9,6 +9,8 @@ services:
     ports:
       - "80:80"
       - "443:443"
+    environment:
+      - STREAM_DOMAIN=${STREAM_DOMAIN:-stream.localhost}
     volumes:
       - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
