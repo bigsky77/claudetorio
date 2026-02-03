@@ -1,5 +1,12 @@
-#!/bin/bash
-# This file is sourced by the LinuxServer Selkies base image
-# It should launch the application we want to stream
+#!/bin/sh
+# This file runs when openbox starts
+# It launches Factorio to connect to the game server
 
-exec /scripts/start-factorio.sh
+# Source environment if available (use . instead of source for sh compatibility)
+[ -f /etc/environment ] && . /etc/environment
+
+# Small delay to ensure display is ready
+sleep 3
+
+# Start Factorio in background (allows openbox to continue)
+/scripts/start-factorio.sh &

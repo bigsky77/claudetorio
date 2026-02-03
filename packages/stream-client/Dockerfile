@@ -26,14 +26,19 @@ COPY root/ /
 COPY scripts/ /scripts/
 RUN chmod +x /scripts/*.sh
 
+# Copy custom init scripts to start Factorio automatically
+COPY custom-cont-init.d/ /custom-cont-init.d/
+RUN chmod +x /custom-cont-init.d/*
+
 # Environment variables for KasmVNC
+# NOTE: Do NOT set PASSWORD here - it triggers nginx basic auth
+# To enable auth, set PASSWORD in docker-compose instead
 ENV \
     TITLE="Factorio Stream" \
     DISPLAY_WIDTH=1280 \
     DISPLAY_HEIGHT=720 \
     DISPLAY_REFRESH_RATE=30 \
-    CUSTOM_USER=viewer \
-    PASSWORD=factorio123
+    CUSTOM_USER=viewer
 
 # Server to connect to (override in docker-compose)
 ENV \
