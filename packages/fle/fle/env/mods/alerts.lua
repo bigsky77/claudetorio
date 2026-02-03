@@ -408,5 +408,7 @@ global.get_alerts = function(seconds)
     return old_alerts
 end
 
--- Register the on_tick function to the on_tick event
-script.on_event(defines.events.on_tick, on_tick)
+-- NOTE: Event registration moved to scenario control.lua for join-proof operation
+-- The on_tick function is now called via global.alerts.on_tick from control.lua
+-- DO NOT register events dynamically here - it causes script-event-mismatch errors
+global.alerts.on_tick = on_tick

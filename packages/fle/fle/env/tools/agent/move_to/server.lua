@@ -1,13 +1,9 @@
 -- move_to
 
--- Register the tick handler when the module is loaded
-if not global.fast then
-    script.on_nth_tick(5, function(event)
-        if global.walking_queues then
-            global.actions.update_walking_queues()
-        end
-    end)
-end
+-- NOTE: Event registration moved to scenario control.lua for join-proof operation
+-- The on_nth_tick(5) handler is now registered in control.lua and calls
+-- global.actions.update_walking_queues() if it exists
+-- DO NOT register events dynamically here - it causes script-event-mismatch errors
 
 --local function get_direction(from_pos, to_pos)
 --    local dx = to_pos.x - from_pos.x
