@@ -3,82 +3,24 @@
 # This Caddyfile terminates TLS and proxies to KasmVNC stream clients.
 # Caddy automatically obtains and renews Let's Encrypt certificates.
 #
-# Replace {$STREAM_DOMAIN} with your actual domain, or set the
-# STREAM_DOMAIN environment variable (e.g., stream.claudetorio.dev)
+# Uses subdomain-based routing: c0.stream.domain, c1.stream.domain, etc.
+# This allows KasmVNC to work correctly at the root path of each subdomain.
 
 {
 	# Global options
 	email admin@claudetorio.dev
 }
 
-# Main stream domain - handles all slot routing
+# Main stream domain - health check and index
 {$STREAM_DOMAIN:stream.localhost} {
-	# Health check endpoint
 	handle /health {
 		respond "OK" 200
 	}
 
-	# Slot 0: /streams/0/*
-	handle_path /streams/0/* {
-		reverse_proxy factorio-stream-0:3000 {
-			# WebSocket support
-			header_up Host {upstream_hostport}
-			header_up X-Real-IP {remote_host}
-			header_up X-Forwarded-For {remote_host}
-			header_up X-Forwarded-Proto {scheme}
-
-			# Critical for KasmVNC WebSocket connections
-			transport http {
-				# Don't buffer WebSocket frames
-				response_header_timeout 0
-				read_buffer 0
-			}
-
-			# Flush immediately for real-time streaming
-			flush_interval -1
-		}
-	}
-
-	# Slot 1: /streams/1/*
-	handle_path /streams/1/* {
-		reverse_proxy factorio-stream-1:3000 {
-			header_up Host {upstream_hostport}
-			header_up X-Real-IP {remote_host}
-			header_up X-Forwarded-For {remote_host}
-			header_up X-Forwarded-Proto {scheme}
-
-			transport http {
-				response_header_timeout 0
-				read_buffer 0
-			}
-
-			flush_interval -1
-		}
-	}
-
-	# Slot 2: /streams/2/*
-	handle_path /streams/2/* {
-		reverse_proxy factorio-stream-2:3000 {
-			header_up Host {upstream_hostport}
-			header_up X-Real-IP {remote_host}
-			header_up X-Forwarded-For {remote_host}
-			header_up X-Forwarded-Proto {scheme}
-
-			transport http {
-				response_header_timeout 0
-				read_buffer 0
-			}
-
-			flush_interval -1
-		}
-	}
-
-	# Default: show available streams
 	handle {
-		respond "ClaudeTorio Streams - Available: /streams/0/, /streams/1/, /streams/2/" 200
+		respond "ClaudeTorio Streams - Use c0.{$STREAM_DOMAIN}, c1.{$STREAM_DOMAIN}, c2.{$STREAM_DOMAIN}" 200
 	}
 
-	# Logging
 	log {
 		output stdout
 		format console
@@ -86,27 +28,69 @@
 	}
 }
 
-# Alternative: subdomain-based routing (uncomment if preferred)
-# Each slot gets its own subdomain for cleaner URLs
-#
-# c0.{$STREAM_DOMAIN:stream.localhost} {
-# 	reverse_proxy factorio-stream-0:3000 {
-# 		header_up Host {upstream_hostport}
-# 		header_up X-Real-IP {remote_host}
-# 		header_up X-Forwarded-For {remote_host}
-# 		header_up X-Forwarded-Proto {scheme}
-# 		transport http {
-# 			response_header_timeout 0
-# 			read_buffer 0
-# 		}
-# 		flush_interval -1
-# 	}
-# }
-#
-# c1.{$STREAM_DOMAIN:stream.localhost} {
-# 	reverse_proxy factorio-stream-1:3000 { ... }
-# }
-#
-# c2.{$STREAM_DOMAIN:stream.localhost} {
-# 	reverse_proxy factorio-stream-2:3000 { ... }
-# }
+# Slot 0: c0.stream.domain
+c0.{$STREAM_DOMAIN:stream.localhost} {
+	reverse_proxy factorio-stream-0:3000 {
+		# WebSocket support for KasmVNC
+		header_up Host {upstream_hostport}
+		header_up X-Real-IP {remote_host}
+		header_up X-Forwarded-Proto {scheme}
+
+		transport http {
+			response_header_timeout 0
+			read_buffer 0
+		}
+
+		flush_interval -1
+	}
+
+	log {
+		output stdout
+		format console
+		level INFO
+	}
+}
+
+# Slot 1: c1.stream.domain
+c1.{$STREAM_DOMAIN:stream.localhost} {
+	reverse_proxy factorio-stream-1:3000 {
+		header_up Host {upstream_hostport}
+		header_up X-Real-IP {remote_host}
+		header_up X-Forwarded-Proto {scheme}
+
+		transport http {
+			response_header_timeout 0
+			read_buffer 0
+		}
+
+		flush_interval -1
+	}
+
+	log {
+		output stdout
+		format console
+		level INFO
+	}
+}
+
+# Slot 2: c2.stream.domain
+c2.{$STREAM_DOMAIN:stream.localhost} {
+	reverse_proxy factorio-stream-2:3000 {
+		header_up Host {upstream_hostport}
+		header_up X-Real-IP {remote_host}
+		header_up X-Forwarded-Proto {scheme}
+
+		transport http {
+			response_header_timeout 0
+			read_buffer 0
+		}
+
+		flush_interval -1
+	}
+
+	log {
+		output stdout
+		format console
+		level INFO
+	}
+}

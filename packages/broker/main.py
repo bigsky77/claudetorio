@@ -45,7 +45,7 @@ class Config:
     REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
     SCORE_POLL_INTERVAL = 30  # seconds
     # Stream server configuration
-    # New: path-based routing through Caddy reverse proxy (e.g., https://stream.claudetorio.ai/streams/0/)
+    # Subdomain routing through Caddy: c0.stream.claudetorio.ai, c1.stream.claudetorio.ai, etc.
     # Legacy: port-based routing (e.g., https://host:3003/) - used if STREAM_DOMAIN is not set
     STREAM_DOMAIN = os.getenv("STREAM_DOMAIN", "")  # e.g., "stream.claudetorio.ai"
     STREAM_BASE_URL = os.getenv("STREAM_BASE_URL", "https://localhost")  # Legacy fallback
@@ -55,8 +55,8 @@ class Config:
     def get_stream_url(cls, slot: int) -> str:
         """Get the stream URL for a given slot."""
         if cls.STREAM_DOMAIN:
-            # New path-based routing through Caddy
-            return f"https://{cls.STREAM_DOMAIN}/streams/{slot}/"
+            # Subdomain-based routing: c0.stream.domain, c1.stream.domain, etc.
+            return f"https://c{slot}.{cls.STREAM_DOMAIN}/"
         else:
             # Legacy port-based routing
             port = cls.STREAM_BASE_PORT + slot
