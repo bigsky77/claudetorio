@@ -32,12 +32,11 @@ ssh $SERVER "systemctl restart claudetorio-frontend"
 # 4. Health check
 echo "→ Waiting for startup..."
 sleep 5
-RESPONSE=$(ssh $SERVER "curl -s http://localhost:3000 | head -c 500")
-if echo "$RESPONSE" | grep -q "Claudetorio"; then
-    echo "✓ Frontend is running"
+HTTP_CODE=$(ssh $SERVER "curl -s -o /dev/null -w '%{http_code}' http://localhost:3000")
+if [ "$HTTP_CODE" = "200" ]; then
+    echo "✓ Frontend is running (HTTP $HTTP_CODE)"
 else
-    echo "✗ Frontend may not be responding correctly"
-    echo "$RESPONSE"
+    echo "✗ Frontend returned HTTP $HTTP_CODE"
 fi
 
 echo ""
