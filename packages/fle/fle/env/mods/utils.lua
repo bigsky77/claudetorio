@@ -131,21 +131,9 @@ end
 
 global.crafting_queue = {}
 
-script.on_event(defines.events.on_tick, function(event)
-  -- Iterate over the crafting queue and update the remaining ticks
-  for i, task in ipairs(global.crafting_queue) do
-    task.remaining_ticks = task.remaining_ticks - 1
-
-    -- If the crafting is finished, consume the ingredients, insert the crafted entity, and remove the task from the queue
-    if task.remaining_ticks <= 0 then
-      for _, ingredient in pairs(task.recipe.ingredients) do
-        task.player.remove_item({name = ingredient.name, count = ingredient.amount * task.count})
-      end
-      task.player.insert({name = task.entity_name, count = task.count})
-      table.remove(global.crafting_queue, i)
-    end
-  end
-end)
+-- NOTE: Event registration moved to scenario control.lua for join-proof operation
+-- The crafting queue is now processed directly in control.lua's on_tick handler
+-- DO NOT register events dynamically here - it causes script-event-mismatch errors
 
 function dump(o)
    if type(o) == 'table' then

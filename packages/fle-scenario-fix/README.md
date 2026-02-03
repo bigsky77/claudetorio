@@ -1,5 +1,14 @@
 # FLE Multiplayer Sync Fix
 
+> **NOTE:** This fix has been integrated into the main FLE codebase.
+> The canonical implementation is now at:
+> `packages/fle/fle/cluster/scenarios/open_world/`
+>
+> Use `scripts/deploy-scenario.sh` to deploy the join-proof scenario.
+> This package is kept for historical reference.
+
+---
+
 ## Problem
 
 When FLE (Factorio Learning Environment) runs on a headless server, it injects Lua scripts via RCON that register event handlers:
