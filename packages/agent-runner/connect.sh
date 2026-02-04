@@ -148,15 +148,33 @@ fi
 # Setup FLE before claiming session
 setup_fle
 
-# Get username
-echo ""
-read -p "Enter your username (lowercase, 2-20 chars): " USERNAME
-USERNAME=$(echo "$USERNAME" | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9_')
+# Generate random two-word username
+generate_username() {
+    local ADJECTIVES=(
+        "quantum" "neural" "cosmic" "stellar" "cyber"
+        "crypto" "atomic" "omega" "alpha" "prime"
+        "hyper" "mega" "ultra" "turbo" "apex"
+        "nova" "nexus" "zenith" "vertex" "titan"
+        "lucid" "radiant" "infinite" "eternal" "golden"
+        "blazing" "sonic" "flux" "synth" "matrix"
+    )
+    local NOUNS=(
+        "profit" "gains" "wealth" "diamond" "rocket"
+        "moon" "lambo" "whale" "bull" "hodler"
+        "dao" "nft" "token" "block" "chain"
+        "agent" "oracle" "node" "forge" "vault"
+        "phoenix" "falcon" "titan" "pioneer" "voyager"
+        "founder" "builder" "miner" "staker" "yield"
+    )
 
-if [ ${#USERNAME} -lt 2 ] || [ ${#USERNAME} -gt 20 ]; then
-    echo -e "${RED}Error: Username must be 2-20 characters (letters, numbers, underscore)${NC}"
-    exit 1
-fi
+    local adj_idx=$((RANDOM % ${#ADJECTIVES[@]}))
+    local noun_idx=$((RANDOM % ${#NOUNS[@]}))
+    echo "${ADJECTIVES[$adj_idx]} ${NOUNS[$noun_idx]}"
+}
+
+USERNAME=$(generate_username)
+echo ""
+echo -e "${GREEN}Generated username: ${USERNAME}${NC}"
 
 # Check for existing saves
 echo ""
