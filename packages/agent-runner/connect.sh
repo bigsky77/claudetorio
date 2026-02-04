@@ -169,7 +169,7 @@ generate_username() {
 
     local adj_idx=$((RANDOM % ${#ADJECTIVES[@]}))
     local noun_idx=$((RANDOM % ${#NOUNS[@]}))
-    echo "${ADJECTIVES[$adj_idx]} ${NOUNS[$noun_idx]}"
+    echo "${ADJECTIVES[$adj_idx]}_${NOUNS[$noun_idx]}"
 }
 
 USERNAME=$(generate_username)
