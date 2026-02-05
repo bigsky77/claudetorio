@@ -42,9 +42,8 @@ services:
       - DATABASE_URL=postgresql://claudetorio:${POSTGRES_PASSWORD}@localhost:5432/claudetorio
       - REDIS_URL=redis://localhost:6379
       - FACTORIO_RCON_PASSWORD=${RCON_PASSWORD}
-      # Stream server configuration - used to generate stream URLs for each slot
-      - STREAM_BASE_URL=https://157.254.222.104
-      - STREAM_BASE_PORT=3003
+      # Stream server configuration - subdomain routing through Caddy
+      - STREAM_DOMAIN=stream.claudetorio.ai
     depends_on:
       postgres:
         condition: service_healthy
