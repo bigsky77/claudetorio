@@ -1,0 +1,132 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  # Run existing checks first
+  check:
+    name: Flake Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/nix-installer-action@main
+      - uses: DeterminateSystems/magic-nix-cache-action@main
+      - run: nix flake check --accept-flake-config
+
+  # Detect what changed and deploy
+  deploy:
+    name: Deploy
+    needs: check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Detect changes
+        id: changes
+        run: |
+          # Get changed files
+          CHANGED=$(git diff --name-only HEAD~1 HEAD)
+          echo "Changed files:"
+          echo "$CHANGED"
+
+          DEPLOY_GAME=false
+          DEPLOY_STREAM=false
+
+          # Check if stream-related files changed
+          if echo "$CHANGED" | grep -qE '^(packages/stream-client/|machines/stream-server/)'; then
+            DEPLOY_STREAM=true
+          fi
+
+          # Check if game-server related files changed
+          # (packages except stream-client, machines except stream-server, or config)
+          if echo "$CHANGED" | grep -qE '^(packages/(broker|frontend|agent-runner|fle)/|machines/game-server/|config/)'; then
+            DEPLOY_GAME=true
+          fi
+
+          # If workflow or scripts changed, deploy both
+          if echo "$CHANGED" | grep -qE '^(\.github/workflows/deploy\.yml|scripts/)'; then
+            DEPLOY_STREAM=true
+            DEPLOY_GAME=true
+          fi
+
+          echo "deploy_game=$DEPLOY_GAME" >> $GITHUB_OUTPUT
+          echo "deploy_stream=$DEPLOY_STREAM" >> $GITHUB_OUTPUT
+          echo "Deploy game: $DEPLOY_GAME, Deploy stream: $DEPLOY_STREAM"
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          echo "${{ secrets.KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+
+      - name: Deploy to game-server
+        if: steps.changes.outputs.deploy_game == 'true'
+        env:
+          HOST: ${{ secrets.GAME_SERVER_HOST }}
+        run: |
+          ssh -i ~/.ssh/deploy_key root@$HOST bash -s << 'EOF'
+            set -e
+            cd /opt/claudetorio
+
+            # Save current SHA for rollback
+            git rev-parse HEAD > .deployed-sha.prev
+
+            # Pull latest
+            git fetch origin main
+            git reset --hard origin/main
+
+            # Record new SHA
+            git rev-parse HEAD > .deployed-sha
+
+            # Rebuild containers
+            cd machines/game-server
+            docker compose up --build -d
+
+            # Health check
+            sleep 5
+            curl -sf http://localhost:8080/api/status || echo "Health check pending..."
+
+            echo "Game server deployed: $(cat /opt/claudetorio/.deployed-sha)"
+          EOF
+
+      - name: Deploy to stream-server
+        if: steps.changes.outputs.deploy_stream == 'true'
+        env:
+          HOST: ${{ secrets.STREAM_SERVER_HOST }}
+        run: |
+          ssh -i ~/.ssh/deploy_key root@$HOST bash -s << 'EOF'
+            set -e
+            cd /opt/claudetorio
+
+            # Save current SHA for rollback
+            git rev-parse HEAD > .deployed-sha.prev
+
+            # Pull latest
+            git fetch origin main
+            git reset --hard origin/main
+
+            # Record new SHA
+            git rev-parse HEAD > .deployed-sha
+
+            # Rebuild containers
+            cd machines/stream-server
+            docker compose up --build -d
+
+            # Health check
+            sleep 10
+            docker ps | grep -q caddy && echo "Stream server healthy" || echo "Health check pending..."
+
+            echo "Stream server deployed: $(cat /opt/claudetorio/.deployed-sha)"
+          EOF
+
+      - name: Summary
+        run: |
+          echo "## Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "- Game server: ${{ steps.changes.outputs.deploy_game }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Stream server: ${{ steps.changes.outputs.deploy_stream }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Commit: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY

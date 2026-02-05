@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # Caddy reverse proxy - terminates TLS and routes to stream clients
   caddy:
