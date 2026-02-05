@@ -46,18 +46,21 @@ jobs:
           echo "Deploy game: $DEPLOY_GAME, Deploy stream: $DEPLOY_STREAM"
 
       - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
+
+      - name: Add known hosts
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
-          echo "${{ secrets.KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          echo "${{ secrets.KNOWN_HOSTS }}" >> ~/.ssh/known_hosts
 
       - name: Deploy to game-server
         if: steps.changes.outputs.deploy_game == 'true'
         env:
           HOST: ${{ secrets.GAME_SERVER_HOST }}
         run: |
-          ssh -i ~/.ssh/deploy_key root@$HOST bash -s << 'EOF'
+          ssh root@$HOST bash -s << 'EOF'
             set -e
             cd /opt/claudetorio
 
@@ -87,7 +90,7 @@ jobs:
         env:
           HOST: ${{ secrets.STREAM_SERVER_HOST }}
         run: |
-          ssh -i ~/.ssh/deploy_key root@$HOST bash -s << 'EOF'
+          ssh root@$HOST bash -s << 'EOF'
             set -e
             cd /opt/claudetorio
 
