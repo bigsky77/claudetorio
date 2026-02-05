@@ -16,43 +16,29 @@ echo ""
 # Create config directory structure
 mkdir -p "${CONFIG_DIR}/saves" "${CONFIG_DIR}/mods" "${CONFIG_DIR}/script-output"
 
-# Create a config-path.cfg that points Factorio to use our config directory
-# This allows multiple instances to run without lock conflicts
-cat > "${CONFIG_DIR}/config-path.cfg" << EOF
-config-path=${CONFIG_DIR}
-EOF
-
-# Create/update config.ini with per-container write-data path
-# This is CRITICAL for running multiple instances - the lock file goes in write-data
+# Create config.ini if it doesn't exist
+# The standalone Factorio install has no config/ dir, so we generate one.
 if [ ! -f "${CONFIG_DIR}/config.ini" ]; then
-    cp "${FACTORIO_DIR}/config/config.ini" "${CONFIG_DIR}/config.ini" 2>/dev/null || true
-fi
+    cat > "${CONFIG_DIR}/config.ini" << CFGEOF
+; Auto-generated config for stream client
+[path]
+read-data=${FACTORIO_DIR}/data
+write-data=${CONFIG_DIR}
 
-# Ensure write-data points to our container-specific directory
-# This prevents lock file conflicts between containers
-if [ -f "${CONFIG_DIR}/config.ini" ]; then
-    # Update or add the write-data setting
-    if grep -q "^write-data=" "${CONFIG_DIR}/config.ini"; then
-        sed -i "s|^write-data=.*|write-data=${CONFIG_DIR}|" "${CONFIG_DIR}/config.ini"
-    else
-        # Add it after the [path] section
-        sed -i "/^\[path\]/a write-data=${CONFIG_DIR}" "${CONFIG_DIR}/config.ini"
-    fi
-    echo "Set write-data to: ${CONFIG_DIR}"
-fi
+[other]
+check-updates=false
+enable-crash-log-uploading=false
 
-# Disable Steam API by renaming the library
-# This makes Factorio run in standalone mode without trying to restart via Steam
-if [ -f "$FACTORIO_DIR/lib/libsteam_api.so" ]; then
-    echo "Disabling Steam API..."
-    mv "$FACTORIO_DIR/lib/libsteam_api.so" "$FACTORIO_DIR/lib/libsteam_api.so.disabled" 2>/dev/null || true
+[graphics]
+full-screen=true
+CFGEOF
+    echo "Generated config.ini"
 fi
 
 # Wait a moment for the display to be ready
 sleep 2
 
 # Start Factorio as a client connecting to the specified server
-# -c uses a per-container config to avoid lock conflicts
 exec "$FACTORIO_DIR/bin/x64/factorio" \
     --mp-connect "${SERVER_HOST}:${SERVER_PORT}" \
     -c "${CONFIG_DIR}/config.ini" \

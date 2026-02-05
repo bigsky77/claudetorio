@@ -30,9 +30,9 @@ load_dotenv()
 # ============== Configuration ==============
 
 class Config:
-    TOTAL_SLOTS = 20
-    BASE_RCON_PORT = 27000
-    BASE_UDP_PORT = 34197
+    TOTAL_SLOTS = int(os.getenv("TOTAL_SLOTS", "20"))
+    BASE_RCON_PORT = int(os.getenv("BASE_RCON_PORT", "27000"))
+    BASE_UDP_PORT = int(os.getenv("BASE_UDP_PORT", "34197"))
     RCON_PASSWORD = os.getenv("RCON_PASSWORD", "factorio")
     SERVER_HOST = os.getenv("SERVER_HOST", "localhost")
     SAVES_DIR = Path(os.getenv("SAVES_DIR", "/var/claudetorio/saves"))

@@ -1,14 +1,14 @@
-# Simulates BOTH servers in one compose for local dev
-version: '3.8'
+# Canonical local dev stack: infra + worlds + streams
+# Broker and frontend run on the HOST for hot reload (see README.md)
 
 services:
   # === DATABASE LAYER ===
   postgres:
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: claudetorio
-      POSTGRES_PASSWORD: dev_password
-      POSTGRES_DB: claudetorio
+      POSTGRES_USER: ${POSTGRES_USER:-claudetorio}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dev_password}
+      POSTGRES_DB: ${POSTGRES_DB:-claudetorio}
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./seed-data.sql:/docker-entrypoint-initdb.d/seed.sql
@@ -33,80 +33,101 @@ services:
       timeout: 3s
       retries: 5
 
-  # === GAME SERVER COMPONENTS ===
+  # === HEADLESS FACTORIO WORLDS ===
+  # Each slot exposes host ports: UDP 34197+i, RCON TCP 27000+i
+  # This matches the broker's port convention exactly.
+  #
+  # We bypass the factoriotools entrypoint (it conflicts with custom commands)
+  # and run factorio directly with minimal setup.
 
-  # Single headless Factorio for local testing
-  factorio:
+  factorio_0:
     image: factoriotools/factorio:1.1.110
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        mkdir -p /factorio/saves /factorio/config /factorio/mods /factorio/script-output &&
+        exec /opt/factorio/bin/x64/factorio
+        --start-server-load-scenario open_world
+        --server-settings /opt/factorio/config/server-settings.json
+        --port 34197
+        --rcon-port 27015
+        --rcon-password "$$RCON_PASSWORD"
+    environment:
+      RCON_PASSWORD: ${RCON_PASSWORD:-dev_rcon_password}
     ports:
       - "34197:34197/udp"
-      - "27015:27015/tcp"  # RCON
+      - "27000:27015/tcp"
     volumes:
-      - factorio_data:/factorio
-      - ../config/factorio:/factorio/config:ro
-    environment:
-      - LOAD_LATEST_SAVE=true
-      - GENERATE_NEW_SAVE=true
-      - SAVE_NAME=dev_world
+      - ../packages/fle/fle/cluster/scenarios:/opt/factorio/scenarios
+      - ../packages/fle/fle/cluster/config:/opt/factorio/config
+      - factorio_0_data:/factorio/saves
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1024m
 
-  broker:
-    build:
-      context: ../packages/broker
-      dockerfile: Dockerfile
+  factorio_1:
+    image: factoriotools/factorio:1.1.110
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        mkdir -p /factorio/saves /factorio/config /factorio/mods /factorio/script-output &&
+        exec /opt/factorio/bin/x64/factorio
+        --start-server-load-scenario open_world
+        --server-settings /opt/factorio/config/server-settings.json
+        --port 34197
+        --rcon-port 27015
+        --rcon-password "$$RCON_PASSWORD"
+    environment:
+      RCON_PASSWORD: ${RCON_PASSWORD:-dev_rcon_password}
     ports:
-      - "8080:8080"
-    environment:
-      - DATABASE_URL=postgresql://claudetorio:dev_password@postgres:5432/claudetorio
-      - REDIS_URL=redis://redis:6379
-      - FACTORIO_RCON_HOST=factorio
-      - FACTORIO_RCON_PORT=27015
-      - FACTORIO_RCON_PASSWORD=dev_rcon_password
-      # Stream server configuration (local dev)
-      - STREAM_BASE_URL=http://localhost
-      - STREAM_BASE_PORT=3002
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
+      - "34198:34197/udp"
+      - "27001:27015/tcp"
+    volumes:
+      - ../packages/fle/fle/cluster/scenarios:/opt/factorio/scenarios
+      - ../packages/fle/fle/cluster/config:/opt/factorio/config
+      - factorio_1_data:/factorio/saves
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1024m
 
-  frontend:
+  # === STREAM CLIENTS ===
+  # Connect to headless worlds via host ports (same as prod topology)
+  # Requires Factorio GUI install symlinked/copied to dev/factorio-client/
+
+  stream_client_0:
     build:
-      context: ../packages/frontend
+      context: ../packages/stream-client
       dockerfile: Dockerfile
-    ports:
-      - "3000:3000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:8080
-      - NEXT_PUBLIC_STREAM_URL=http://localhost:3002
-    depends_on:
-      - broker
-
-  # === STREAM SERVER COMPONENTS ===
-  # Uncomment if you have Factorio client installed locally
-
-  # stream-client:
-  #   build:
-  #     context: ../packages/stream-client
-  #     dockerfile: Dockerfile
-  #   ports:
-  #     - "3002:3000"   # KasmVNC HTTP
-  #     - "3003:3001"   # KasmVNC HTTPS
-  #   environment:
-  #     - SERVER_HOST=factorio
-  #     - SERVER_PORT=34197
-  #     - TITLE=ClaudeTorio Dev
-  #     - CUSTOM_USER=viewer
-  #     - PASSWORD=dev123
-  #     - DISABLE_AUTH=true
-  #     - DISPLAY_WIDTH=1280
-  #     - DISPLAY_HEIGHT=720
-  #   volumes:
-  #     - ./factorio-client:/opt/factorio  # Must provide Factorio install
-  #   depends_on:
-  #     - factorio
+      # For local dev, connect via docker network directly.
+      # In prod, stream clients use host.docker.internal to reach a different machine.
+      - SERVER_HOST=factorio_0
+      - SERVER_PORT=34197
+      - TITLE=ClaudeTorio Dev - Slot 0
+      - CUSTOM_USER=viewer
+      - PASSWORD=${STREAM_PASSWORD:-dev123}
+      - DISPLAY_WIDTH=1280
+      - DISPLAY_HEIGHT=720
+      - DISPLAY_REFRESH_RATE=30
+      - PUID=1000
+      - PGID=1000
+      - TZ=UTC
+    volumes:
+      - ./factorio-client:/opt/factorio
+      - stream_client_0_data:/config/factorio-data
+    ports:
+      - "3002:3000"
+    restart: unless-stopped
 
 volumes:
   postgres_data:
   redis_data:
-  factorio_data:
+  factorio_0_data:
+  factorio_1_data:
+  stream_client_0_data:
