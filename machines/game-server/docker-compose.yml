@@ -37,11 +37,10 @@ services:
       context: ../../packages/broker
     container_name: claudetorio-broker
     restart: unless-stopped
-    ports:
-      - "8080:8080"
+    network_mode: host
     environment:
-      - DATABASE_URL=postgresql://claudetorio:${POSTGRES_PASSWORD}@postgres:5432/claudetorio
-      - REDIS_URL=redis://redis:6379
+      - DATABASE_URL=postgresql://claudetorio:${POSTGRES_PASSWORD}@localhost:5432/claudetorio
+      - REDIS_URL=redis://localhost:6379
       - FACTORIO_RCON_PASSWORD=${RCON_PASSWORD}
       # Stream server configuration - used to generate stream URLs for each slot
       - STREAM_BASE_URL=https://157.254.222.104
