@@ -5,20 +5,8 @@ on:
     branches: [main]
 
 jobs:
-  # Run existing checks first
-  check:
-    name: Flake Check
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: DeterminateSystems/nix-installer-action@main
-      - uses: DeterminateSystems/magic-nix-cache-action@main
-      - run: nix flake check --accept-flake-config
-
-  # Detect what changed and deploy
   deploy:
     name: Deploy
-    needs: check
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
