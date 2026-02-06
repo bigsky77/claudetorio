@@ -349,6 +349,21 @@ script.on_event(defines.events.on_player_joined_game, function(event)
     if player then
         player.print("[FLE] Join-proof scenario loaded - version: " .. RUNTIME_VERSION)
         player.print("[FLE] Multiplayer sync enabled - all events pre-registered")
+
+        -- Hide all UI panels for stream viewers (minimap, quickbar, sidebar, etc.)
+        player.game_view_settings = {
+            show_controller_gui = false,
+            show_minimap = false,
+            show_research_info = false,
+            show_entity_info = false,
+            show_alert_gui = false,
+            update_entity_selection = false,
+            show_rail_block_visualisation = false,
+            show_side_menu = false,
+            show_map_view_options = false,
+            show_quickbar = false,
+            show_shortcut_bar = false,
+        }
     end
 end)
 

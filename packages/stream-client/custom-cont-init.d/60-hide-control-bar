@@ -1,0 +1,25 @@
+#!/bin/bash
+# Hide the kclient control bar (#lsbar) for stream-only viewers.
+# The kclient is LinuxServer's wrapper around KasmVNC that adds
+# file manager, audio, and microphone buttons in a floating bar.
+
+KCLIENT_CSS="/kclient/public/css/kclient.css"
+
+if [ -f "$KCLIENT_CSS" ]; then
+    cat >> "$KCLIENT_CSS" << 'EOF'
+
+/* Stream viewer: always hide kclient control bar */
+#lsbar { display: none !important; }
+#files { display: none !important; }
+EOF
+    echo "[stream-client] Hidden kclient control bar via CSS override"
+else
+    echo "[stream-client] Warning: kclient CSS not found at $KCLIENT_CSS"
+    # Fallback: try to inject into any HTML files in the kclient or www dirs
+    for html in /kclient/public/index.html /usr/share/kasmvnc/www/index.html; do
+        if [ -f "$html" ]; then
+            sed -i 's|</head>|<style>#lsbar{display:none!important}#files{display:none!important}</style></head>|' "$html"
+            echo "[stream-client] Injected CSS into $html"
+        fi
+    done
+fi
