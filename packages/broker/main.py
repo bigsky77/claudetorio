@@ -31,7 +31,7 @@ load_dotenv()
 
 class Config:
     TOTAL_SLOTS = 20
-    BASE_RCON_PORT = 27000
+    BASE_RCON_PORT = int(os.getenv("BASE_RCON_PORT", "27000"))
     BASE_UDP_PORT = 34197
     RCON_PASSWORD = os.getenv("RCON_PASSWORD", "factorio")
     SERVER_HOST = os.getenv("SERVER_HOST", "localhost")
@@ -203,6 +203,40 @@ async def init_db():
                 factory_data JSONB
             );
 
+            -- Autonomous agent runs
+            CREATE TABLE IF NOT EXISTS runs (
+                run_id TEXT PRIMARY KEY,
+                status TEXT NOT NULL DEFAULT 'queued',
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                started_at TIMESTAMPTZ,
+                ended_at TIMESTAMPTZ,
+                slot INTEGER,
+                task_key TEXT NOT NULL DEFAULT 'open_play',
+                model TEXT NOT NULL,
+                max_steps INTEGER NOT NULL DEFAULT 200,
+                step_timeout_seconds INTEGER NOT NULL DEFAULT 60,
+                error TEXT,
+                final_score REAL
+            );
+
+            -- Steps within a run
+            CREATE TABLE IF NOT EXISTS run_steps (
+                id SERIAL PRIMARY KEY,
+                run_id TEXT NOT NULL REFERENCES runs(run_id),
+                step_idx INTEGER NOT NULL,
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                code TEXT NOT NULL,
+                result TEXT,
+                error_occurred BOOLEAN DEFAULT FALSE,
+                reward REAL,
+                production_score REAL,
+                ticks INTEGER,
+                token_usage JSONB,
+                achievements JSONB,
+                observation_summary JSONB,
+                UNIQUE(run_id, step_idx)
+            );
+
             -- Indexes
             CREATE INDEX IF NOT EXISTS idx_sessions_active
                 ON sessions(slot) WHERE status = 'active';
@@ -212,6 +246,12 @@ async def init_db():
                 ON users(best_score DESC);
             CREATE INDEX IF NOT EXISTS idx_score_history_session
                 ON score_history(session_id);
+            CREATE INDEX IF NOT EXISTS idx_runs_status_created
+                ON runs(status, created_at);
+            CREATE INDEX IF NOT EXISTS idx_runs_active_slot
+                ON runs(slot) WHERE status = 'running';
+            CREATE INDEX IF NOT EXISTS idx_run_steps_run
+                ON run_steps(run_id);
         """)
 
 
@@ -228,7 +268,7 @@ async def close_db():
 def get_rcon_connection(slot: int) -> MCRcon:
     """Get RCON connection for a slot."""
     port = config.BASE_RCON_PORT + slot
-    return MCRcon("localhost", config.RCON_PASSWORD, port=port)
+    return MCRcon(config.SERVER_HOST, config.RCON_PASSWORD, port=port)
 
 
 async def get_slot_score(slot: int) -> dict:
@@ -247,7 +287,7 @@ def _sync_get_slot_score(slot: int) -> dict:
     try:
         port = config.BASE_RCON_PORT + slot
         # Create connection without using context manager to avoid signal issues
-        rcon = MCRcon("localhost", config.RCON_PASSWORD, port=port)
+        rcon = MCRcon(config.SERVER_HOST, config.RCON_PASSWORD, port=port)
         rcon.connect()
         try:
             # Call FLE's score action which returns production-based score
@@ -747,7 +787,7 @@ def _sync_get_factory_data(slot: int, radius: int = 50) -> dict:
     """Get factory state data from FLE via RCON."""
     try:
         port = config.BASE_RCON_PORT + slot
-        rcon = MCRcon("localhost", config.RCON_PASSWORD, port=port)
+        rcon = MCRcon(config.SERVER_HOST, config.RCON_PASSWORD, port=port)
         rcon.connect()
         try:
             # Get entity data from FLE
@@ -784,7 +824,7 @@ def _sync_get_detailed_score(slot: int) -> dict:
     import re
     try:
         port = config.BASE_RCON_PORT + slot
-        rcon = MCRcon("localhost", config.RCON_PASSWORD, port=port)
+        rcon = MCRcon(config.SERVER_HOST, config.RCON_PASSWORD, port=port)
         rcon.connect()
         try:
             # Get production stats
@@ -811,7 +851,7 @@ def _sync_get_inventory(slot: int) -> dict:
     """Get player inventory from FLE."""
     try:
         port = config.BASE_RCON_PORT + slot
-        rcon = MCRcon("localhost", config.RCON_PASSWORD, port=port)
+        rcon = MCRcon(config.SERVER_HOST, config.RCON_PASSWORD, port=port)
         rcon.connect()
         try:
             response = rcon.command("/silent-command rcon.print(game.table_to_json(game.players[1].get_main_inventory().get_contents()))")
@@ -838,7 +878,7 @@ def _sync_get_research(slot: int) -> dict:
     """Get research progress from FLE."""
     try:
         port = config.BASE_RCON_PORT + slot
-        rcon = MCRcon("localhost", config.RCON_PASSWORD, port=port)
+        rcon = MCRcon(config.SERVER_HOST, config.RCON_PASSWORD, port=port)
         rcon.connect()
         try:
             # Get current research
@@ -877,7 +917,7 @@ def _sync_get_production(slot: int) -> dict:
     """Get production statistics from FLE."""
     try:
         port = config.BASE_RCON_PORT + slot
-        rcon = MCRcon("localhost", config.RCON_PASSWORD, port=port)
+        rcon = MCRcon(config.SERVER_HOST, config.RCON_PASSWORD, port=port)
         rcon.connect()
         try:
             # Get item production input counts (produced)
@@ -920,7 +960,7 @@ def _sync_get_entities_list(slot: int, radius: int = 50) -> dict:
     """Get detailed entity list from FLE."""
     try:
         port = config.BASE_RCON_PORT + slot
-        rcon = MCRcon("localhost", config.RCON_PASSWORD, port=port)
+        rcon = MCRcon(config.SERVER_HOST, config.RCON_PASSWORD, port=port)
         rcon.connect()
         try:
             response = rcon.command(f"/silent-command rcon.print(game.table_to_json(global.actions.render(1, true, {radius}, 'none')))")
