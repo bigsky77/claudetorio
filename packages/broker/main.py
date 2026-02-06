@@ -50,7 +50,6 @@ class Config:
     STREAM_DOMAIN = os.getenv("STREAM_DOMAIN", "")  # e.g., "stream.claudetorio.ai"
     STREAM_BASE_URL = os.getenv("STREAM_BASE_URL", "https://localhost")  # Legacy fallback
     STREAM_BASE_PORT = int(os.getenv("STREAM_BASE_PORT", "3003"))  # Legacy: Slot 0 = 3003, Slot 1 = 3004, etc.
-
     @classmethod
     def get_stream_url(cls, slot: int) -> str:
         """Get the stream URL for a given slot."""
