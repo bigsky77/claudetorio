@@ -1,87 +1,127 @@
 # Local Development
 
-Run the complete ClaudeTorio stack locally for development and testing.
+Ultra-tight local dev stack for ClaudeTorio. Matches prod topology: worlds are cheap and numerous, streams are scarce and stable.
+
+## Architecture
+
+```
+Host (hot reload)                Docker (infra + worlds)
+─────────────────                ────────────────────────
+broker   :8080  ──RCON──────►  factorio_0  :27000 / :34197
+frontend :3000                  factorio_1  :27001 / :34198
+                                postgres    :5432
+                                redis       :6379
+                                stream_client_0 :3002 (optional)
+```
+
+- **Broker + Frontend** run on the host for instant reload
+- **Everything else** runs in Docker via `docker compose`
 
 ## Prerequisites
 
-- Docker
-- Docker Compose v2
-- Git
+- Docker + Docker Compose v2
+- Python 3.11+ (for broker)
+- Node.js 20+ (for frontend)
+- Optional: Factorio GUI install for stream client testing
 
-Optional for NixOS VM testing:
-- Nix with flakes enabled
-- QEMU, VirtualBox, or UTM
-
-## Quick Start
+## One-Time Setup (~10 minutes)
 
 ```bash
-# One-command setup
-./setup.sh
-
-# Or manually:
+# 1. Create local env file
+cd dev/
 cp .env.example .env
-# Edit .env with your ANTHROPIC_API_KEY (optional)
-docker compose up --build
+
+# 2. Create local data directories
+mkdir -p data/saves data/fle-saves
+
+# 3. Install broker dependencies
+cd ../packages/broker
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+
+# 4. Install frontend dependencies
+cd ../frontend
+npm install
+cp .env.local.example .env.local
 ```
 
-## Services
+## Daily Workflow (2 terminals, no rebuilds)
 
-| Service | URL | Description |
-|---------|-----|-------------|
-| Frontend | http://localhost:3000 | Next.js viewer app |
-| Broker | http://localhost:8080 | FastAPI session broker |
-| PostgreSQL | localhost:5432 | Database |
-| Redis | localhost:6379 | Cache and pub/sub |
-| Factorio | localhost:34197 (UDP) | Headless game server |
-
-## Development Workflow
+### Terminal A: Docker infra
 
 ```bash
-# Start services
-docker compose up -d
-
-# View logs
-docker compose logs -f broker
-docker compose logs -f frontend
-
-# Rebuild after code changes
-docker compose up --build broker
-docker compose up --build frontend
-
-# Reset database
-docker compose down -v
-docker compose up -d
-
-# Stop all services
-docker compose down
+cd dev/
+docker compose up
 ```
+
+This starts: postgres, redis, factorio_0 (slot 0), factorio_1 (slot 1).
+
+### Terminal B: Broker + Frontend
+
+```bash
+# Start broker (from repo root)
+cd packages/broker
+source .venv/bin/activate
+set -a; source ../../dev/.env; set +a
+uvicorn main:app --reload --host 0.0.0.0 --port 8080
+
+# In another terminal/tab, start frontend
+cd packages/frontend
+npm run dev
+```
+
+### That's it
+
+- Frontend: http://localhost:3000
+- Broker API: http://localhost:8080
+- Broker docs: http://localhost:8080/docs
+
+## Port Map
+
+| Service | Port | Protocol |
+|---------|------|----------|
+| Frontend | 3000 | HTTP |
+| Broker API | 8080 | HTTP |
+| PostgreSQL | 5432 | TCP |
+| Redis | 6379 | TCP |
+| Factorio slot 0 game | 34197 | UDP |
+| Factorio slot 0 RCON | 27000 | TCP |
+| Factorio slot 1 game | 34198 | UDP |
+| Factorio slot 1 RCON | 27001 | TCP |
+| Stream client 0 | 3002 | HTTP |
 
 ## Stream Client (Optional)
 
-The stream client requires a full Factorio installation with graphics.
-To enable local stream testing:
+To test streaming locally:
 
-1. Install Factorio GUI to `./factorio-client/`
-2. Uncomment the `stream-client` service in `docker-compose.yml`
-3. Run `docker compose up --build`
+1. Place a full Factorio GUI install (v1.1.110) at `dev/factorio-client/` (gitignored)
+2. Uncomment the `stream_client_0` service and `stream_client_0_data` volume in `docker-compose.yml`
+3. `docker compose up`
+4. Open http://localhost:3002 to see the stream
 
-## NixOS VM
+## Scaling
 
-For testing NixOS configurations:
+Start with 2 worlds and 1 stream client. Only bump up when needed:
+
+- **5-10 worlds**: debugging allocation + ranking logic
+- **2-3 stream clients**: debugging pool assignment and prewarming
+
+Add more slots by duplicating `factorio_N` services in `docker-compose.yml` with incremented ports, and setting `TOTAL_SLOTS` in `.env`.
+
+## Troubleshooting
 
 ```bash
-# Build VM
-nix build ..#nixosConfigurations.dev-vm.config.system.build.vm
+# View factorio logs
+docker compose logs -f factorio_0
 
-# Run VM
-./result/bin/run-claudetorio-dev-vm
+# Reset database
+docker compose down -v && docker compose up
+
+# Test RCON connectivity
+python -c "from mcrcon import MCRcon; r=MCRcon('localhost','dev_rcon_password',port=27000); r.connect(); print(r.command('/version')); r.disconnect()"
 ```
 
-## Environment Variables
+## Legacy
 
-See `.env.example` for all available options.
-
-Key variables:
-- `ANTHROPIC_API_KEY` - Required to run AI agents
-- `POSTGRES_PASSWORD` - Database password (default: dev_password)
-- `RCON_PASSWORD` - Factorio RCON password
+The previous all-in-one compose (with broker+frontend in Docker) is preserved at `docker-compose.legacy.yml` for reference.

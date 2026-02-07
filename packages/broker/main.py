@@ -30,9 +30,9 @@ load_dotenv()
 # ============== Configuration ==============
 
 class Config:
-    TOTAL_SLOTS = 20
-    BASE_RCON_PORT = 27000
-    BASE_UDP_PORT = 34197
+    TOTAL_SLOTS = int(os.getenv("TOTAL_SLOTS", "20"))
+    BASE_RCON_PORT = int(os.getenv("BASE_RCON_PORT", "27000"))
+    BASE_UDP_PORT = int(os.getenv("BASE_UDP_PORT", "34197"))
     RCON_PASSWORD = os.getenv("RCON_PASSWORD", "factorio")
     SERVER_HOST = os.getenv("SERVER_HOST", "localhost")
     SAVES_DIR = Path(os.getenv("SAVES_DIR", "/var/claudetorio/saves"))
@@ -50,7 +50,6 @@ class Config:
     STREAM_DOMAIN = os.getenv("STREAM_DOMAIN", "")  # e.g., "stream.claudetorio.ai"
     STREAM_BASE_URL = os.getenv("STREAM_BASE_URL", "https://localhost")  # Legacy fallback
     STREAM_BASE_PORT = int(os.getenv("STREAM_BASE_PORT", "3003"))  # Legacy: Slot 0 = 3003, Slot 1 = 3004, etc.
-
     @classmethod
     def get_stream_url(cls, slot: int) -> str:
         """Get the stream URL for a given slot."""
@@ -72,6 +71,25 @@ active_websockets: Dict[str, List[WebSocket]] = {}  # session_id -> websockets
 
 
 # ============== Models ==============
+
+class ActivityEvent(BaseModel):
+    type: str = Field(..., pattern=r'^(thinking|tool_use|code_exec|output|error|commit|system)$')
+    timestamp: str
+    summary: str
+    detail: Optional[str] = None
+    metadata: Optional[Dict[str, Any]] = None
+
+class RunStats(BaseModel):
+    score: float = 0
+    game_tick: int = 0
+    playtime_seconds: int = 0
+    inventory_summary: Optional[Dict[str, Any]] = None
+    research: Optional[Dict[str, Any]] = None
+    production_summary: Optional[Dict[str, Any]] = None
+    entity_count: int = 0
+
+class EventsPayload(BaseModel):
+    events: List[ActivityEvent]
 
 class ClaimRequest(BaseModel):
     username: str = Field(..., min_length=2, max_length=20, pattern=r'^[a-z0-9_]+$')
@@ -365,22 +383,46 @@ async def release_slot_lock(slot: int):
     await redis_client.delete(lock_key)
 
 
+# ============== Broadcasting ==============
+
+async def broadcast_to_session(session_id: str, message: dict):
+    """Broadcast a JSON message to all WebSocket subscribers of a session."""
+    if session_id not in active_websockets:
+        return
+    text = json.dumps(message)
+    dead = []
+    for ws in active_websockets[session_id]:
+        try:
+            await ws.send_text(text)
+        except Exception:
+            dead.append(ws)
+    for ws in dead:
+        try:
+            active_websockets[session_id].remove(ws)
+        except ValueError:
+            pass
+
+
 # ============== Background Tasks ==============
 
 async def score_polling_loop():
-    """Periodically poll active sessions for scores and broadcast updates."""
+    """Periodically poll active sessions for scores, stats, and broadcast updates."""
+    # Track previous stats per session to generate activity diffs
+    prev_stats: Dict[str, dict] = {}
+
     while True:
         await asyncio.sleep(config.SCORE_POLL_INTERVAL)
         try:
             async with db_pool.acquire() as conn:
                 active = await conn.fetch(
-                    "SELECT session_id, username, slot FROM sessions WHERE status = 'active'"
+                    "SELECT session_id, username, slot, started_at FROM sessions WHERE status = 'active'"
                 )
 
                 for session in active:
                     slot = session['slot']
                     session_id = session['session_id']
                     username = session['username']
+                    started_at = session['started_at']
 
                     # Get current score
                     score_data = await get_slot_score(slot)
@@ -392,18 +434,110 @@ async def score_polling_loop():
                         VALUES ($1, $2, $3, $4)
                     """, username, session_id, score, json.dumps(score_data.get('items', {})))
 
-                    # Broadcast to websockets
-                    if session_id in active_websockets:
-                        message = json.dumps({
-                            "type": "score_update",
+                    # Broadcast legacy score_update
+                    await broadcast_to_session(session_id, {
+                        "type": "score_update",
+                        "score": score,
+                        "timestamp": datetime.utcnow().isoformat(),
+                    })
+
+                    # Gather full run_stats via RCON helpers
+                    research_data = _sync_get_research(slot)
+                    inventory_data = _sync_get_inventory(slot)
+                    factory_data = _sync_get_factory_data(slot)
+                    playtime_seconds = int((datetime.utcnow() - started_at.replace(tzinfo=None)).total_seconds())
+
+                    stats_payload = {
+                        "score": score,
+                        "game_tick": 0,
+                        "playtime_seconds": playtime_seconds,
+                        "inventory_summary": inventory_data.get("items", {}),
+                        "research": research_data,
+                        "production_summary": None,
+                        "entity_count": factory_data.get("total_entities", 0),
+                    }
+
+                    # Cache in Redis
+                    await redis_client.set(
+                        f"session_state:{session_id}",
+                        json.dumps(stats_payload),
+                    )
+
+                    # Broadcast run_stats
+                    await broadcast_to_session(session_id, {
+                        "type": "run_stats",
+                        "session_id": session_id,
+                        "timestamp": datetime.utcnow().isoformat(),
+                        "payload": stats_payload,
+                    })
+
+                    # Generate activity events from state diffs (skip first poll to avoid noise)
+                    prev = prev_stats.get(session_id)
+                    events = []
+                    ts = datetime.utcnow().isoformat()
+
+                    if prev is None:
+                        # First poll — just seed the tracker, no events
+                        prev_stats[session_id] = {
                             "score": score,
-                            "timestamp": datetime.utcnow().isoformat()
-                        })
-                        for ws in active_websockets[session_id]:
-                            try:
-                                await ws.send_text(message)
-                            except:
-                                pass
+                            "current_research": research_data.get("current_research"),
+                            "entity_count": factory_data.get("total_entities", 0),
+                            "researched_count": len(research_data.get("researched", [])),
+                        }
+                        continue
+
+                    prev_score = prev.get("score", 0)
+                    if score != prev_score:
+                        delta = score - prev_score
+                        sign = "+" if delta > 0 else ""
+                        events.append({"type": "system", "timestamp": ts, "summary": f"Score: {score} ({sign}{delta})"})
+
+                    prev_research = prev.get("current_research")
+                    cur_research = research_data.get("current_research")
+                    if cur_research and cur_research != prev_research:
+                        events.append({"type": "system", "timestamp": ts, "summary": f"Researching: {cur_research}"})
+
+                    prev_entities = prev.get("entity_count", 0)
+                    cur_entities = factory_data.get("total_entities", 0)
+                    if cur_entities != prev_entities:
+                        delta = cur_entities - prev_entities
+                        sign = "+" if delta > 0 else ""
+                        events.append({"type": "system", "timestamp": ts, "summary": f"Entities: {cur_entities} ({sign}{delta})"})
+
+                    prev_researched = prev.get("researched_count", 0)
+                    cur_researched = len(research_data.get("researched", []))
+                    if cur_researched > prev_researched:
+                        events.append({"type": "commit", "timestamp": ts, "summary": f"Research complete! ({cur_researched} total)"})
+
+                    # Store and broadcast activity events
+                    if events:
+                        pipe = redis_client.pipeline()
+                        for ev in events:
+                            pipe.rpush(f"session_events:{session_id}", json.dumps(ev))
+                        pipe.ltrim(f"session_events:{session_id}", -200, -1)
+                        await pipe.execute()
+
+                        for ev in events:
+                            await broadcast_to_session(session_id, {
+                                "type": "activity",
+                                "session_id": session_id,
+                                "timestamp": ts,
+                                "payload": ev,
+                            })
+
+                    # Update prev tracker
+                    prev_stats[session_id] = {
+                        "score": score,
+                        "current_research": cur_research,
+                        "entity_count": cur_entities,
+                        "researched_count": cur_researched,
+                    }
+
+                # Clean up prev_stats for ended sessions
+                active_ids = {s['session_id'] for s in active}
+                for sid in list(prev_stats.keys()):
+                    if sid not in active_ids:
+                        del prev_stats[sid]
 
         except Exception as e:
             print(f"Score polling error: {e}")
@@ -467,6 +601,10 @@ async def session_timeout_checker():
                     """, final_score, playtime_seconds, session['username'])
 
                     await release_slot_lock(session['slot'])
+                    await redis_client.delete(
+                        f"session_events:{session['session_id']}",
+                        f"session_state:{session['session_id']}",
+                    )
 
         except Exception as e:
             print(f"Session timeout checker error: {e}")
@@ -702,9 +840,10 @@ async def release_session(session_id: str, request: ReleaseRequest):
         # Release slot
         await release_slot_lock(slot)
 
-        # Clean up websockets
+        # Clean up websockets and Redis event/state keys
         if session_id in active_websockets:
             del active_websockets[session_id]
+        await redis_client.delete(f"session_events:{session_id}", f"session_state:{session_id}")
 
     return {
         "status": "released",
@@ -1125,9 +1264,67 @@ async def get_session_entities(session_id: str, radius: int = 50):
     return _sync_get_entities_list(session['slot'], radius)
 
 
+@app.post("/api/session/{session_id}/events")
+async def post_session_events(session_id: str, payload: EventsPayload):
+    """Ingest activity events from agent reporter sidecar."""
+    async with db_pool.acquire() as conn:
+        session = await conn.fetchrow(
+            "SELECT status FROM sessions WHERE session_id = $1",
+            session_id
+        )
+        if not session or session['status'] != 'active':
+            raise HTTPException(status_code=404, detail="Session not found or inactive")
+
+    # Store in Redis list, capped at 200
+    key = f"session_events:{session_id}"
+    pipe = redis_client.pipeline()
+    for event in payload.events:
+        pipe.rpush(key, event.model_dump_json())
+    pipe.ltrim(key, -200, -1)
+    await pipe.execute()
+
+    # Broadcast each event
+    for event in payload.events:
+        await broadcast_to_session(session_id, {
+            "type": "activity",
+            "session_id": session_id,
+            "timestamp": event.timestamp,
+            "payload": event.model_dump(),
+        })
+
+    return {"accepted": len(payload.events)}
+
+
+@app.post("/api/session/{session_id}/game-state")
+async def post_game_state(session_id: str, stats: RunStats):
+    """Ingest game state from FLE after each execute() call."""
+    async with db_pool.acquire() as conn:
+        session = await conn.fetchrow(
+            "SELECT status, username FROM sessions WHERE session_id = $1",
+            session_id
+        )
+        if not session or session['status'] != 'active':
+            raise HTTPException(status_code=404, detail="Session not found or inactive")
+
+    # Store latest state in Redis hash
+    key = f"session_state:{session_id}"
+    state_dict = stats.model_dump()
+    await redis_client.set(key, json.dumps(state_dict))
+
+    # Broadcast to WS subscribers
+    await broadcast_to_session(session_id, {
+        "type": "run_stats",
+        "session_id": session_id,
+        "timestamp": datetime.utcnow().isoformat(),
+        "payload": state_dict,
+    })
+
+    return {"accepted": True}
+
+
 @app.websocket("/api/session/{session_id}/stream")
 async def session_stream(websocket: WebSocket, session_id: str):
-    """WebSocket endpoint for real-time score updates."""
+    """WebSocket endpoint for real-time session updates (scores, activity, run stats)."""
     await websocket.accept()
 
     # Verify session exists and is active
@@ -1145,15 +1342,41 @@ async def session_stream(websocket: WebSocket, session_id: str):
         active_websockets[session_id] = []
     active_websockets[session_id].append(websocket)
 
+    # Send replay buffer: cached run_stats + last 50 activity events
+    try:
+        cached_state = await redis_client.get(f"session_state:{session_id}")
+        if cached_state:
+            await websocket.send_text(json.dumps({
+                "type": "run_stats",
+                "session_id": session_id,
+                "timestamp": datetime.utcnow().isoformat(),
+                "payload": json.loads(cached_state),
+            }))
+
+        cached_events = await redis_client.lrange(f"session_events:{session_id}", -50, -1)
+        for raw_event in cached_events:
+            event_data = json.loads(raw_event)
+            await websocket.send_text(json.dumps({
+                "type": "activity",
+                "session_id": session_id,
+                "timestamp": event_data.get("timestamp", ""),
+                "payload": event_data,
+            }))
+    except Exception as e:
+        print(f"Error sending replay buffer for {session_id}: {e}")
+
     try:
         while True:
-            # Keep connection alive, actual updates come from score_polling_loop
+            # Keep connection alive, actual updates come from broadcast
             await websocket.receive_text()
     except WebSocketDisconnect:
         pass
     finally:
         if session_id in active_websockets:
-            active_websockets[session_id].remove(websocket)
+            try:
+                active_websockets[session_id].remove(websocket)
+            except ValueError:
+                pass
 
 
 @app.get("/api/leaderboard", response_model=List[LeaderboardEntry])

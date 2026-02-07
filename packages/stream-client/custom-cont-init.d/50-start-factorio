@@ -1,17 +1,11 @@
 #!/bin/bash
 # Start Factorio in the background after a delay
-# This runs during container init before the display is fully ready,
-# so we start a background process that waits and then launches Factorio
+# This runs during container init (as root) before the display is fully ready,
+# so we set up permissions here and schedule the launch.
 
-(
-    # Wait for the display to be ready
-    sleep 15
-
-    # Export display for Factorio
-    export DISPLAY=:1
-
-    # Start Factorio
-    /scripts/start-factorio.sh &
-) &
+# Fix permissions on the config/data volume so the runtime user can write
+chown -R "${PUID:-1000}:${PGID:-1000}" /config/factorio-data 2>/dev/null || true
+mkdir -p /config/factorio-data/saves /config/factorio-data/mods /config/factorio-data/script-output
+chown -R "${PUID:-1000}:${PGID:-1000}" /config/factorio-data
 
 echo "Factorio startup scheduled"

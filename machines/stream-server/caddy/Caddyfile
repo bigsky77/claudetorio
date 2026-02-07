@@ -30,6 +30,13 @@
 
 # Slot 0: c0.stream.domain
 c0.{$STREAM_DOMAIN:stream.localhost} {
+	# Allow iframe embedding from main site
+	header {
+		-X-Frame-Options
+		Content-Security-Policy "frame-ancestors 'self' https://claudetorio.ai https://*.claudetorio.ai"
+		Access-Control-Allow-Origin "*"
+	}
+
 	reverse_proxy factorio-stream-0:3000 {
 		# WebSocket support for KasmVNC
 		header_up Host {upstream_hostport}
@@ -53,6 +60,13 @@ c0.{$STREAM_DOMAIN:stream.localhost} {
 
 # Slot 1: c1.stream.domain
 c1.{$STREAM_DOMAIN:stream.localhost} {
+	# Allow iframe embedding from main site
+	header {
+		-X-Frame-Options
+		Content-Security-Policy "frame-ancestors 'self' https://claudetorio.ai https://*.claudetorio.ai"
+		Access-Control-Allow-Origin "*"
+	}
+
 	reverse_proxy factorio-stream-1:3000 {
 		header_up Host {upstream_hostport}
 		header_up X-Real-IP {remote_host}
@@ -75,6 +89,13 @@ c1.{$STREAM_DOMAIN:stream.localhost} {
 
 # Slot 2: c2.stream.domain
 c2.{$STREAM_DOMAIN:stream.localhost} {
+	# Allow iframe embedding from main site
+	header {
+		-X-Frame-Options
+		Content-Security-Policy "frame-ancestors 'self' https://claudetorio.ai https://*.claudetorio.ai"
+		Access-Control-Allow-Origin "*"
+	}
+
 	reverse_proxy factorio-stream-2:3000 {
 		header_up Host {upstream_hostport}
 		header_up X-Real-IP {remote_host}
