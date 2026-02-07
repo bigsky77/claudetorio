@@ -1,8 +1,8 @@
 #!/bin/bash
 set -e
 
-# Configuration - UPDATE THIS
-SERVER="https://app.claudetorio.ai"
+# Configuration - override SERVER with env var for local dev
+SERVER="${CLAUDETORIO_SERVER:-https://app.claudetorio.ai}"
 FLE_REPO="git+https://github.com/bigsky77/factorio-learning-environment.git"
 
 # Colors
@@ -254,8 +254,12 @@ WRAPPER_EOF
 
 chmod +x run-mcp.sh
 
-# Update MCP config to use wrapper script
-MCP_CONFIG=$(echo "$MCP_CONFIG" | jq --arg cmd "$SCRIPT_DIR/run-mcp.sh" '.mcpServers["factorio-fle"].command = $cmd | .mcpServers["factorio-fle"].args = []')
+# Update MCP config to use wrapper script and inject broker env vars
+MCP_CONFIG=$(echo "$MCP_CONFIG" | jq \
+    --arg cmd "$SCRIPT_DIR/run-mcp.sh" \
+    --arg broker_url "$SERVER" \
+    --arg session_id "$SESSION_ID" \
+    '.mcpServers["factorio-fle"].command = $cmd | .mcpServers["factorio-fle"].args = [] | .mcpServers["factorio-fle"].env.CLAUDETORIO_BROKER_URL = $broker_url | .mcpServers["factorio-fle"].env.CLAUDETORIO_SESSION_ID = $session_id')
 
 mkdir -p .claude
 echo "$MCP_CONFIG" > .claude/settings.json
@@ -309,5 +313,11 @@ echo ""
 echo -e "${GREEN}Launching Claude Code...${NC}"
 echo ""
 
-# Launch Claude Code with MCP config
-exec claude --mcp-config mcp-config.json --dangerously-skip-permissions
+# Launch Claude Code with MCP config, piped through activity reporter
+REPORTER_SCRIPT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/reporter.py"
+if [ -f "$REPORTER_SCRIPT" ]; then
+    claude --mcp-config mcp-config.json --dangerously-skip-permissions 2>&1 | \
+        python3 "$REPORTER_SCRIPT" --session-id "$SESSION_ID" --broker-url "$SERVER"
+else
+    exec claude --mcp-config mcp-config.json --dangerously-skip-permissions
+fi

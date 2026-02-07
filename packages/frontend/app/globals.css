@@ -57,3 +57,27 @@ body {
   color: var(--foreground);
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
 }
+
+/* Thin custom scrollbar for terminal feed */
+.terminal-scroll::-webkit-scrollbar {
+  width: 4px;
+}
+.terminal-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.terminal-scroll::-webkit-scrollbar-thumb {
+  background: rgba(161, 161, 170, 0.2);
+  border-radius: 2px;
+}
+.terminal-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(161, 161, 170, 0.4);
+}
+
+/* Panel hover highlight border */
+.panel-hover {
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.panel-hover:hover {
+  border-color: rgba(161, 161, 170, 0.3);
+  box-shadow: 0 0 0 1px rgba(161, 161, 170, 0.1);
+}

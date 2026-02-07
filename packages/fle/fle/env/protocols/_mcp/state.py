@@ -93,6 +93,7 @@ class FactorioMCPState:
                     "iron-plate": 8,
                 },
                 all_technologies_researched=False,
+                clear_entities=False,
             )
             # Ensure agent characters exist (removed one-time associate command)
             # Check if agent characters exist, if not create them
@@ -293,5 +294,6 @@ class FactorioMCPState:
             self.recipes_loaded = True
             return recipes
         except Exception as e:
-            print(f"Error loading recipes from file: {e}")
-            raise e
+            print(f"Warning: Could not load recipes file: {e}", file=__import__('sys').stderr)
+            self.recipes_loaded = True
+            return {}
