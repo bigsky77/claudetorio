@@ -9,6 +9,7 @@ dependencies = [
     "openai",
     "factorio-learning-environment @ file:///${PROJECT_ROOT}/../fle",
     "gym>=0.26.2",
+    "dulwich",
 ]
 
 [project.scripts]
