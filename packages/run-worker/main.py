@@ -54,12 +54,19 @@ def _report_headers() -> dict:
 def report_step(broker_url: str, run_id: str, step_idx: int, code: str, **kwargs):
     """Report a step to the broker (fire-and-forget, best effort)."""
     try:
-        httpx.post(
+        payload = {"step_idx": step_idx, "code": code, **kwargs}
+        # Sanitise numpy/non-JSON-native types
+        for k, v in payload.items():
+            if hasattr(v, 'item'):  # numpy scalar
+                payload[k] = v.item()
+        resp = httpx.post(
             f"{broker_url}/api/internal/runs/{run_id}/steps",
-            json={"step_idx": step_idx, "code": code, **kwargs},
+            json=payload,
             headers=_report_headers(),
             timeout=10,
         )
+        if resp.status_code >= 400:
+            print(f"Warning: step {step_idx} report returned {resp.status_code}: {resp.text[:300]}")
     except Exception as e:
         print(f"Warning: failed to report step {step_idx}: {e}")
 
@@ -67,12 +74,17 @@ def report_step(broker_url: str, run_id: str, step_idx: int, code: str, **kwargs
 def report_complete(broker_url: str, run_id: str, final_score: float | None, status: str = "completed", error: str | None = None):
     """Report run completion to the broker (best effort)."""
     try:
-        httpx.post(
+        # Sanitise numpy scalars
+        if hasattr(final_score, 'item'):
+            final_score = final_score.item()
+        resp = httpx.post(
             f"{broker_url}/api/internal/runs/{run_id}/complete",
             json={"final_score": final_score, "status": status, "error": error},
             headers=_report_headers(),
             timeout=10,
         )
+        if resp.status_code >= 400:
+            print(f"Warning: complete report returned {resp.status_code}: {resp.text[:300]}")
     except Exception as e:
         print(f"Warning: failed to report run completion: {e}")
 
@@ -400,9 +412,45 @@ async def run(steps: int, broker_url: str, username: str):
     # 2. Connect FLE
     from fle.env.instance import FactorioInstance
 
-    print(f"Connecting to Factorio at {server_host}:{rcon_port}...")
+    # Resolve hostname to IP — factorio-rcon-py can fail with Docker hostnames
+    import socket
+    try:
+        server_ip = socket.gethostbyname(server_host)
+        print(f"Resolved {server_host} -> {server_ip}")
+    except socket.gaierror:
+        server_ip = server_host
+        print(f"DNS resolution failed for {server_host}, using as-is")
+
+    # Dismiss Factorio's "achievements will be disabled" warning.
+    # On a fresh save, the first /sc command triggers a warning and is NOT executed.
+    # Sending it twice "confirms" and unlocks the Lua console for FLE.
+    from factorio_rcon import RCONClient as _WarmupRCON
+    from fle.cluster.run_envs import RCON_PASSWORD as _rcon_pw
+    for attempt in range(3):
+        try:
+            _warmup = _WarmupRCON(server_ip, rcon_port, _rcon_pw)
+            # send the same command twice to dismiss the achievements warning
+            _warmup.send_command("/sc rcon.print('warmup')")
+            _warmup.send_command("/sc rcon.print('warmup')")
+            _warmup.close()
+            print("RCON warmup OK (achievements warning dismissed)")
+            break
+        except Exception as e:
+            print(f"RCON warmup attempt {attempt+1} failed: {e}")
+            import time; time.sleep(2)
+
+    # Patch: FLE's connect_to_server calls RCONClient(connect_on_init=True) then
+    # immediately calls .connect() again, causing a double-connect that confuses
+    # the RCON protocol state. Fix by defaulting connect_on_init to False.
+    from factorio_rcon import RCONClient as _OrigRCON
+    _orig_init = _OrigRCON.__init__
+    def _patched_init(self, ip_address, port, password, timeout=None, connect_on_init=False):
+        _orig_init(self, ip_address, port, password, timeout=timeout, connect_on_init=connect_on_init)
+    _OrigRCON.__init__ = _patched_init
+
+    print(f"Connecting to Factorio at {server_ip}:{rcon_port}...")
     instance = FactorioInstance(
-        address=server_host,
+        address=server_ip,
         tcp_port=rcon_port,
         fast=True,
         all_technologies_researched=False,

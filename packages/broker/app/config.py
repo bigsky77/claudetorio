@@ -24,8 +24,9 @@ class Config:
     # Auth keys
     BROKER_ADMIN_KEY = os.getenv("BROKER_ADMIN_KEY", "")
     RUN_WORKER_API_KEY = os.getenv("RUN_WORKER_API_KEY", "")
-    # Path to run-worker package
-    RUN_WORKER_DIR = Path(os.getenv("RUN_WORKER_DIR", str(Path(__file__).resolve().parent.parent.parent / "run-worker")))
+    # Docker settings for run-worker containers
+    RUN_WORKER_IMAGE = os.getenv("RUN_WORKER_IMAGE", "claudetorio-run-worker")
+    DOCKER_NETWORK = os.getenv("DOCKER_NETWORK", "")
     # Stream server configuration
     # Subdomain routing through Caddy: c0.stream.claudetorio.ai, c1.stream.claudetorio.ai, etc.
     # Legacy: port-based routing (e.g., https://host:3003/) - used if STREAM_DOMAIN is not set

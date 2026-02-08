@@ -1,8 +1,11 @@
 import asyncio
+import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from .db import init_db, close_db
 from .routes import all_routers
@@ -41,6 +44,11 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    @app.exception_handler(RequestValidationError)
+    async def log_validation_error(request: Request, exc: RequestValidationError):
+        logging.warning(f"422 on {request.method} {request.url.path}: {exc.errors()}")
+        return JSONResponse(status_code=422, content={"detail": exc.errors()})
 
     for router in all_routers:
         app.include_router(router)

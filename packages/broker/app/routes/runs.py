@@ -1,6 +1,5 @@
 import asyncio
 import os
-import signal
 import uuid
 from datetime import datetime
 
@@ -21,7 +20,7 @@ router = APIRouter()
 
 async def _monitor_run(run_id: str, proc: asyncio.subprocess.Process, app_state: AppState):
     """Monitor a run subprocess and update DB when it exits."""
-    await proc.wait()
+    stdout_bytes, _ = await proc.communicate()
     app_state.run_processes.pop(run_id, None)
     async with async_session_factory() as db:
         run = await db.scalar(select(Run).where(Run.run_id == run_id))
@@ -29,7 +28,14 @@ async def _monitor_run(run_id: str, proc: asyncio.subprocess.Process, app_state:
             run.status = "completed" if proc.returncode == 0 else "failed"
             run.ended_at = datetime.utcnow()
             if proc.returncode != 0:
-                run.error = f"Process exited with code {proc.returncode}"
+                output = ""
+                if stdout_bytes:
+                    full = stdout_bytes.decode(errors="replace")
+                    if len(full) > 2000:
+                        output = full[:800] + "\n...\n" + full[-800:]
+                    else:
+                        output = full
+                run.error = f"Process exited with code {proc.returncode}\n{output}".strip()
             await db.commit()
         # Safety net: release slot lock if worker didn't
         if run and run.slot is not None:
@@ -178,24 +184,51 @@ async def create_run(
     db.add(run)
     await db.commit()
 
-    # Spawn worker subprocess
-    broker_url = "http://localhost:8080"
-    env = {
-        **os.environ,
+    # Spawn run-worker Docker container
+    broker_url = "http://broker:8080"
+    rcon_port = config.BASE_RCON_PORT + slot
+    env_vars = {
         "BROKER_URL": broker_url,
         "MODEL": req.model,
         "SERVER_HOST": config.SERVER_HOST,
         "RCON_PASSWORD": config.RCON_PASSWORD,
-        "RCON_PORT": str(config.BASE_RCON_PORT + slot),
+        "RCON_PORT": str(rcon_port),
         "RUN_WORKER_API_KEY": config.RUN_WORKER_API_KEY,
         "RUN_ID": run_id,
+        # FLE reads these at module-import time, so they must be in the
+        # container env before any Python import runs.
+        "FLE_RCON_HOST": config.SERVER_HOST,
+        "FLE_RCON_PORT": str(rcon_port),
+        "FLE_RCON_PASSWORD": config.RCON_PASSWORD,
     }
-    proc = await asyncio.create_subprocess_exec(
+    # User-provided credentials from the request
+    if req.custom_api_url:
+        env_vars["CUSTOM_API"] = "true"
+        env_vars["CUSTOM_API_URL"] = req.custom_api_url
+        if req.custom_api_key:
+            env_vars["CUSTOM_API_KEY"] = req.custom_api_key
+    elif req.api_key:
+        env_vars["ANTHROPIC_API_KEY"] = req.api_key
+        env_vars["OPENAI_API_KEY"] = req.api_key
+
+    # Debug: log env vars being passed (redact secrets)
+    safe_keys = {k: (v[:4] + "..." if "KEY" in k or "PASSWORD" in k else v) for k, v in env_vars.items()}
+    print(f"[run {run_id}] env_vars: {safe_keys}", flush=True)
+
+    cmd = ["docker", "run", "--rm", "--name", f"run-worker-{run_id}"]
+    if config.DOCKER_NETWORK:
+        cmd += ["--network", config.DOCKER_NETWORK]
+    for k, v in env_vars.items():
+        cmd += ["-e", f"{k}={v}"]
+    cmd += [
+        config.RUN_WORKER_IMAGE,
         "uv", "run", "python", "main.py",
         "--steps", str(req.max_steps),
         "--broker-url", broker_url,
-        cwd=str(config.RUN_WORKER_DIR),
-        env=env,
+    ]
+
+    proc = await asyncio.create_subprocess_exec(
+        *cmd,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.STDOUT,
     )
@@ -221,15 +254,13 @@ async def stop_run(
     run.ended_at = datetime.utcnow()
     await db.commit()
 
-    # Send SIGTERM to the worker process
+    # Stop the run-worker Docker container
     proc = app_state.run_processes.get(run_id)
     if proc and proc.returncode is None:
-        proc.send_signal(signal.SIGTERM)
-        # Give worker 10s to clean up, then SIGKILL
-        try:
-            await asyncio.wait_for(proc.wait(), timeout=10)
-        except asyncio.TimeoutError:
-            proc.kill()
+        stop_proc = await asyncio.create_subprocess_exec(
+            "docker", "stop", "-t", "10", f"run-worker-{run_id}",
+        )
+        await stop_proc.wait()
         app_state.run_processes.pop(run_id, None)
 
     # Safety net: release slot lock

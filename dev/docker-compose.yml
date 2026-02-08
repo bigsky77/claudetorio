@@ -56,6 +56,8 @@ services:
       dockerfile: Dockerfile
     ports:
       - "8080:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
     environment:
       - POSTGRES_HOST=postgres
       - POSTGRES_DB=claudetorio
@@ -68,6 +70,9 @@ services:
       # Stream server configuration (local dev)
       - STREAM_BASE_URL=http://localhost
       - STREAM_BASE_PORT=3002
+      # Docker settings for run-worker containers
+      - DOCKER_NETWORK=dev_default
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
     depends_on:
       postgres:
         condition: service_healthy
@@ -83,6 +88,8 @@ services:
         - NEXT_PUBLIC_STREAM_URL=http://localhost:3002
     ports:
       - "3000:3000"
+    environment:
+      - BROKER_URL=http://broker:8080
     depends_on:
       - broker
 
@@ -109,6 +116,14 @@ services:
       - ./factorio-client:/opt/factorio  # Must provide Factorio install
     depends_on:
       - factorio
+
+  # Build-only target — image used by broker to spawn run-worker containers
+  run-worker:
+    build:
+      context: ../packages
+      dockerfile: run-worker/Dockerfile
+    image: claudetorio-run-worker
+    profiles: ["build-only"]
 
 volumes:
   postgres_data:

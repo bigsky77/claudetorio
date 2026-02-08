@@ -9,6 +9,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
+# Install Docker CLI (for spawning run-worker containers)
+RUN curl -fsSL https://download.docker.com/linux/static/stable/x86_64/docker-27.5.1.tgz \
+    | tar xz --strip-components=1 -C /usr/local/bin docker/docker
+
 # Copy project metadata and install dependencies
 COPY pyproject.toml .
 RUN uv sync --no-dev --no-install-project
@@ -16,10 +20,6 @@ RUN uv sync --no-dev --no-install-project
 # Copy application code
 COPY app/ app/
 COPY main.py .
-
-# Create non-root user
-RUN useradd -m -u 1000 broker
-USER broker
 
 EXPOSE 8080
 

@@ -38,3 +38,5 @@ docker run -p 8080:8080 --env-file .env claudetorio-broker
 - `GET /api/sessions` - List active sessions
 - `POST /api/sessions` - Create new session
 - `GET /api/leaderboard` - Get player leaderboard
+
+- `POST /api/runs` - Create a new run (the broker should be available on localhost)
