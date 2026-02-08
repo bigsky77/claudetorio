@@ -11,13 +11,14 @@ import StepList from './StepList';
 export default function RunDetailClient({
   initialRun,
   initialSteps,
-  streamUrl,
+  streamUrl: initialStreamUrl,
 }: {
   initialRun: RunInfo;
   initialSteps: RunStepInfo[];
   streamUrl: string | null;
 }) {
   const { run, steps, isActive, refetch } = useRunPolling(initialRun, initialSteps);
+  const streamUrl = run.stream_url ?? initialStreamUrl;
   const showStream = isActive && streamUrl;
 
   async function handleStop() {

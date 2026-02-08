@@ -85,6 +85,7 @@ class RunInfo(BaseModel):
     error: Optional[str] = None
     final_score: Optional[float] = None
     step_count: int = 0
+    stream_url: Optional[str] = None
 
 class RunStepInfo(BaseModel):
     id: int

@@ -12,7 +12,9 @@ from ..db import async_session_factory
 from ..dependencies import get_db, get_app_state, require_admin_key
 from ..models import Run, RunStep
 from ..schemas import CreateRunRequest, CreateRunResponse, RunInfo, RunStepInfo
+from ..services.factorio import spawn_factorio, stop_factorio, wait_for_factorio
 from ..services.slots import get_free_slot, claim_slot_lock, release_slot_lock
+from ..services.streaming import spawn_stream_client, stop_stream_client
 from ..state import AppState
 
 router = APIRouter()
@@ -40,6 +42,8 @@ async def _monitor_run(run_id: str, proc: asyncio.subprocess.Process, app_state:
         # Safety net: release slot lock if worker didn't
         if run and run.slot is not None:
             await release_slot_lock(run.slot, app_state.redis)
+            await stop_stream_client(run.slot)
+            await stop_factorio(run.slot)
 
 
 @router.get("/api/runs")
@@ -80,6 +84,7 @@ async def list_runs(
             error=r.error,
             final_score=r.final_score,
             step_count=step_counts.get(r.run_id, 0),
+            stream_url=config.get_stream_url(r.slot) if r.slot is not None else None,
         )
         for r in runs
     ]
@@ -110,6 +115,7 @@ async def get_run(run_id: str, db: AsyncSession = Depends(get_db)):
         error=run.error,
         final_score=run.final_score,
         step_count=step_count,
+        stream_url=config.get_stream_url(run.slot) if run.slot is not None else None,
     )
 
 
@@ -184,20 +190,34 @@ async def create_run(
     db.add(run)
     await db.commit()
 
+    # Spawn Factorio server for this slot (no-op if FACTORIO_IMAGE not set)
+    await spawn_factorio(slot)
+    if config.FACTORIO_IMAGE:
+        ready = await wait_for_factorio(slot)
+        if not ready:
+            await stop_factorio(slot)
+            await release_slot_lock(slot, app_state.redis)
+            run.status = "failed"
+            run.error = "Factorio server failed to start"
+            run.ended_at = datetime.utcnow()
+            await db.commit()
+            raise HTTPException(503, "Factorio server failed to start")
+
     # Spawn run-worker Docker container
     broker_url = "http://broker:8080"
-    rcon_port = config.BASE_RCON_PORT + slot
+    factorio_host = f"factorio-{slot}"
+    rcon_port = config.BASE_RCON_PORT
     env_vars = {
         "BROKER_URL": broker_url,
         "MODEL": req.model,
-        "SERVER_HOST": config.SERVER_HOST,
+        "SERVER_HOST": factorio_host,
         "RCON_PASSWORD": config.RCON_PASSWORD,
         "RCON_PORT": str(rcon_port),
         "RUN_WORKER_API_KEY": config.RUN_WORKER_API_KEY,
         "RUN_ID": run_id,
         # FLE reads these at module-import time, so they must be in the
         # container env before any Python import runs.
-        "FLE_RCON_HOST": config.SERVER_HOST,
+        "FLE_RCON_HOST": factorio_host,
         "FLE_RCON_PORT": str(rcon_port),
         "FLE_RCON_PASSWORD": config.RCON_PASSWORD,
     }
@@ -235,6 +255,9 @@ async def create_run(
     app_state.run_processes[run_id] = proc
     asyncio.create_task(_monitor_run(run_id, proc, app_state))
 
+    # Spawn stream-client for this slot (no-op if streaming not configured)
+    await spawn_stream_client(slot)
+
     return CreateRunResponse(run_id=run_id, status="running")
 
 
@@ -266,5 +289,7 @@ async def stop_run(
     # Safety net: release slot lock
     if run.slot is not None:
         await release_slot_lock(run.slot, app_state.redis)
+        await stop_stream_client(run.slot)
+        await stop_factorio(run.slot)
 
     return {"run_id": run_id, "status": "stopped"}

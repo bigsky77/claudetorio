@@ -11,8 +11,7 @@ from ..config import config
 
 def get_rcon_connection(slot: int) -> MCRcon:
     """Get RCON connection for a slot."""
-    port = config.BASE_RCON_PORT + slot
-    return MCRcon(config.SERVER_HOST, config.RCON_PASSWORD, port=port)
+    return MCRcon(f"factorio-{slot}", config.RCON_PASSWORD, port=config.BASE_RCON_PORT)
 
 
 async def get_slot_score(slot: int) -> dict:
@@ -26,8 +25,7 @@ async def get_slot_score(slot: int) -> dict:
 def _sync_get_slot_score(slot: int) -> dict:
     """Synchronous RCON call to get score."""
     try:
-        port = config.BASE_RCON_PORT + slot
-        rcon = MCRcon(config.SERVER_HOST, config.RCON_PASSWORD, port=port)
+        rcon = MCRcon(f"factorio-{slot}", config.RCON_PASSWORD, port=config.BASE_RCON_PORT)
         rcon.connect()
         try:
             response = rcon.command("/silent-command rcon.print(global.actions.score())")
@@ -100,8 +98,7 @@ async def save_slot_state(slot: int, save_path: Path):
 def _sync_get_factory_data(slot: int, radius: int = 50) -> dict:
     """Get factory state data from FLE via RCON."""
     try:
-        port = config.BASE_RCON_PORT + slot
-        rcon = MCRcon(config.SERVER_HOST, config.RCON_PASSWORD, port=port)
+        rcon = MCRcon(f"factorio-{slot}", config.RCON_PASSWORD, port=config.BASE_RCON_PORT)
         rcon.connect()
         try:
             response = rcon.command(f"/silent-command rcon.print(game.table_to_json(global.actions.render(1, true, {radius}, 'none')))")
@@ -134,8 +131,7 @@ def _sync_get_factory_data(slot: int, radius: int = 50) -> dict:
 def _sync_get_detailed_score(slot: int) -> dict:
     """Get detailed score breakdown from FLE."""
     try:
-        port = config.BASE_RCON_PORT + slot
-        rcon = MCRcon(config.SERVER_HOST, config.RCON_PASSWORD, port=port)
+        rcon = MCRcon(f"factorio-{slot}", config.RCON_PASSWORD, port=config.BASE_RCON_PORT)
         rcon.connect()
         try:
             score_response = rcon.command("/silent-command rcon.print(global.actions.score())")
@@ -159,8 +155,7 @@ def _sync_get_detailed_score(slot: int) -> dict:
 def _sync_get_inventory(slot: int) -> dict:
     """Get player inventory from FLE."""
     try:
-        port = config.BASE_RCON_PORT + slot
-        rcon = MCRcon(config.SERVER_HOST, config.RCON_PASSWORD, port=port)
+        rcon = MCRcon(f"factorio-{slot}", config.RCON_PASSWORD, port=config.BASE_RCON_PORT)
         rcon.connect()
         try:
             response = rcon.command("/silent-command rcon.print(game.table_to_json(game.players[1].get_main_inventory().get_contents()))")
@@ -186,8 +181,7 @@ def _sync_get_inventory(slot: int) -> dict:
 def _sync_get_research(slot: int) -> dict:
     """Get research progress from FLE."""
     try:
-        port = config.BASE_RCON_PORT + slot
-        rcon = MCRcon(config.SERVER_HOST, config.RCON_PASSWORD, port=port)
+        rcon = MCRcon(f"factorio-{slot}", config.RCON_PASSWORD, port=config.BASE_RCON_PORT)
         rcon.connect()
         try:
             current_response = rcon.command("/silent-command if game.forces.player.current_research then rcon.print(game.forces.player.current_research.name) else rcon.print('none') end")
@@ -222,8 +216,7 @@ def _sync_get_research(slot: int) -> dict:
 def _sync_get_production(slot: int) -> dict:
     """Get production statistics from FLE."""
     try:
-        port = config.BASE_RCON_PORT + slot
-        rcon = MCRcon(config.SERVER_HOST, config.RCON_PASSWORD, port=port)
+        rcon = MCRcon(f"factorio-{slot}", config.RCON_PASSWORD, port=config.BASE_RCON_PORT)
         rcon.connect()
         try:
             produced_response = rcon.command("/silent-command rcon.print(game.table_to_json(game.forces.player.item_production_statistics.input_counts))")
@@ -262,8 +255,7 @@ def _sync_get_production(slot: int) -> dict:
 def _sync_get_entities_list(slot: int, radius: int = 50) -> dict:
     """Get detailed entity list from FLE."""
     try:
-        port = config.BASE_RCON_PORT + slot
-        rcon = MCRcon(config.SERVER_HOST, config.RCON_PASSWORD, port=port)
+        rcon = MCRcon(f"factorio-{slot}", config.RCON_PASSWORD, port=config.BASE_RCON_PORT)
         rcon.connect()
         try:
             response = rcon.command(f"/silent-command rcon.print(game.table_to_json(global.actions.render(1, true, {radius}, 'none')))")

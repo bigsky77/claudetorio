@@ -19,7 +19,9 @@ from ..services.rcon import (
     _sync_get_detailed_score, _sync_get_inventory, _sync_get_research,
     _sync_get_production, _sync_get_factory_data, _sync_get_entities_list,
 )
+from ..services.factorio import spawn_factorio, stop_factorio, wait_for_factorio
 from ..services.slots import get_free_slot, claim_slot_lock, release_slot_lock
+from ..services.streaming import spawn_stream_client, stop_stream_client
 from ..state import AppState
 
 router = APIRouter()
@@ -67,6 +69,15 @@ async def claim_session(
         )
 
     try:
+        # Spawn Factorio server for this slot (no-op if FACTORIO_IMAGE not set)
+        await spawn_factorio(slot)
+        if config.FACTORIO_IMAGE:
+            ready = await wait_for_factorio(slot)
+            if not ready:
+                await stop_factorio(slot)
+                await release_slot_lock(slot, app_state.redis)
+                raise HTTPException(503, "Factorio server failed to start")
+
         # Ensure user exists
         stmt = pg_insert(User).values(username=username).on_conflict_do_nothing()
         await db.execute(stmt)
@@ -99,8 +110,12 @@ async def claim_session(
         else:
             background_tasks.add_task(reset_slot, slot)
 
-        rcon_port = config.BASE_RCON_PORT + slot
-        udp_port = config.BASE_UDP_PORT + slot
+        # Spawn stream-client for this slot (no-op if streaming not configured)
+        await spawn_stream_client(slot)
+
+        factorio_host = f"factorio-{slot}"
+        rcon_port = config.BASE_RCON_PORT
+        udp_port = config.BASE_UDP_PORT
         expires_at = datetime.utcnow() + timedelta(hours=config.SESSION_TIMEOUT_HOURS)
 
         mcp_config = {
@@ -109,7 +124,7 @@ async def claim_session(
                     "command": "python",
                     "args": ["-m", "fle.env.protocols._mcp"],
                     "env": {
-                        "FLE_SERVER_HOST": config.SERVER_HOST,
+                        "FLE_SERVER_HOST": factorio_host,
                         "FLE_RCON_PORT": str(rcon_port),
                         "FLE_RCON_PASSWORD": config.RCON_PASSWORD,
                     },
@@ -124,7 +139,7 @@ async def claim_session(
             rcon_port=rcon_port,
             udp_port=udp_port,
             mcp_config=mcp_config,
-            spectate_address=f"{config.SERVER_HOST}:{udp_port}",
+            spectate_address=f"{factorio_host}:{udp_port}",
             stream_url=config.get_stream_url(slot),
             expires_at=expires_at,
         )
@@ -238,6 +253,8 @@ async def release_session(
 
     # Release slot
     await release_slot_lock(slot, app_state.redis)
+    await stop_stream_client(slot)
+    await stop_factorio(slot)
 
     # Clean up websockets
     if session_id in app_state.active_websockets:

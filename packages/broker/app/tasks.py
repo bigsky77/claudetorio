@@ -7,8 +7,10 @@ from sqlalchemy import select
 from .config import config
 from .db import async_session_factory
 from .models import Session, ScoreHistory, User, Save
+from .services.factorio import stop_factorio
 from .services.rcon import get_slot_score, save_slot_state
 from .services.slots import release_slot_lock
+from .services.streaming import stop_stream_client
 from .state import AppState
 
 
@@ -122,6 +124,8 @@ async def session_timeout_checker(app_state: AppState):
                     await db.commit()
 
                     await release_slot_lock(session.slot, app_state.redis)
+                    await stop_stream_client(session.slot)
+                    await stop_factorio(session.slot)
 
         except Exception as e:
             print(f"Session timeout checker error: {e}")

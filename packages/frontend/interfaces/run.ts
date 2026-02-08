@@ -33,4 +33,5 @@ export interface RunInfo {
   error: string | null;
   final_score: number | null;
   step_count: number;
+  stream_url: string | null;
 }
