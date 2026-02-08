@@ -40,5 +40,5 @@ export function useRunPolling(initialRun: RunInfo, initialSteps: RunStepInfo[]) 
     return () => clearInterval(id);
   }, [active, poll]);
 
-  return { run, steps, isActive: active };
+  return { run, steps, isActive: active, refetch: poll };
 }

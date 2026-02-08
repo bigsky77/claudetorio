@@ -1,3 +1,6 @@
+'use client';
+
+import { useState } from 'react';
 import Link from 'next/link';
 import type { RunInfo } from '@/interfaces';
 
@@ -22,8 +25,24 @@ function formatDuration(start: string | null, end: string | null): string {
   return `${sec}s`;
 }
 
-export default function RunHeader({ run }: { run: RunInfo }) {
+export default function RunHeader({
+  run,
+  isActive,
+  onStop,
+}: {
+  run: RunInfo;
+  isActive?: boolean;
+  onStop?: () => Promise<void>;
+}) {
   const badgeClass = STATUS_COLORS[run.status] ?? 'bg-gray-700 text-gray-300';
+  const [stopping, setStopping] = useState(false);
+
+  async function handleStop() {
+    if (!onStop) return;
+    setStopping(true);
+    await onStop();
+    setStopping(false);
+  }
 
   return (
     <div className="space-y-4">
@@ -39,6 +58,15 @@ export default function RunHeader({ run }: { run: RunInfo }) {
         <span className={`px-2 py-1 text-xs rounded font-medium ${badgeClass}`}>
           {run.status}
         </span>
+        {isActive && onStop && (
+          <button
+            onClick={handleStop}
+            disabled={stopping}
+            className="ml-auto px-4 py-1.5 bg-red-700 hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed rounded text-sm font-medium transition-colors"
+          >
+            {stopping ? 'Stopping...' : 'Stop Run'}
+          </button>
+        )}
       </div>
 
       {/* Metadata cards */}

@@ -138,3 +138,33 @@ export async function fetchRunSteps(
     return [];
   }
 }
+
+export async function createRun(body: {
+  task_key?: string;
+  model?: string;
+  max_steps?: number;
+  api_key?: string;
+  custom_api_url?: string;
+  custom_api_key?: string;
+}): Promise<{ run_id: string; status: string; error?: string }> {
+  const res = await fetch('/api/runs', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.error || data.detail || `HTTP ${res.status}`);
+  }
+  return data;
+}
+
+export async function stopRun(runId: string): Promise<{ run_id: string; status: string } | null> {
+  try {
+    const res = await fetch(`/api/runs/${runId}/stop`, { method: 'POST' });
+    if (res.ok) return res.json();
+    return null;
+  } catch {
+    return null;
+  }
+}

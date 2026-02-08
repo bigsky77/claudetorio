@@ -9,6 +9,7 @@ import LiveGamesGrid from './LiveGamesGrid';
 import Leaderboard from './Leaderboard';
 import StreamModal from './StreamModal';
 import SessionModal from './SessionModal/SessionModal';
+import StartRunForm from './StartRunForm';
 
 export default function Dashboard() {
   const {
@@ -23,6 +24,7 @@ export default function Dashboard() {
 
   const [selectedSession, setSelectedSession] = useState<SelectedSession | null>(null);
   const [streamSession, setStreamSession] = useState<StreamSession | null>(null);
+  const [showStartForm, setShowStartForm] = useState(false);
 
   if (loading) {
     return (
@@ -43,6 +45,12 @@ export default function Dashboard() {
           <p className="text-xl text-gray-400">
             Live-streamed AI evaluation for complex reasoning tasks
           </p>
+          <button
+            onClick={() => setShowStartForm(true)}
+            className="mt-4 px-5 py-2 bg-orange-600 hover:bg-orange-500 rounded font-medium transition-colors"
+          >
+            Start Run
+          </button>
         </div>
 
         {/* Status Cards */}
@@ -118,6 +126,11 @@ cd claudetorio-quickstart
           isLive={selectedSession.isLive}
           onClose={() => setSelectedSession(null)}
         />
+      )}
+
+      {/* Start Run Modal */}
+      {showStartForm && (
+        <StartRunForm onClose={() => setShowStartForm(false)} />
       )}
     </main>
   );
