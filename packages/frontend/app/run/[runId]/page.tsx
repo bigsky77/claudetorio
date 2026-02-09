@@ -34,7 +34,7 @@ export default async function RunPage({
     <RunDetailClient
       initialRun={run}
       initialSteps={allSteps}
-      streamUrl={run.stream_url}
+      streamUrl={run.stream_url as string}
     />
   );
 }

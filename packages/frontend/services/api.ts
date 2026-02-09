@@ -168,3 +168,15 @@ export async function stopRun(runId: string): Promise<{ run_id: string; status: 
     return null;
   }
 }
+
+export async function startRunStream(
+  runId: string,
+): Promise<{ run_id: string; slot: number; stream_url: string } | null> {
+  try {
+    const res = await fetch(`/api/runs/${runId}/stream/start`, { method: 'POST' });
+    if (res.ok) return res.json();
+    return null;
+  } catch {
+    return null;
+  }
+}

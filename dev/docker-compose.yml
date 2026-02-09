@@ -61,7 +61,7 @@ services:
     image: alpine
     volumes:
       - factorio_client:/dest
-      - ${FACTORIO_CLIENT_PATH:-../factorio-client}:/src #:ro
+      - ${FACTORIO_CLIENT_PATH:-./factorio-client}:/src #:ro
     entrypoint: ["sh", "-c", "cp -rn /src/* /dest/ 2>/dev/null; echo 'Factorio client volume ready'"]
 
   broker:

@@ -13,10 +13,22 @@ from ..models import Run, RunStep
 from ..schemas import CreateRunRequest, CreateRunResponse, RunInfo, RunStepInfo
 from ..services.factorio import spawn_factorio, stop_factorio, wait_for_factorio
 from ..services.slots import get_free_slot, claim_slot_lock, release_slot_lock
-from ..services.streaming import spawn_stream_client, stop_stream_client
+from ..services.streaming import (
+    is_stream_client_running,
+    spawn_stream_client,
+    stop_stream_client,
+)
 from ..state import AppState
 
 router = APIRouter()
+
+
+async def _get_live_stream_url(slot: int | None) -> str | None:
+    if slot is None:
+        return None
+    if await is_stream_client_running(slot):
+        return config.get_stream_url(slot)
+    return None
 
 
 async def _monitor_run(run_id: str, proc: asyncio.subprocess.Process, app_state: AppState):
@@ -68,6 +80,14 @@ async def list_runs(
         )
         step_counts = dict(count_result.all())
 
+    stream_urls: dict[int, str] = {}
+    for r in runs:
+        if r.slot is None or r.slot in stream_urls:
+            continue
+        maybe_url = await _get_live_stream_url(r.slot)
+        if maybe_url:
+            stream_urls[r.slot] = maybe_url
+
     return [
         RunInfo(
             run_id=r.run_id,
@@ -83,7 +103,7 @@ async def list_runs(
             error=r.error,
             final_score=r.final_score,
             step_count=step_counts.get(r.run_id, 0),
-            stream_url=config.get_stream_url(r.slot) if r.slot is not None else None,
+            stream_url=stream_urls.get(r.slot) if r.slot is not None else None,
         )
         for r in runs
     ]
@@ -114,7 +134,7 @@ async def get_run(run_id: str, db: AsyncSession = Depends(get_db)):
         error=run.error,
         final_score=run.final_score,
         step_count=step_count,
-        stream_url=config.get_stream_url(run.slot) if run.slot is not None else None,
+        stream_url=await _get_live_stream_url(run.slot),
     )
 
 
@@ -232,8 +252,7 @@ async def create_run(
     # Debug: log env vars being passed (redact secrets)
     safe_keys = {k: (v[:4] + "..." if "KEY" in k or "PASSWORD" in k else v) for k, v in env_vars.items()}
     print(f"[run {run_id}] env_vars: {safe_keys}", flush=True)
-    # add  "--rm" back when confident in the setup
-    cmd = ["docker", "run", "--name", f"run-worker-{run_id}"]
+    cmd = ["docker","--rm", "run", "--name", f"run-worker-{run_id}"]
     if config.DOCKER_NETWORK:
         cmd += ["--network", config.DOCKER_NETWORK]
     for k, v in env_vars.items():
@@ -253,11 +272,28 @@ async def create_run(
     app_state.run_processes[run_id] = proc
     asyncio.create_task(_monitor_run(run_id, proc, app_state))
 
-    # Spawn stream-client for this slot (opt-in — adds significant resource overhead)
-    if req.enable_streaming:
-        await spawn_stream_client(slot)
+    # Stream clients are attached lazily on explicit frontend request:
+    # POST /api/runs/{run_id}/stream/start
 
     return CreateRunResponse(run_id=run_id, status="running")
+
+
+@router.post("/api/runs/{run_id}/stream/start", dependencies=[Depends(require_admin_key)])
+async def start_run_stream(
+    run_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    run = await db.scalar(select(Run).where(Run.run_id == run_id))
+    if not run:
+        raise HTTPException(404, "Run not found")
+    if run.slot is None:
+        raise HTTPException(409, "Run is not attached to a slot")
+    if run.status != "running":
+        raise HTTPException(409, f"Run is not running (status={run.status})")
+
+    factorio_host = f"factorio-{run.slot}"
+    await spawn_stream_client(run.slot, factorio_host=factorio_host)
+    return {"run_id": run_id, "slot": run.slot, "stream_url": config.get_stream_url(run.slot)}
 
 
 @router.post("/api/runs/{run_id}/stop", dependencies=[Depends(require_admin_key)])

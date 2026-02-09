@@ -3,7 +3,10 @@ import asyncio
 from ..config import config
 
 
-async def spawn_stream_client(slot: int) -> asyncio.subprocess.Process | None:
+async def spawn_stream_client(
+    slot: int,
+    factorio_host: str | None = None,
+) -> asyncio.subprocess.Process | None:
     """Spawn a stream-client Docker container for the given slot.
 
     Returns the process, or None if FACTORIO_CLIENT_PATH is not configured
@@ -19,8 +22,9 @@ async def spawn_stream_client(slot: int) -> asyncio.subprocess.Process | None:
 
     network = config.STREAM_CLIENT_NETWORK or config.DOCKER_NETWORK
 
+    server_host = factorio_host or f"factorio-{slot}"
     env_vars = {
-        "SERVER_HOST": f"factorio-{slot}",
+        "SERVER_HOST": server_host,
         "SERVER_PORT": str(config.BASE_UDP_PORT),
         "TITLE": f"ClaudeTorio Slot {slot}",
         "CUSTOM_USER": "viewer",
@@ -46,8 +50,9 @@ async def spawn_stream_client(slot: int) -> asyncio.subprocess.Process | None:
     elif config.FACTORIO_CLIENT_PATH:
         cmd += ["-v", f"{config.FACTORIO_CLIENT_PATH}:/opt/factorio"]
 
-    # Per-slot data dir for config isolation (lock files, config.ini)
-    cmd += ["-v", f"factorio-data-{slot}:/config/factorio-data"]
+    # Keep runtime config container-local to avoid shared-write conflicts.
+    # The startup script copies base config from /opt/factorio/config into
+    # /config/factorio-data for this instance.
 
     if config.STREAM_DOMAIN:
         # Prod: Caddy routes via Docker DNS, only expose internally
@@ -59,7 +64,7 @@ async def spawn_stream_client(slot: int) -> asyncio.subprocess.Process | None:
 
     cmd += [config.STREAM_CLIENT_IMAGE]
 
-    print(f"[streaming] Spawning {container_name}: SERVER_HOST=factorio-{slot} SERVER_PORT={config.BASE_UDP_PORT}", flush=True)
+    print(f"[streaming] Spawning {container_name}: SERVER_HOST={server_host} SERVER_PORT={config.BASE_UDP_PORT}", flush=True)
 
     proc = await asyncio.create_subprocess_exec(
         *cmd,
@@ -73,6 +78,21 @@ async def stop_stream_client(slot: int) -> None:
     """Stop the stream-client container for the given slot (best-effort)."""
     container_name = f"stream-client-{slot}"
     await _stop_container(container_name)
+
+
+async def is_stream_client_running(slot: int) -> bool:
+    """Check if the stream-client container for this slot is running."""
+    container_name = f"stream-client-{slot}"
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "docker", "inspect", "-f", "{{.State.Running}}", container_name,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+        stdout, _ = await proc.communicate()
+        return stdout.decode().strip() == "true"
+    except Exception:
+        return False
 
 
 async def _stop_container(name: str) -> None:
