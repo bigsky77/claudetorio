@@ -38,12 +38,31 @@ services:
 
   # Init: populate a named volume with Factorio server config files so
   # dynamically-spawned containers can mount them without host paths.
+  # remember :ro
   factorio-config-init:
     image: alpine
     volumes:
       - factorio_config:/dest
-      - ../config/factorio:/src:ro
+      - ../config/factorio:/src #:ro
     entrypoint: ["sh", "-c", "cp -f /src/* /dest/ && echo 'Factorio config volume populated'"]
+
+  # Init: populate a named volume with Factorio scenario files so
+  # dynamically-spawned containers can load the FLE open_world scenario.
+  factorio-scenarios-init:
+    image: alpine
+    volumes:
+      - factorio_scenarios:/dest
+      - ../config/factorio-scenarios:/src
+    entrypoint: ["sh", "-c", "cp -rf /src/* /dest/ && echo 'Factorio scenarios volume populated'"]
+
+  # Init: populate a named volume with Factorio client files so
+  # dynamically-spawned stream-client containers can mount them without host paths.
+  factorio-client-init:
+    image: alpine
+    volumes:
+      - factorio_client:/dest
+      - ${FACTORIO_CLIENT_PATH:-../factorio-client}:/src #:ro
+    entrypoint: ["sh", "-c", "cp -rn /src/* /dest/ 2>/dev/null; echo 'Factorio client volume ready'"]
 
   broker:
     build:
@@ -63,6 +82,7 @@ services:
       - BASE_RCON_PORT=27015
       - FACTORIO_IMAGE=factoriotools/factorio:1.1.110
       - FACTORIO_CONFIG_VOLUME=dev_factorio_config
+      - FACTORIO_SCENARIOS_VOLUME=dev_factorio_scenarios
       # Stream server configuration (local dev)
       - STREAM_BASE_URL=http://localhost
       - STREAM_BASE_PORT=3002
@@ -70,7 +90,7 @@ services:
       - DOCKER_NETWORK=dev_default
       # Docker settings for stream-client containers
       - STREAM_CLIENT_IMAGE=claudetorio-stream-client
-      - FACTORIO_CLIENT_PATH=${FACTORIO_CLIENT_PATH:-./factorio-client}
+      - FACTORIO_CLIENT_VOLUME=dev_factorio_client
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
     depends_on:
       postgres:
@@ -114,3 +134,5 @@ volumes:
   postgres_data:
   redis_data:
   factorio_config:
+  factorio_scenarios:
+  factorio_client:

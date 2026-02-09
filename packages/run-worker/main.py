@@ -413,14 +413,14 @@ async def run(steps: int, broker_url: str, username: str):
     from fle.env.instance import FactorioInstance
 
     # Resolve hostname to IP — factorio-rcon-py can fail with Docker hostnames
-    import socket
-    try:
-        server_ip = socket.gethostbyname(server_host)
-        print(f"Resolved {server_host} -> {server_ip}")
-    except socket.gaierror:
-        server_ip = server_host
-        print(f"DNS resolution failed for {server_host}, using as-is")
-
+    # import socket
+    # try:
+    #     server_ip = socket.gethostbyname(server_host)
+    #     print(f"Resolved {server_host} -> {server_ip}")
+    # except socket.gaierror:
+    #     server_ip = server_host
+    #     print(f"DNS resolution failed for {server_host}, using as-is")
+    server_ip = server_host
     # Dismiss Factorio's "achievements will be disabled" warning.
     # On a fresh save, the first /sc command triggers a warning and is NOT executed.
     # Sending it twice "confirms" and unlocks the Lua console for FLE.
@@ -447,7 +447,6 @@ async def run(steps: int, broker_url: str, username: str):
     def _patched_init(self, ip_address, port, password, timeout=None, connect_on_init=False):
         _orig_init(self, ip_address, port, password, timeout=timeout, connect_on_init=connect_on_init)
     _OrigRCON.__init__ = _patched_init
-
     print(f"Connecting to Factorio at {server_ip}:{rcon_port}...")
     instance = FactorioInstance(
         address=server_ip,
@@ -456,7 +455,6 @@ async def run(steps: int, broker_url: str, username: str):
         all_technologies_researched=False,
         clear_entities=False,
     )
-
     # Initialize version control for game state
     vcs_repo = FactorioMCPRepository(instance)
 
@@ -492,6 +490,8 @@ async def run(steps: int, broker_url: str, username: str):
     last_result: str | None = None
     observation: Observation | None = None
     cumulative_score = 0.0
+    consecutive_fle_errors = 0
+    MAX_CONSECUTIVE_FLE_ERRORS = 5
 
     try:
         # 3. Agent loop
@@ -500,12 +500,30 @@ async def run(steps: int, broker_url: str, username: str):
             print(f"Step {step}/{steps}")
             print(f"{'='*60}")
 
-            # Observe — first step gets a fresh observation, subsequent steps
-            # use the observation returned by gym_env.step()
-            if observation is None:
-                observation = gym_env.get_observation(agent_idx=0)
-            formatted_obs = obs_formatter.format(observation)
-            obs_text = formatted_obs.raw_str
+            # ── Observe ──────────────────────────────────────────────
+            # FLE/RCON calls are unstable: any call can return None or
+            # raise when the Factorio server is unhealthy.  Wrap the
+            # entire observe→think→act cycle so one bad step doesn't
+            # kill the run.
+            try:
+                if observation is None:
+                    observation = gym_env.get_observation(agent_idx=0)
+                formatted_obs = obs_formatter.format(observation)
+                obs_text = formatted_obs.raw_str
+            except Exception as obs_err:
+                consecutive_fle_errors += 1
+                print(f"ERROR: observation failed ({consecutive_fle_errors}/{MAX_CONSECUTIVE_FLE_ERRORS}): {obs_err}")
+                traceback.print_exc()
+                observation = None
+                if RUN_ID:
+                    report_step(broker_url, RUN_ID, step_idx=step,
+                                code="# observation failed", result=str(obs_err),
+                                error_occurred=True, production_score=cumulative_score)
+                if consecutive_fle_errors >= MAX_CONSECUTIVE_FLE_ERRORS:
+                    raise RuntimeError(f"Aborting: {MAX_CONSECUTIVE_FLE_ERRORS} consecutive FLE errors — Factorio server likely dead")
+                import time; time.sleep(2)
+                continue
+
             if last_result is not None:
                 obs_text += f"\n\n## Result from previous step\n{last_result}\n"
 
@@ -533,7 +551,7 @@ async def run(steps: int, broker_url: str, username: str):
             total_chars = sum(len(m.get("content", "")) if isinstance(m.get("content"), str) else sum(len(b.get("text", "")) for b in m["content"] if b.get("type") == "text") for m in messages)
             print(f"Context: {len(messages)} messages, ~{total_chars} chars")
 
-            # Call LLM (3 attempts with exponential backoff, then fail loud)
+            # ── Think ────────────────────────────────────────────────
             print("Thinking...")
             try:
                 response = await asyncio.wait_for(
@@ -544,13 +562,13 @@ async def run(steps: int, broker_url: str, username: str):
                 print("ERROR: LLM call timed out after 120s")
                 conversation.add_agent_message("# LLM call timed out")
                 last_result = "ERROR: LLM call timed out — check API key, rate limits, or context size"
-                observation = gym_env.get_observation(agent_idx=0)
+                observation = None
                 continue
             except Exception as api_err:
                 print(f"ERROR: LLM API call failed after retries: {type(api_err).__name__}: {api_err}")
                 conversation.add_agent_message("# LLM API call failed")
                 last_result = f"ERROR: API call failed: {api_err}"
-                observation = gym_env.get_observation(agent_idx=0)
+                observation = None
                 continue
 
             # Extract code from response
@@ -559,7 +577,7 @@ async def run(steps: int, broker_url: str, username: str):
                 conversation.add_agent_message("# No valid code generated")
                 last_result = "ERROR: no valid Python in LLM response"
                 print("Warning: LLM response contained no valid Python code")
-                observation = gym_env.get_observation(agent_idx=0)
+                observation = None
                 continue
 
             code = policy.code
@@ -571,31 +589,34 @@ async def run(steps: int, broker_url: str, username: str):
             directives, remaining_code = parse_vcs_directives(code)
             vcs_results = []
             for directive in directives:
-                if directive == "UNDO":
-                    prev_id = vcs_repo.undo()
-                    if prev_id:
-                        vcs_repo.apply_to_instance(prev_id)
-                        observation = gym_env.get_observation(agent_idx=0)
-                        vcs_results.append(f"Undone to commit {prev_id[:8]}")
-                    else:
-                        vcs_results.append("Nothing to undo")
-                elif directive.startswith("TAG:"):
-                    name = directive[4:]
-                    vcs_repo.tag_commit(name)
-                    vcs_results.append(f"Tagged as '{name}'")
-                elif directive.startswith("RESTORE:"):
-                    ref = directive[8:]
-                    tag_id = vcs_repo.get_tag(ref)
-                    if tag_id:
-                        vcs_repo.apply_to_instance(tag_id)
-                        observation = gym_env.get_observation(agent_idx=0)
-                        vcs_results.append(f"Restored to '{ref}'")
-                    else:
-                        vcs_results.append(f"Tag '{ref}' not found")
-                elif directive == "HISTORY":
-                    history = vcs_repo.get_history(max_count=5)
-                    lines = [f"  {h['id'][:8]}: {h['message']}" for h in history]
-                    vcs_results.append("Recent history:\n" + "\n".join(lines))
+                try:
+                    if directive == "UNDO":
+                        prev_id = vcs_repo.undo()
+                        if prev_id:
+                            vcs_repo.apply_to_instance(prev_id)
+                            observation = gym_env.get_observation(agent_idx=0)
+                            vcs_results.append(f"Undone to commit {prev_id[:8]}")
+                        else:
+                            vcs_results.append("Nothing to undo")
+                    elif directive.startswith("TAG:"):
+                        name = directive[4:]
+                        vcs_repo.tag_commit(name)
+                        vcs_results.append(f"Tagged as '{name}'")
+                    elif directive.startswith("RESTORE:"):
+                        ref = directive[8:]
+                        tag_id = vcs_repo.get_tag(ref)
+                        if tag_id:
+                            vcs_repo.apply_to_instance(tag_id)
+                            observation = gym_env.get_observation(agent_idx=0)
+                            vcs_results.append(f"Restored to '{ref}'")
+                        else:
+                            vcs_results.append(f"Tag '{ref}' not found")
+                    elif directive == "HISTORY":
+                        history = vcs_repo.get_history(max_count=5)
+                        lines = [f"  {h['id'][:8]}: {h['message']}" for h in history]
+                        vcs_results.append("Recent history:\n" + "\n".join(lines))
+                except Exception as vcs_err:
+                    vcs_results.append(f"VCS error: {vcs_err}")
 
             # If only VCS directives (no code), skip gym step
             if directives and not remaining_code.strip():
@@ -614,11 +635,29 @@ async def run(steps: int, broker_url: str, username: str):
             # If both directives and code, prepend VCS results to next observation
             exec_code = remaining_code if remaining_code.strip() else code
 
-            # Act via gym env
+            # ── Act ──────────────────────────────────────────────────
             print("Executing...")
             action = Action(code=exec_code, agent_idx=0)
-            obs_dict, reward, terminated, truncated, info = gym_env.step(action)
-            observation = Observation.from_dict(obs_dict)
+            try:
+                obs_dict, reward, terminated, truncated, info = gym_env.step(action)
+                observation = Observation.from_dict(obs_dict)
+            except Exception as step_err:
+                consecutive_fle_errors += 1
+                print(f"ERROR: step execution crashed ({consecutive_fle_errors}/{MAX_CONSECUTIVE_FLE_ERRORS}): {step_err}")
+                traceback.print_exc()
+                last_result = f"ERROR: Step crashed: {step_err}"
+                observation = None
+                if RUN_ID:
+                    report_step(broker_url, RUN_ID, step_idx=step,
+                                code=code, result=str(step_err),
+                                error_occurred=True, production_score=cumulative_score)
+                if consecutive_fle_errors >= MAX_CONSECUTIVE_FLE_ERRORS:
+                    raise RuntimeError(f"Aborting: {MAX_CONSECUTIVE_FLE_ERRORS} consecutive FLE errors — Factorio server likely dead")
+                import time; time.sleep(2)
+                continue
+
+            # Step succeeded — reset error counter
+            consecutive_fle_errors = 0
 
             # Structured results from info dict
             error_occurred = info["error_occurred"]

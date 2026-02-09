@@ -30,11 +30,13 @@ class Config:
     # Docker settings for stream-client containers
     STREAM_CLIENT_IMAGE = os.getenv("STREAM_CLIENT_IMAGE", "claudetorio-stream-client")
     FACTORIO_CLIENT_PATH = os.getenv("FACTORIO_CLIENT_PATH", "")  # host path to Factorio client install
+    FACTORIO_CLIENT_VOLUME = os.getenv("FACTORIO_CLIENT_VOLUME", "")  # Docker volume with Factorio client files
     STREAM_CLIENT_NETWORK = os.getenv("STREAM_CLIENT_NETWORK", "")  # may differ from DOCKER_NETWORK in prod
     # Docker settings for dynamic Factorio server containers
     FACTORIO_IMAGE = os.getenv("FACTORIO_IMAGE", "")  # e.g. "factoriotools/factorio:1.1.110"
     FACTORIO_CONFIG_PATH = os.getenv("FACTORIO_CONFIG_PATH", "")  # host path to config/factorio dir
     FACTORIO_CONFIG_VOLUME = os.getenv("FACTORIO_CONFIG_VOLUME", "")  # Docker volume name with config files
+    FACTORIO_SCENARIOS_VOLUME = os.getenv("FACTORIO_SCENARIOS_VOLUME", "")  # Docker volume with FLE scenario files
     # Stream server configuration
     # Subdomain routing through Caddy: c0.stream.claudetorio.ai, c1.stream.claudetorio.ai, etc.
     # Legacy: port-based routing (e.g., https://host:3003/) - used if STREAM_DOMAIN is not set

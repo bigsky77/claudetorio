@@ -9,7 +9,7 @@ async def spawn_stream_client(slot: int) -> asyncio.subprocess.Process | None:
     Returns the process, or None if FACTORIO_CLIENT_PATH is not configured
     (streaming disabled).
     """
-    if not config.FACTORIO_CLIENT_PATH:
+    if not config.FACTORIO_CLIENT_PATH and not config.FACTORIO_CLIENT_VOLUME:
         return None
 
     container_name = f"stream-client-{slot}"
@@ -40,8 +40,11 @@ async def spawn_stream_client(slot: int) -> asyncio.subprocess.Process | None:
     for k, v in env_vars.items():
         cmd += ["-e", f"{k}={v}"]
 
-    # Mount Factorio client binary (read-only)
-    cmd += ["-v", f"{config.FACTORIO_CLIENT_PATH}:/opt/factorio:ro"]
+    # Mount Factorio client binary
+    if config.FACTORIO_CLIENT_VOLUME:
+        cmd += ["-v", f"{config.FACTORIO_CLIENT_VOLUME}:/opt/factorio"]
+    elif config.FACTORIO_CLIENT_PATH:
+        cmd += ["-v", f"{config.FACTORIO_CLIENT_PATH}:/opt/factorio"]
 
     # Per-slot data dir for config isolation (lock files, config.ini)
     cmd += ["-v", f"factorio-data-{slot}:/config/factorio-data"]

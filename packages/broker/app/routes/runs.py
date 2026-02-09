@@ -2,7 +2,6 @@ import asyncio
 import os
 import uuid
 from datetime import datetime
-
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -202,7 +201,6 @@ async def create_run(
             run.ended_at = datetime.utcnow()
             await db.commit()
             raise HTTPException(503, "Factorio server failed to start")
-
     # Spawn run-worker Docker container
     broker_url = "http://broker:8080"
     factorio_host = f"factorio-{slot}"
@@ -234,8 +232,8 @@ async def create_run(
     # Debug: log env vars being passed (redact secrets)
     safe_keys = {k: (v[:4] + "..." if "KEY" in k or "PASSWORD" in k else v) for k, v in env_vars.items()}
     print(f"[run {run_id}] env_vars: {safe_keys}", flush=True)
-
-    cmd = ["docker", "run", "--rm", "--name", f"run-worker-{run_id}"]
+    # add  "--rm" back when confident in the setup
+    cmd = ["docker", "run", "--name", f"run-worker-{run_id}"]
     if config.DOCKER_NETWORK:
         cmd += ["--network", config.DOCKER_NETWORK]
     for k, v in env_vars.items():
@@ -255,8 +253,9 @@ async def create_run(
     app_state.run_processes[run_id] = proc
     asyncio.create_task(_monitor_run(run_id, proc, app_state))
 
-    # Spawn stream-client for this slot (no-op if streaming not configured)
-    await spawn_stream_client(slot)
+    # Spawn stream-client for this slot (opt-in — adds significant resource overhead)
+    if req.enable_streaming:
+        await spawn_stream_client(slot)
 
     return CreateRunResponse(run_id=run_id, status="running")
 

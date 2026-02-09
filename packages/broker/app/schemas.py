@@ -62,6 +62,7 @@ class CreateRunRequest(BaseModel):
     model: str = "claude-sonnet-4-5-20250929"
     max_steps: int = 200
     step_timeout_seconds: int = 60
+    enable_streaming: bool = False  # Opt-in: stream-client adds significant resource overhead
     # Provider credentials (sent per-run from frontend)
     api_key: Optional[str] = None
     custom_api_url: Optional[str] = None

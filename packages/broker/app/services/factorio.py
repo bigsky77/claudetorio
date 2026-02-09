@@ -5,9 +5,21 @@ from mcrcon import MCRcon
 from ..config import config
 
 
+async def _volume_has_content(volume_name: str) -> bool:
+    """Check if a Docker volume has any files."""
+    proc = await asyncio.create_subprocess_exec(
+        "docker", "run", "--rm", "-v", f"{volume_name}:/vol", "alpine", "ls", "/vol",
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.DEVNULL,
+    )
+    stdout, _ = await proc.communicate()
+    return bool(stdout.decode().strip())
+
+
 async def spawn_factorio(slot: int) -> str | None:
     """Spawn a Factorio server container for the given slot.
 
+    Uses FLE's open_world scenario for proper game-state initialization.
     Returns the container ID, or None if not configured or spawn failed.
     """
     if not config.FACTORIO_IMAGE:
@@ -18,30 +30,44 @@ async def spawn_factorio(slot: int) -> str | None:
     # Stop and remove any existing container for this slot (best-effort)
     await stop_factorio(slot)
 
-    env_vars = {
-        "GENERATE_NEW_SAVE": "true",
-        "SAVE_NAME": f"slot_{slot}",
-        "RCON_PASSWORD": config.RCON_PASSWORD,
-    }
-
-    cmd = ["docker", "run", "-d", "--name", container_name]
+    cmd = ["docker", "run", "-d", "--name", container_name, "--entrypoint", ""]
 
     if config.DOCKER_NETWORK:
         cmd += ["--network", config.DOCKER_NETWORK]
 
-    for k, v in env_vars.items():
-        cmd += ["-e", f"{k}={v}"]
-
     # Per-slot data volume
     cmd += ["-v", f"factorio-slot-{slot}:/factorio"]
 
-    # Mount config directory — prefer named volume, fall back to host path
+    # Mount config at /opt/factorio/config (FLE convention)
     if config.FACTORIO_CONFIG_VOLUME:
-        cmd += ["-v", f"{config.FACTORIO_CONFIG_VOLUME}:/factorio/config"]
+        if await _volume_has_content(config.FACTORIO_CONFIG_VOLUME):
+            cmd += ["-v", f"{config.FACTORIO_CONFIG_VOLUME}:/opt/factorio/config"]
+        else:
+            print(f"[factorio] WARNING: config volume '{config.FACTORIO_CONFIG_VOLUME}' empty, using image defaults", flush=True)
     elif config.FACTORIO_CONFIG_PATH:
-        cmd += ["-v", f"{config.FACTORIO_CONFIG_PATH}:/factorio/config"]
+        cmd += ["-v", f"{config.FACTORIO_CONFIG_PATH}:/opt/factorio/config"]
+
+    # Mount scenarios volume
+    if config.FACTORIO_SCENARIOS_VOLUME:
+        if await _volume_has_content(config.FACTORIO_SCENARIOS_VOLUME):
+            cmd += ["-v", f"{config.FACTORIO_SCENARIOS_VOLUME}:/factorio/scenarios"]
+        else:
+            print(f"[factorio] WARNING: scenarios volume '{config.FACTORIO_SCENARIOS_VOLUME}' empty", flush=True)
 
     cmd += [config.FACTORIO_IMAGE]
+
+    # Explicit command: launch with FLE's open_world scenario
+    cmd += [
+        "/opt/factorio/bin/x64/factorio",
+        "--start-server-load-scenario", "open_world",
+        "--rcon-port", str(config.BASE_RCON_PORT),
+        "--rcon-password", config.RCON_PASSWORD,
+        "--server-settings", "/opt/factorio/config/server-settings.json",
+        "--map-gen-settings", "/opt/factorio/config/map-gen-settings.json",
+        "--map-settings", "/opt/factorio/config/map-settings.json",
+        "--server-adminlist", "/opt/factorio/config/server-adminlist.json",
+        "--server-banlist", "/opt/factorio/config/server-banlist.json",
+    ]
 
     print(f"[factorio] Spawning {container_name}: {' '.join(cmd)}", flush=True)
 
@@ -84,7 +110,6 @@ async def stop_factorio(slot: int) -> None:
     except Exception:
         pass
     await _remove_container(container_name)
-
 
 async def _remove_container(name: str) -> None:
     """Remove a Docker container by name, ignoring errors."""
