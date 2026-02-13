@@ -105,7 +105,7 @@ jobs:
 
             # Build broker-spawned image and restart stream stack
             cd machines/stream-server
-            docker compose --profile build-only build stream-client
+            docker build -t claudetorio-stream-client ../../packages/stream-client
             docker compose up --build -d
 
             # Health check

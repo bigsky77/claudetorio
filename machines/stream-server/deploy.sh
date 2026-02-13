@@ -21,7 +21,7 @@ rsync -avz \
 
 # 3. Build broker-spawned image and restart stack
 echo "Building stream-client image and restarting containers..."
-ssh $SERVER "cd $REMOTE_PATH/machines/stream-server && docker compose --profile build-only build stream-client && docker compose up --build -d"
+ssh $SERVER "cd $REMOTE_PATH/machines/stream-server && docker build -t claudetorio-stream-client ../../packages/stream-client && docker compose up --build -d"
 
 # 4. Health check
 echo "Checking stream..."
