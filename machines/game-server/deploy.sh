@@ -29,9 +29,9 @@ rsync -avz --delete \
     ../../config/ \
     $SERVER:$REMOTE_PATH/config/
 
-# 4. Rebuild and restart
-echo "Rebuilding containers..."
-ssh $SERVER "cd $REMOTE_PATH/machines/game-server && docker compose up --build -d"
+# 4. Build broker-spawned image and restart stack
+echo "Building run-worker image and restarting containers..."
+ssh $SERVER "cd $REMOTE_PATH/machines/game-server && docker compose --profile build-only build run-worker && docker compose up --build -d"
 
 # 5. Health check
 echo "Checking health..."

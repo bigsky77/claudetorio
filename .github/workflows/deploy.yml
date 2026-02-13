@@ -31,7 +31,7 @@ jobs:
 
           # Check if game-server related files changed
           # (packages except stream-client, machines except stream-server, or config)
-          if echo "$CHANGED" | grep -qE '^(packages/(broker|frontend|agent-runner|fle)/|machines/game-server/|config/)'; then
+          if echo "$CHANGED" | grep -qE '^(packages/(broker|frontend|agent-runner|fle|run-worker)/|machines/game-server/|config/)'; then
             DEPLOY_GAME=true
           fi
 
@@ -72,7 +72,11 @@ jobs:
             # Record new SHA
             git rev-parse HEAD > .deployed-sha
 
-            # Rebuild containers
+            # Build broker-spawned image (profile-only service; not started here)
+            cd machines/game-server
+            docker compose --profile build-only build run-worker
+
+            # Rebuild and restart game stack
             cd machines/game-server
             docker compose up --build -d
 
@@ -102,7 +106,11 @@ jobs:
             # Record new SHA
             git rev-parse HEAD > .deployed-sha
 
-            # Rebuild containers
+            # Build broker-spawned image (profile-only service; not started here)
+            cd machines/stream-server
+            docker compose --profile build-only build stream-client
+
+            # Rebuild and restart stream stack
             cd machines/stream-server
             docker compose up --build -d
 
