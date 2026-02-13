@@ -116,19 +116,21 @@ services:
   # Images used by broker to spawn containers dynamically via `docker run`
 
   # Build-only target — image used by broker to spawn stream-client containers
+  # override the entrypoint to make the image persist
   stream-client:
     build:
       context: ../packages/stream-client
     image: claudetorio-stream-client
-    profiles: ["build-only"]
-
+    entrypoint: ["sh", "-c", "echo 'stream client image ready'"]
+    restart: "no"
   # Build-only target — image used by broker to spawn run-worker containers
   run-worker:
     build:
       context: ../packages
       dockerfile: run-worker/Dockerfile
     image: claudetorio-run-worker
-    profiles: ["build-only"]
+    entrypoint: ["sh", "-c", "echo 'stream client image ready'"]
+    restart: "no"
 
 volumes:
   postgres_data:

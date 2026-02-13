@@ -34,6 +34,7 @@ docker-compose.override.yml
 factorio/
 factorio-data/
 *.zip
+factorio-client/
 
 # Logs
 *.log
