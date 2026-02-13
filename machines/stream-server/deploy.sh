@@ -19,9 +19,9 @@ rsync -avz \
     .env \
     $SERVER:$REMOTE_PATH/machines/stream-server/
 
-# 3. Rebuild and restart
-echo "Rebuilding containers..."
-ssh $SERVER "cd $REMOTE_PATH/machines/stream-server && docker compose up --build -d"
+# 3. Build broker-spawned image and restart stack
+echo "Building stream-client image and restarting containers..."
+ssh $SERVER "cd $REMOTE_PATH/machines/stream-server && docker compose --profile build-only build stream-client && docker compose up --build -d"
 
 # 4. Health check
 echo "Checking stream..."
