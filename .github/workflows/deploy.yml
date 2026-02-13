@@ -72,12 +72,9 @@ jobs:
             # Record new SHA
             git rev-parse HEAD > .deployed-sha
 
-            # Build broker-spawned image (profile-only service; not started here)
+            # Build broker-spawned image and restart game stack
             cd machines/game-server
             docker compose --profile build-only build run-worker
-
-            # Rebuild and restart game stack
-            cd machines/game-server
             docker compose up --build -d
 
             # Health check
@@ -106,12 +103,9 @@ jobs:
             # Record new SHA
             git rev-parse HEAD > .deployed-sha
 
-            # Build broker-spawned image (profile-only service; not started here)
+            # Build broker-spawned image and restart stream stack
             cd machines/stream-server
             docker compose --profile build-only build stream-client
-
-            # Rebuild and restart stream stack
-            cd machines/stream-server
             docker compose up --build -d
 
             # Health check
