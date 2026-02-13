@@ -252,7 +252,11 @@ async def create_run(
     # Debug: log env vars being passed (redact secrets)
     safe_keys = {k: (v[:4] + "..." if "KEY" in k or "PASSWORD" in k else v) for k, v in env_vars.items()}
     print(f"[run {run_id}] env_vars: {safe_keys}", flush=True)
+<<<<<<< HEAD
+    cmd = ["docker", "run", "--rm", "--name", f"run-worker-{run_id}"]
+=======
     cmd = ["docker","--rm", "run", "--name", f"run-worker-{run_id}"]
+>>>>>>> origin/main
     if config.DOCKER_NETWORK:
         cmd += ["--network", config.DOCKER_NETWORK]
     for k, v in env_vars.items():
