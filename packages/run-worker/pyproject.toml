@@ -1,0 +1,16 @@
+[project]
+name = "run-worker"
+version = "0.1.0"
+description = "Autonomous Factorio agent worker for Claudetorio"
+requires-python = ">=3.11"
+dependencies = [
+    "httpx",
+    "python-dotenv",
+    "openai",
+    "factorio-learning-environment @ file:///${PROJECT_ROOT}/../fle",
+    "gym>=0.26.2",
+    "dulwich",
+]
+
+[project.scripts]
+run-worker = "main:main"

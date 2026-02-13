@@ -15,98 +15,13 @@ services:
       - caddy_config:/config
     networks:
       - stream-network
-    depends_on:
-      - factorio-stream-0
-      - factorio-stream-1
-      - factorio-stream-2
 
-  # Stream client for Slot 0 (UDP 34197) -> HTTP port 3000 (internal)
-  factorio-stream-0:
+  # Build-only target — image used by broker to spawn stream-client containers
+  stream-client:
     build:
       context: ../../packages/stream-client
-    container_name: factorio-stream-0
-    restart: unless-stopped
-
-    environment:
-      - SERVER_HOST=157.254.222.103
-      - SERVER_PORT=34197  # Slot 0
-      - TITLE=ClaudeTorio Slot 0
-      - CUSTOM_USER=viewer
-      # NOTE: Do NOT set PASSWORD - it triggers nginx auth even with DISABLE_AUTH=true
-      - DISPLAY_WIDTH=1280
-      - DISPLAY_HEIGHT=720
-      - DISPLAY_REFRESH_RATE=30
-      - PUID=1000
-      - PGID=1000
-      - TZ=UTC
-
-    volumes:
-      - /opt/factorio:/opt/factorio
-      - /var/claudetorio/factorio-data-0:/config/factorio-data
-
-    # Only expose HTTP internally for reverse proxy
-    expose:
-      - "3000"
-    networks:
-      - stream-network
-
-  # Stream client for Slot 1 (UDP 34198) -> HTTP port 3000 (internal)
-  factorio-stream-1:
-    build:
-      context: ../../packages/stream-client
-    container_name: factorio-stream-1
-    restart: unless-stopped
-
-    environment:
-      - SERVER_HOST=157.254.222.103
-      - SERVER_PORT=34198  # Slot 1
-      - TITLE=ClaudeTorio Slot 1
-      - CUSTOM_USER=viewer
-      # NOTE: Do NOT set PASSWORD - it triggers nginx auth even with DISABLE_AUTH=true
-      - DISPLAY_WIDTH=1280
-      - DISPLAY_HEIGHT=720
-      - DISPLAY_REFRESH_RATE=30
-      - PUID=1000
-      - PGID=1000
-      - TZ=UTC
-
-    volumes:
-      - /opt/factorio:/opt/factorio
-      - /var/claudetorio/factorio-data-1:/config/factorio-data
-
-    expose:
-      - "3000"
-    networks:
-      - stream-network
-
-  # Stream client for Slot 2 (UDP 34199) -> HTTP port 3000 (internal)
-  factorio-stream-2:
-    build:
-      context: ../../packages/stream-client
-    container_name: factorio-stream-2
-    restart: unless-stopped
-
-    environment:
-      - SERVER_HOST=157.254.222.103
-      - SERVER_PORT=34199  # Slot 2
-      - TITLE=ClaudeTorio Slot 2
-      - CUSTOM_USER=viewer
-      # NOTE: Do NOT set PASSWORD - it triggers nginx auth even with DISABLE_AUTH=true
-      - DISPLAY_WIDTH=1280
-      - DISPLAY_HEIGHT=720
-      - DISPLAY_REFRESH_RATE=30
-      - PUID=1000
-      - PGID=1000
-      - TZ=UTC
-
-    volumes:
-      - /opt/factorio:/opt/factorio
-      - /var/claudetorio/factorio-data-2:/config/factorio-data
-
-    expose:
-      - "3000"
-    networks:
-      - stream-network
+    image: claudetorio-stream-client
+    profiles: ["build-only"]
 
 networks:
   stream-network:
@@ -115,7 +30,3 @@ networks:
 volumes:
   caddy_data:
   caddy_config:
-
-# Port mapping: All stream clients expose HTTP on port 3000 internally
-# Caddy routes /streams/{slot}/* to the appropriate container
-# To add more slots, follow the pattern and update the Caddyfile

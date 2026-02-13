@@ -34,20 +34,35 @@ services:
       retries: 5
 
   # === GAME SERVER COMPONENTS ===
+  # Factorio servers are spawned dynamically per-slot by the broker
 
-  # Single headless Factorio for local testing
-  factorio:
-    image: factoriotools/factorio:1.1.110
-    ports:
-      - "34197:34197/udp"
-      - "27015:27015/tcp"  # RCON
+  # Init: populate a named volume with Factorio server config files so
+  # dynamically-spawned containers can mount them without host paths.
+  # remember :ro
+  factorio-config-init:
+    image: alpine
     volumes:
-      - factorio_data:/factorio
-      - ../config/factorio:/factorio/config:ro
-    environment:
-      - LOAD_LATEST_SAVE=true
-      - GENERATE_NEW_SAVE=true
-      - SAVE_NAME=dev_world
+      - factorio_config:/dest
+      - ../config/factorio:/src #:ro
+    entrypoint: ["sh", "-c", "cp -f /src/* /dest/ && echo 'Factorio config volume populated'"]
+
+  # Init: populate a named volume with Factorio scenario files so
+  # dynamically-spawned containers can load the FLE open_world scenario.
+  factorio-scenarios-init:
+    image: alpine
+    volumes:
+      - factorio_scenarios:/dest
+      - ../config/factorio-scenarios:/src
+    entrypoint: ["sh", "-c", "cp -rf /src/* /dest/ && echo 'Factorio scenarios volume populated'"]
+
+  # Init: populate a named volume with Factorio client files so
+  # dynamically-spawned stream-client containers can mount them without host paths.
+  factorio-client-init:
+    image: alpine
+    volumes:
+      - factorio_client:/dest
+      - ${FACTORIO_CLIENT_PATH:-./factorio-client}:/src #:ro
+    entrypoint: ["sh", "-c", "cp -rn /src/* /dest/ 2>/dev/null; echo 'Factorio client volume ready'"]
 
   broker:
     build:
@@ -55,15 +70,28 @@ services:
       dockerfile: Dockerfile
     ports:
       - "8080:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
     environment:
-      - DATABASE_URL=postgresql://claudetorio:dev_password@postgres:5432/claudetorio
-      - REDIS_URL=redis://redis:6379
-      - FACTORIO_RCON_HOST=factorio
-      - FACTORIO_RCON_PORT=27015
-      - FACTORIO_RCON_PASSWORD=dev_rcon_password
+      - POSTGRES_HOST=postgres
+      - POSTGRES_DB=claudetorio
+      - POSTGRES_USER=claudetorio
+      - POSTGRES_PASSWORD=dev_password
+      - REDIS_HOST=redis
+      - RCON_PASSWORD=dev_rcon_password
+      - BASE_RCON_PORT=27015
+      - FACTORIO_IMAGE=factoriotools/factorio:1.1.110
+      - FACTORIO_CONFIG_VOLUME=dev_factorio_config
+      - FACTORIO_SCENARIOS_VOLUME=dev_factorio_scenarios
       # Stream server configuration (local dev)
       - STREAM_BASE_URL=http://localhost
       - STREAM_BASE_PORT=3002
+      # Docker settings for run-worker containers
+      - DOCKER_NETWORK=dev_default
+      # Docker settings for stream-client containers
+      - STREAM_CLIENT_IMAGE=claudetorio-stream-client
+      - FACTORIO_CLIENT_VOLUME=dev_factorio_client
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
     depends_on:
       postgres:
         condition: service_healthy
@@ -74,39 +102,37 @@ services:
     build:
       context: ../packages/frontend
       dockerfile: Dockerfile
+      args:
+        - NEXT_PUBLIC_API_URL=http://localhost:8080
+        - NEXT_PUBLIC_STREAM_URL=http://localhost:3002
     ports:
       - "3000:3000"
     environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:8080
-      - NEXT_PUBLIC_STREAM_URL=http://localhost:3002
+      - BROKER_URL=http://broker:8080
     depends_on:
       - broker
 
-  # === STREAM SERVER COMPONENTS ===
-  # Uncomment if you have Factorio client installed locally
+  # === BUILD-ONLY TARGETS ===
+  # Images used by broker to spawn containers dynamically via `docker run`
 
-  # stream-client:
-  #   build:
-  #     context: ../packages/stream-client
-  #     dockerfile: Dockerfile
-  #   ports:
-  #     - "3002:3000"   # KasmVNC HTTP
-  #     - "3003:3001"   # KasmVNC HTTPS
-  #   environment:
-  #     - SERVER_HOST=factorio
-  #     - SERVER_PORT=34197
-  #     - TITLE=ClaudeTorio Dev
-  #     - CUSTOM_USER=viewer
-  #     - PASSWORD=dev123
-  #     - DISABLE_AUTH=true
-  #     - DISPLAY_WIDTH=1280
-  #     - DISPLAY_HEIGHT=720
-  #   volumes:
-  #     - ./factorio-client:/opt/factorio  # Must provide Factorio install
-  #   depends_on:
-  #     - factorio
+  # Build-only target — image used by broker to spawn stream-client containers
+  stream-client:
+    build:
+      context: ../packages/stream-client
+    image: claudetorio-stream-client
+    profiles: ["build-only"]
+
+  # Build-only target — image used by broker to spawn run-worker containers
+  run-worker:
+    build:
+      context: ../packages
+      dockerfile: run-worker/Dockerfile
+    image: claudetorio-run-worker
+    profiles: ["build-only"]
 
 volumes:
   postgres_data:
   redis_data:
-  factorio_data:
+  factorio_config:
+  factorio_scenarios:
+  factorio_client:

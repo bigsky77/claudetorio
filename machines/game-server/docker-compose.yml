@@ -38,12 +38,17 @@ services:
     container_name: claudetorio-broker
     restart: unless-stopped
     network_mode: host
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
     environment:
       - DATABASE_URL=postgresql://claudetorio:${POSTGRES_PASSWORD}@localhost:5432/claudetorio
       - REDIS_URL=redis://localhost:6379
       - FACTORIO_RCON_PASSWORD=${RCON_PASSWORD}
       # Stream server configuration - subdomain routing through Caddy
       - STREAM_DOMAIN=stream.claudetorio.ai
+      # Docker settings for run-worker containers
+      - DOCKER_NETWORK=host
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
     depends_on:
       postgres:
         condition: service_healthy
@@ -60,3 +65,12 @@ services:
     environment:
       - NEXT_PUBLIC_API_URL=http://157.254.222.103:8080
       - NEXT_PUBLIC_STREAM_URL=https://157.254.222.104:3003
+      - BROKER_URL=http://157.254.222.103:8080
+
+  # Build-only target — image used by broker to spawn run-worker containers
+  run-worker:
+    build:
+      context: ../../packages
+      dockerfile: run-worker/Dockerfile
+    image: claudetorio-run-worker
+    profiles: ["build-only"]

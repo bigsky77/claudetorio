@@ -16,6 +16,12 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
+# Next.js inlines NEXT_PUBLIC_* env vars at build time
+ARG NEXT_PUBLIC_API_URL
+ARG NEXT_PUBLIC_STREAM_URL
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+ENV NEXT_PUBLIC_STREAM_URL=$NEXT_PUBLIC_STREAM_URL
+
 # Build the application
 RUN npm run build
 

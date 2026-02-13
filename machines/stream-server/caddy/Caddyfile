@@ -3,8 +3,8 @@
 # This Caddyfile terminates TLS and proxies to KasmVNC stream clients.
 # Caddy automatically obtains and renews Let's Encrypt certificates.
 #
-# Uses subdomain-based routing: c0.stream.domain, c1.stream.domain, etc.
-# This allows KasmVNC to work correctly at the root path of each subdomain.
+# Uses wildcard subdomain routing: c{N}.stream.domain -> stream-client-{N}:3000
+# Stream-client containers are spawned dynamically by the broker.
 
 {
 	# Global options
@@ -18,7 +18,7 @@
 	}
 
 	handle {
-		respond "ClaudeTorio Streams - Use c0.{$STREAM_DOMAIN}, c1.{$STREAM_DOMAIN}, c2.{$STREAM_DOMAIN}" 200
+		respond "ClaudeTorio Streams - Use c{N}.{$STREAM_DOMAIN} to access slot N" 200
 	}
 
 	log {
@@ -28,54 +28,12 @@
 	}
 }
 
-# Slot 0: c0.stream.domain
-c0.{$STREAM_DOMAIN:stream.localhost} {
-	reverse_proxy factorio-stream-0:3000 {
+# Wildcard subdomain: c{N}.stream.domain -> stream-client-{N}:3000
+*.{$STREAM_DOMAIN:stream.localhost} {
+	@slot header_regexp slot Host ^c(\d+)\.
+
+	reverse_proxy @slot stream-client-{re.slot.1}:3000 {
 		# WebSocket support for KasmVNC
-		header_up Host {upstream_hostport}
-		header_up X-Real-IP {remote_host}
-		header_up X-Forwarded-Proto {scheme}
-
-		transport http {
-			response_header_timeout 0
-			read_buffer 0
-		}
-
-		flush_interval -1
-	}
-
-	log {
-		output stdout
-		format console
-		level INFO
-	}
-}
-
-# Slot 1: c1.stream.domain
-c1.{$STREAM_DOMAIN:stream.localhost} {
-	reverse_proxy factorio-stream-1:3000 {
-		header_up Host {upstream_hostport}
-		header_up X-Real-IP {remote_host}
-		header_up X-Forwarded-Proto {scheme}
-
-		transport http {
-			response_header_timeout 0
-			read_buffer 0
-		}
-
-		flush_interval -1
-	}
-
-	log {
-		output stdout
-		format console
-		level INFO
-	}
-}
-
-# Slot 2: c2.stream.domain
-c2.{$STREAM_DOMAIN:stream.localhost} {
-	reverse_proxy factorio-stream-2:3000 {
 		header_up Host {upstream_hostport}
 		header_up X-Real-IP {remote_host}
 		header_up X-Forwarded-Proto {scheme}
