@@ -43,7 +43,11 @@ services:
     environment:
       - DATABASE_URL=postgresql://claudetorio:${POSTGRES_PASSWORD}@localhost:5432/claudetorio
       - REDIS_URL=redis://localhost:6379
-      - FACTORIO_RCON_PASSWORD=${RCON_PASSWORD}
+      - RCON_PASSWORD=${RCON_PASSWORD}
+      - FACTORIO_IMAGE=${FACTORIO_IMAGE:-}
+      - FACTORIO_CONFIG_PATH=${FACTORIO_CONFIG_PATH:-/opt/claudetorio/config/factorio}
+      - FACTORIO_SCENARIOS_VOLUME=${FACTORIO_SCENARIOS_VOLUME:-}
+      - FACTORIO_SCENARIOS_PATH=${FACTORIO_SCENARIOS_PATH:-/opt/claudetorio/config/factorio-scenarios}
       # Stream server configuration - subdomain routing through Caddy
       - STREAM_DOMAIN=stream.claudetorio.ai
       # Docker settings for run-worker containers

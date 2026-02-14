@@ -53,6 +53,8 @@ async def spawn_factorio(slot: int) -> str | None:
             cmd += ["-v", f"{config.FACTORIO_SCENARIOS_VOLUME}:/factorio/scenarios"]
         else:
             print(f"[factorio] WARNING: scenarios volume '{config.FACTORIO_SCENARIOS_VOLUME}' empty", flush=True)
+    elif config.FACTORIO_SCENARIOS_PATH:
+        cmd += ["-v", f"{config.FACTORIO_SCENARIOS_PATH}:/factorio/scenarios"]
 
     cmd += [config.FACTORIO_IMAGE]
 
