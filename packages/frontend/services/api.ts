@@ -171,7 +171,14 @@ export async function stopRun(runId: string): Promise<{ run_id: string; status: 
 
 export async function startRunStream(
   runId: string,
-): Promise<{ run_id: string; slot: number; stream_url: string } | null> {
+): Promise<{
+  run_id: string;
+  slot: number;
+  stream_url: string;
+  stream_host?: string;
+  stream_port?: number;
+  stream_scheme?: string;
+} | null> {
   try {
     const res = await fetch(`/api/runs/${runId}/stream/start`, { method: 'POST' });
     if (res.ok) return res.json();

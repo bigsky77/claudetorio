@@ -4,6 +4,9 @@ export interface ActiveSession {
   slot: number;
   started_at: string;
   stream_url: string;
+  stream_host?: string;
+  stream_port?: number;
+  stream_scheme?: string;
 }
 
 export interface LiveSessionWithScore {
@@ -13,6 +16,9 @@ export interface LiveSessionWithScore {
   started_at: string;
   current_score: number;
   stream_url: string;
+  stream_host?: string;
+  stream_port?: number;
+  stream_scheme?: string;
 }
 
 export interface SessionScore {

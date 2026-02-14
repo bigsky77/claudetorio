@@ -17,6 +17,9 @@ class ClaimResponse(BaseModel):
     mcp_config: dict
     spectate_address: str
     stream_url: str  # URL to watch this game's stream
+    stream_host: str
+    stream_port: int
+    stream_scheme: str
     expires_at: datetime
 
 class ReleaseRequest(BaseModel):
@@ -87,6 +90,9 @@ class RunInfo(BaseModel):
     final_score: Optional[float] = None
     step_count: int = 0
     stream_url: Optional[str] = None
+    stream_host: Optional[str] = None
+    stream_port: Optional[int] = None
+    stream_scheme: Optional[str] = None
 
 class RunStepInfo(BaseModel):
     id: int

@@ -58,10 +58,13 @@ async def spawn_factorio(slot: int) -> str | None:
 
     cmd += [config.FACTORIO_IMAGE]
 
+    udp_port = config.get_udp_port(slot)
+
     # Explicit command: launch with FLE's open_world scenario
     cmd += [
         "/opt/factorio/bin/x64/factorio",
         "--start-server-load-scenario", "open_world",
+        "--port", str(udp_port),
         "--rcon-port", str(config.BASE_RCON_PORT),
         "--rcon-password", config.RCON_PASSWORD,
         "--server-settings", "/opt/factorio/config/server-settings.json",

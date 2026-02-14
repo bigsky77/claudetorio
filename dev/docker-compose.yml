@@ -78,12 +78,15 @@ services:
       - REDIS_HOST=redis
       - RCON_PASSWORD=dev_rcon_password
       - BASE_RCON_PORT=27015
+      # Slot-aware UDP base: slot N uses BASE_UDP_PORT + N
+      - BASE_UDP_PORT=34197
       - FACTORIO_IMAGE=factoriotools/factorio:1.1.110
       - FACTORIO_CONFIG_VOLUME=claudetorio_factorio_config
       - FACTORIO_SCENARIOS_VOLUME=claudetorio_factorio_scenarios
-      # Stream server configuration (local dev)
+      # Stream public endpoint configuration (port-based)
       - STREAM_BASE_URL=http://localhost
       - STREAM_BASE_PORT=3002
+      - STREAM_PUBLIC_HOST=localhost
       # Docker settings for run-worker containers
       - DOCKER_NETWORK=claudetorio_game
       # Docker settings for stream-client containers

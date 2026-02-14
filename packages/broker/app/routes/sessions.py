@@ -118,7 +118,8 @@ async def claim_session(
 
         factorio_host = f"factorio-{slot}"
         rcon_port = config.BASE_RCON_PORT
-        udp_port = config.BASE_UDP_PORT
+        udp_port = config.get_udp_port(slot)
+        stream_endpoint = config.get_stream_public_endpoint(slot)
         expires_at = datetime.utcnow() + timedelta(hours=config.SESSION_TIMEOUT_HOURS)
 
         mcp_config = {
@@ -143,7 +144,10 @@ async def claim_session(
             udp_port=udp_port,
             mcp_config=mcp_config,
             spectate_address=f"{factorio_host}:{udp_port}",
-            stream_url=config.get_stream_url(slot),
+            stream_url=str(stream_endpoint["stream_url"]),
+            stream_host=str(stream_endpoint["stream_host"]),
+            stream_port=int(stream_endpoint["stream_port"]),
+            stream_scheme=str(stream_endpoint["stream_scheme"]),
             expires_at=expires_at,
         )
 

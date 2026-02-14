@@ -103,6 +103,20 @@ sending keyboard/mouse input. They can only watch.
 
 To enable control (for testing), set `DISABLE_CONTROL=false`.
 
+## Runtime Data Behavior
+
+- Standalone `packages/stream-client/docker-compose.yml` can mount `./factorio-data`
+  to persist stream client runtime files.
+- Broker-spawned stream clients in ClaudeTorio use ephemeral container-local
+  runtime state at `/tmp/factorio-data` to avoid cross-container lock conflicts
+  and host/volume permission issues.
+- On startup, broker-spawned clients best-effort copy config files from
+  `/opt/factorio/config` into `/tmp/factorio-data` when available.
+- If `/opt/factorio/config/config.ini` is missing, startup auto-generates a
+  minimal runtime `config.ini` in `/tmp/factorio-data` and continues.
+- With broker-spawned clients, saves/mods/script-output are not persisted across
+  stream-client restarts unless you add your own persistent mount strategy.
+
 ## Troubleshooting
 
 ### Black screen in browser

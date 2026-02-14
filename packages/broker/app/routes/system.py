@@ -33,9 +33,13 @@ async def get_status(
                 "username": s.username,
                 "slot": s.slot,
                 "started_at": s.started_at.isoformat(),
-                "stream_url": config.get_stream_url(s.slot),
+                "stream_url": endpoint["stream_url"],
+                "stream_host": endpoint["stream_host"],
+                "stream_port": endpoint["stream_port"],
+                "stream_scheme": endpoint["stream_scheme"],
             }
             for s in active_sessions
+            for endpoint in [config.get_stream_public_endpoint(s.slot)]
         ],
         total_users=total_users,
         total_sessions_all_time=total_sessions,
