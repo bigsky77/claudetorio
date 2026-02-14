@@ -16,7 +16,8 @@ FastAPI session broker for managing Factorio game sessions.
 - `REDIS_URL` - Redis connection string
 - `FACTORIO_RCON_HOST` - Factorio server hostname
 - `FACTORIO_RCON_PORT` - RCON port (default: 27015)
-- `FACTORIO_RCON_PASSWORD` - RCON password
+- `RCON_PASSWORD` - RCON password
+- `FACTORIO_IMAGE` - Docker image used to spawn per-slot Factorio servers
 
 ## Running Locally
 

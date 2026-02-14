@@ -69,14 +69,17 @@ async def claim_session(
         )
 
     try:
-        # Spawn Factorio server for this slot (no-op if FACTORIO_IMAGE not set)
+        if not config.FACTORIO_IMAGE:
+            await release_slot_lock(slot, app_state.redis)
+            raise HTTPException(503, "Broker misconfigured: FACTORIO_IMAGE is not set")
+
+        # Spawn Factorio server for this slot
         await spawn_factorio(slot)
-        if config.FACTORIO_IMAGE:
-            ready = await wait_for_factorio(slot)
-            if not ready:
-                await stop_factorio(slot)
-                await release_slot_lock(slot, app_state.redis)
-                raise HTTPException(503, "Factorio server failed to start")
+        ready = await wait_for_factorio(slot)
+        if not ready:
+            await stop_factorio(slot)
+            await release_slot_lock(slot, app_state.redis)
+            raise HTTPException(503, "Factorio server failed to start")
 
         # Ensure user exists
         stmt = pg_insert(User).values(username=username).on_conflict_do_nothing()

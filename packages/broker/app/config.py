@@ -37,6 +37,7 @@ class Config:
     FACTORIO_CONFIG_PATH = os.getenv("FACTORIO_CONFIG_PATH", "")  # host path to config/factorio dir
     FACTORIO_CONFIG_VOLUME = os.getenv("FACTORIO_CONFIG_VOLUME", "")  # Docker volume name with config files
     FACTORIO_SCENARIOS_VOLUME = os.getenv("FACTORIO_SCENARIOS_VOLUME", "")  # Docker volume with FLE scenario files
+    FACTORIO_SCENARIOS_PATH = os.getenv("FACTORIO_SCENARIOS_PATH", "")  # host path to scenario files
     # Stream server configuration
     # Subdomain routing through Caddy: c0.stream.claudetorio.ai, c1.stream.claudetorio.ai, etc.
     # Legacy: port-based routing (e.g., https://host:3003/) - used if STREAM_DOMAIN is not set

@@ -209,18 +209,25 @@ async def create_run(
     db.add(run)
     await db.commit()
 
-    # Spawn Factorio server for this slot (no-op if FACTORIO_IMAGE not set)
+    if not config.FACTORIO_IMAGE:
+        await release_slot_lock(slot, app_state.redis)
+        run.status = "failed"
+        run.error = "Broker misconfigured: FACTORIO_IMAGE is not set"
+        run.ended_at = datetime.utcnow()
+        await db.commit()
+        raise HTTPException(503, "Broker misconfigured: FACTORIO_IMAGE is not set")
+
+    # Spawn Factorio server for this slot
     await spawn_factorio(slot)
-    if config.FACTORIO_IMAGE:
-        ready = await wait_for_factorio(slot)
-        if not ready:
-            await stop_factorio(slot)
-            await release_slot_lock(slot, app_state.redis)
-            run.status = "failed"
-            run.error = "Factorio server failed to start"
-            run.ended_at = datetime.utcnow()
-            await db.commit()
-            raise HTTPException(503, "Factorio server failed to start")
+    ready = await wait_for_factorio(slot)
+    if not ready:
+        await stop_factorio(slot)
+        await release_slot_lock(slot, app_state.redis)
+        run.status = "failed"
+        run.error = "Factorio server failed to start"
+        run.ended_at = datetime.utcnow()
+        await db.commit()
+        raise HTTPException(503, "Factorio server failed to start")
     # Spawn run-worker Docker container
     broker_url = "http://broker:8080"
     factorio_host = f"factorio-{slot}"

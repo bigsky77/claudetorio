@@ -106,6 +106,7 @@ in
           REDIS_URL = cfg.redisUrl;
           FACTORIO_RCON_HOST = cfg.factorioRconHost;
           FACTORIO_RCON_PORT = toString cfg.factorioRconPort;
+          RCON_PASSWORD = cfg.factorioRconPassword;
           FACTORIO_RCON_PASSWORD = cfg.factorioRconPassword;
         } // cfg.extraEnv;
         extraOptions = [
