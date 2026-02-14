@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+from urllib.parse import urlparse
 
 from dotenv import load_dotenv
 
@@ -38,23 +39,34 @@ class Config:
     FACTORIO_CONFIG_VOLUME = os.getenv("FACTORIO_CONFIG_VOLUME", "")  # Docker volume name with config files
     FACTORIO_SCENARIOS_VOLUME = os.getenv("FACTORIO_SCENARIOS_VOLUME", "")  # Docker volume with FLE scenario files
     FACTORIO_SCENARIOS_PATH = os.getenv("FACTORIO_SCENARIOS_PATH", "")  # host path to scenario files
-    # Stream server configuration
-    # Subdomain routing through Caddy: c0.stream.claudetorio.ai, c1.stream.claudetorio.ai, etc.
-    # Legacy: port-based routing (e.g., https://host:3003/) - used if STREAM_DOMAIN is not set
-    STREAM_DOMAIN = os.getenv("STREAM_DOMAIN", "")  # e.g., "stream.claudetorio.ai"
-    STREAM_BASE_URL = os.getenv("STREAM_BASE_URL", "https://localhost")  # Legacy fallback
-    STREAM_BASE_PORT = int(os.getenv("STREAM_BASE_PORT", "3003"))  # Legacy: Slot 0 = 3003, Slot 1 = 3004, etc.
+    # Stream server configuration (port-based public access)
+    STREAM_BASE_URL = os.getenv("STREAM_BASE_URL", "http://localhost")
+    STREAM_BASE_PORT = int(os.getenv("STREAM_BASE_PORT", "3003"))  # Slot 0 = 3003, Slot 1 = 3004, etc.
+    STREAM_PUBLIC_HOST = os.getenv("STREAM_PUBLIC_HOST", "")  # Optional explicit public host/IP for frontend metadata
+
+    @classmethod
+    def get_udp_port(cls, slot: int) -> int:
+        """Get the Factorio UDP port for a given slot."""
+        return cls.BASE_UDP_PORT + slot
+
+    @classmethod
+    def get_stream_public_endpoint(cls, slot: int) -> dict[str, str | int]:
+        """Get public stream endpoint metadata for a given slot."""
+        parsed = urlparse(cls.STREAM_BASE_URL)
+        scheme = parsed.scheme or "http"
+        host = cls.STREAM_PUBLIC_HOST or parsed.hostname or "localhost"
+        port = cls.STREAM_BASE_PORT + slot
+        return {
+            "stream_url": f"{scheme}://{host}:{port}/",
+            "stream_host": host,
+            "stream_port": port,
+            "stream_scheme": scheme,
+        }
 
     @classmethod
     def get_stream_url(cls, slot: int) -> str:
         """Get the stream URL for a given slot."""
-        if cls.STREAM_DOMAIN:
-            # Subdomain-based routing: c0.stream.domain, c1.stream.domain, etc.
-            return f"https://c{slot}.{cls.STREAM_DOMAIN}/"
-        else:
-            # Legacy port-based routing
-            port = cls.STREAM_BASE_PORT + slot
-            return f"{cls.STREAM_BASE_URL}:{port}/"
+        return str(cls.get_stream_public_endpoint(slot)["stream_url"])
 
 
 config = Config()

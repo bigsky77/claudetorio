@@ -23,9 +23,10 @@ async def spawn_stream_client(
     network = config.STREAM_CLIENT_NETWORK or config.DOCKER_NETWORK
 
     server_host = factorio_host or f"factorio-{slot}"
+    udp_port = config.get_udp_port(slot)
     env_vars = {
         "SERVER_HOST": server_host,
-        "SERVER_PORT": str(config.BASE_UDP_PORT),
+        "SERVER_PORT": str(udp_port),
         "TITLE": f"ClaudeTorio Slot {slot}",
         "CUSTOM_USER": "viewer",
         "DISPLAY_WIDTH": "1280",
@@ -54,17 +55,13 @@ async def spawn_stream_client(
     # The startup script copies base config from /opt/factorio/config into
     # /config/factorio-data for this instance.
 
-    if config.STREAM_DOMAIN:
-        # Prod: Caddy routes via Docker DNS, only expose internally
-        cmd += ["--expose", "3000"]
-    else:
-        # Dev: port-based routing
-        host_port = config.STREAM_BASE_PORT + slot
-        cmd += ["-p", f"{host_port}:3000"]
+    # Port-based public routing: slot N -> STREAM_BASE_PORT + N
+    host_port = config.STREAM_BASE_PORT + slot
+    cmd += ["-p", f"{host_port}:3000"]
 
     cmd += [config.STREAM_CLIENT_IMAGE]
 
-    print(f"[streaming] Spawning {container_name}: SERVER_HOST={server_host} SERVER_PORT={config.BASE_UDP_PORT}", flush=True)
+    print(f"[streaming] Spawning {container_name}: SERVER_HOST={server_host} SERVER_PORT={udp_port}", flush=True)
 
     proc = await asyncio.create_subprocess_exec(
         *cmd,

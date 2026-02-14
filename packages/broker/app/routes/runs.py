@@ -23,11 +23,11 @@ from ..state import AppState
 router = APIRouter()
 
 
-async def _get_live_stream_url(slot: int | None) -> str | None:
+async def _get_live_stream_endpoint(slot: int | None) -> dict[str, str | int] | None:
     if slot is None:
         return None
     if await is_stream_client_running(slot):
-        return config.get_stream_url(slot)
+        return config.get_stream_public_endpoint(slot)
     return None
 
 
@@ -80,13 +80,13 @@ async def list_runs(
         )
         step_counts = dict(count_result.all())
 
-    stream_urls: dict[int, str] = {}
+    stream_endpoints: dict[int, dict[str, str | int]] = {}
     for r in runs:
-        if r.slot is None or r.slot in stream_urls:
+        if r.slot is None or r.slot in stream_endpoints:
             continue
-        maybe_url = await _get_live_stream_url(r.slot)
-        if maybe_url:
-            stream_urls[r.slot] = maybe_url
+        maybe_endpoint = await _get_live_stream_endpoint(r.slot)
+        if maybe_endpoint:
+            stream_endpoints[r.slot] = maybe_endpoint
 
     return [
         RunInfo(
@@ -103,7 +103,10 @@ async def list_runs(
             error=r.error,
             final_score=r.final_score,
             step_count=step_counts.get(r.run_id, 0),
-            stream_url=stream_urls.get(r.slot) if r.slot is not None else None,
+            stream_url=str(stream_endpoints[r.slot]["stream_url"]) if r.slot is not None and r.slot in stream_endpoints else None,
+            stream_host=str(stream_endpoints[r.slot]["stream_host"]) if r.slot is not None and r.slot in stream_endpoints else None,
+            stream_port=int(stream_endpoints[r.slot]["stream_port"]) if r.slot is not None and r.slot in stream_endpoints else None,
+            stream_scheme=str(stream_endpoints[r.slot]["stream_scheme"]) if r.slot is not None and r.slot in stream_endpoints else None,
         )
         for r in runs
     ]
@@ -120,6 +123,8 @@ async def get_run(run_id: str, db: AsyncSession = Depends(get_db)):
     )
     step_count = step_count_result.scalar() or 0
 
+    endpoint = await _get_live_stream_endpoint(run.slot)
+
     return RunInfo(
         run_id=run.run_id,
         status=run.status,
@@ -134,7 +139,10 @@ async def get_run(run_id: str, db: AsyncSession = Depends(get_db)):
         error=run.error,
         final_score=run.final_score,
         step_count=step_count,
-        stream_url=await _get_live_stream_url(run.slot),
+        stream_url=str(endpoint["stream_url"]) if endpoint else None,
+        stream_host=str(endpoint["stream_host"]) if endpoint else None,
+        stream_port=int(endpoint["stream_port"]) if endpoint else None,
+        stream_scheme=str(endpoint["stream_scheme"]) if endpoint else None,
     )
 
 
@@ -300,7 +308,15 @@ async def start_run_stream(
 
     factorio_host = f"factorio-{run.slot}"
     await spawn_stream_client(run.slot, factorio_host=factorio_host)
-    return {"run_id": run_id, "slot": run.slot, "stream_url": config.get_stream_url(run.slot)}
+    endpoint = config.get_stream_public_endpoint(run.slot)
+    return {
+        "run_id": run_id,
+        "slot": run.slot,
+        "stream_url": endpoint["stream_url"],
+        "stream_host": endpoint["stream_host"],
+        "stream_port": endpoint["stream_port"],
+        "stream_scheme": endpoint["stream_scheme"],
+    }
 
 
 @router.post("/api/runs/{run_id}/stop", dependencies=[Depends(require_admin_key)])

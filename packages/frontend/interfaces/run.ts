@@ -34,4 +34,7 @@ export interface RunInfo {
   final_score: number | null;
   step_count: number;
   stream_url: string | null;
+  stream_host?: string | null;
+  stream_port?: number | null;
+  stream_scheme?: string | null;
 }
