@@ -31,6 +31,10 @@ Claudetorio uses a simple git-based deployment pipeline. Pushes to `main` automa
    ```bash
    git fetch origin main
    git reset --hard origin/main
+   cd machines/game-server
+   docker compose run --rm factorio-config-init
+   docker compose run --rm factorio-scenarios-init
+   docker build -t claudetorio-run-worker -f ../../packages/run-worker/Dockerfile ../../packages
    docker compose up --build -d
    ```
 4. **Health check** verifies services are running
@@ -165,7 +169,7 @@ fuser -k <port>/tcp
 ```
 
 ### Database connection issues
-The broker uses host networking to connect to postgres via localhost. If it fails:
+The broker uses Docker bridge networking and connects to `postgres`/`redis` by service name. If it fails:
 ```bash
 # Verify postgres is healthy
 docker exec claudetorio-postgres pg_isready -U claudetorio

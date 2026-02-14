@@ -1,6 +1,4 @@
 # Simulates BOTH servers in one compose for local dev
-version: '3.8'
-
 services:
   # === DATABASE LAYER ===
   postgres:
@@ -42,7 +40,7 @@ services:
   factorio-config-init:
     image: alpine
     volumes:
-      - factorio_config:/dest
+      - claudetorio_factorio_config:/dest
       - ../config/factorio:/src #:ro
     entrypoint: ["sh", "-c", "cp -f /src/* /dest/ && echo 'Factorio config volume populated'"]
 
@@ -51,7 +49,7 @@ services:
   factorio-scenarios-init:
     image: alpine
     volumes:
-      - factorio_scenarios:/dest
+      - claudetorio_factorio_scenarios:/dest
       - ../config/factorio-scenarios:/src
     entrypoint: ["sh", "-c", "cp -rf /src/* /dest/ && echo 'Factorio scenarios volume populated'"]
 
@@ -60,7 +58,7 @@ services:
   factorio-client-init:
     image: alpine
     volumes:
-      - factorio_client:/dest
+      - claudetorio_factorio_client:/dest
       - ${FACTORIO_CLIENT_PATH:-./factorio-client}:/src #:ro
     entrypoint: ["sh", "-c", "cp -rn /src/* /dest/ 2>/dev/null; echo 'Factorio client volume ready'"]
 
@@ -81,16 +79,16 @@ services:
       - RCON_PASSWORD=dev_rcon_password
       - BASE_RCON_PORT=27015
       - FACTORIO_IMAGE=factoriotools/factorio:1.1.110
-      - FACTORIO_CONFIG_VOLUME=dev_factorio_config
-      - FACTORIO_SCENARIOS_VOLUME=dev_factorio_scenarios
+      - FACTORIO_CONFIG_VOLUME=claudetorio_factorio_config
+      - FACTORIO_SCENARIOS_VOLUME=claudetorio_factorio_scenarios
       # Stream server configuration (local dev)
       - STREAM_BASE_URL=http://localhost
       - STREAM_BASE_PORT=3002
       # Docker settings for run-worker containers
-      - DOCKER_NETWORK=dev_default
+      - DOCKER_NETWORK=claudetorio_game
       # Docker settings for stream-client containers
       - STREAM_CLIENT_IMAGE=claudetorio-stream-client
-      - FACTORIO_CLIENT_VOLUME=dev_factorio_client
+      - FACTORIO_CLIENT_VOLUME=claudetorio_factorio_client
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
     depends_on:
       postgres:
@@ -135,6 +133,13 @@ services:
 volumes:
   postgres_data:
   redis_data:
-  factorio_config:
-  factorio_scenarios:
-  factorio_client:
+  claudetorio_factorio_config:
+    name: claudetorio_factorio_config
+  claudetorio_factorio_scenarios:
+    name: claudetorio_factorio_scenarios
+  claudetorio_factorio_client:
+    name: claudetorio_factorio_client
+
+networks:
+  default:
+    name: claudetorio_game

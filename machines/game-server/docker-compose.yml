@@ -16,6 +16,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - claudetorio_game
 
   redis:
     image: redis:7-alpine
@@ -31,33 +33,60 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - claudetorio_game
+
+  # Populate named volume with Factorio server config files.
+  factorio-config-init:
+    image: alpine
+    command: sh -c "cp -f /src/* /dest/ && echo 'Factorio config volume populated'"
+    volumes:
+      - claudetorio_factorio_config:/dest
+      - ../../config/factorio:/src:ro
+    networks:
+      - claudetorio_game
+
+  # Populate named volume with Factorio scenario files.
+  factorio-scenarios-init:
+    image: alpine
+    command: sh -c "cp -rf /src/* /dest/ && echo 'Factorio scenarios volume populated'"
+    volumes:
+      - claudetorio_factorio_scenarios:/dest
+      - ../../config/factorio-scenarios:/src:ro
+    networks:
+      - claudetorio_game
 
   broker:
     build:
       context: ../../packages/broker
     container_name: claudetorio-broker
     restart: unless-stopped
-    network_mode: host
+    ports:
+      - "8080:8080"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     environment:
-      - DATABASE_URL=postgresql://claudetorio:${POSTGRES_PASSWORD}@localhost:5432/claudetorio
-      - REDIS_URL=redis://localhost:6379
+      - POSTGRES_HOST=postgres
+      - POSTGRES_DB=claudetorio
+      - POSTGRES_USER=claudetorio
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - REDIS_HOST=redis
       - RCON_PASSWORD=${RCON_PASSWORD}
-      - FACTORIO_IMAGE=${FACTORIO_IMAGE:-}
-      - FACTORIO_CONFIG_PATH=${FACTORIO_CONFIG_PATH:-/opt/claudetorio/config/factorio}
-      - FACTORIO_SCENARIOS_VOLUME=${FACTORIO_SCENARIOS_VOLUME:-}
-      - FACTORIO_SCENARIOS_PATH=${FACTORIO_SCENARIOS_PATH:-/opt/claudetorio/config/factorio-scenarios}
+      - FACTORIO_IMAGE=${FACTORIO_IMAGE}
+      - FACTORIO_CONFIG_VOLUME=claudetorio_factorio_config
+      - FACTORIO_SCENARIOS_VOLUME=claudetorio_factorio_scenarios
       # Stream server configuration - subdomain routing through Caddy
       - STREAM_DOMAIN=stream.claudetorio.ai
       # Docker settings for run-worker containers
-      - DOCKER_NETWORK=host
+      - DOCKER_NETWORK=claudetorio_game
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+    networks:
+      - claudetorio_game
 
   frontend:
     build:
@@ -69,7 +98,9 @@ services:
     environment:
       - NEXT_PUBLIC_API_URL=http://157.254.222.103:8080
       - NEXT_PUBLIC_STREAM_URL=https://157.254.222.104:3003
-      - BROKER_URL=http://157.254.222.103:8080
+      - BROKER_URL=http://broker:8080
+    networks:
+      - claudetorio_game
 
   # Build-only target — image used by broker to spawn run-worker containers
   run-worker:
@@ -78,3 +109,14 @@ services:
       dockerfile: run-worker/Dockerfile
     image: claudetorio-run-worker
     profiles: ["build-only"]
+
+networks:
+  claudetorio_game:
+    name: claudetorio_game
+    driver: bridge
+
+volumes:
+  claudetorio_factorio_config:
+    name: claudetorio_factorio_config
+  claudetorio_factorio_scenarios:
+    name: claudetorio_factorio_scenarios

@@ -72,10 +72,33 @@ jobs:
             # Record new SHA
             git rev-parse HEAD > .deployed-sha
 
-            # Build broker-spawned image and restart game stack
+            # Prepare game stack
             cd machines/game-server
-            docker compose --profile build-only build run-worker
-            docker compose up --build -d
+
+            # Fail fast on missing required env
+            test -f .env || { echo "ERROR: machines/game-server/.env is missing"; exit 1; }
+            for key in POSTGRES_PASSWORD RCON_PASSWORD FACTORIO_IMAGE; do
+              val="$(grep -E "^${key}=" .env | tail -n1 | cut -d= -f2-)"
+              if [ -z "$val" ]; then
+                echo "ERROR: required key '${key}' is missing/empty in .env"
+                exit 1
+              fi
+            done
+
+            # Deterministically populate config/scenario volumes
+            docker compose run --rm factorio-config-init
+            docker compose run --rm factorio-scenarios-init
+
+            # Sanity-check that expected files exist in config volume
+            docker run --rm -v claudetorio_factorio_config:/v alpine sh -c "test -f /v/server-settings.json"
+
+            # Build broker-spawned image and recreate stack
+            docker build -t claudetorio-run-worker -f ../../packages/run-worker/Dockerfile ../../packages
+            docker compose up --build -d --force-recreate
+
+            # Verify broker runtime contract
+            docker inspect claudetorio-broker --format '{{range .Config.Env}}{{println .}}{{end}}' | grep -q '^DOCKER_NETWORK=claudetorio_game$'
+            docker inspect claudetorio-broker --format '{{range .Config.Env}}{{println .}}{{end}}' | grep -q '^FACTORIO_CONFIG_VOLUME=claudetorio_factorio_config$'
 
             # Health check
             sleep 5
