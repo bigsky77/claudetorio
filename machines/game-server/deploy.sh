@@ -4,7 +4,7 @@ set -euo pipefail
 # Configuration
 SERVER="factorio-server"  # SSH alias
 REMOTE_PATH="/opt/claudetorio"
-PACKAGES="broker frontend agent-runner"
+PACKAGES="broker frontend agent-runner run-worker stream-client fle"
 
 echo "=== Deploying to game-server ==="
 
@@ -29,9 +29,9 @@ rsync -avz --delete \
     ../../config/ \
     $SERVER:$REMOTE_PATH/config/
 
-# 4. Build broker-spawned image and restart stack
-echo "Building run-worker image and restarting containers..."
-ssh $SERVER "cd $REMOTE_PATH/machines/game-server && docker compose --profile build-only build run-worker && docker compose up --build -d"
+# 4. Build broker-spawned images and restart stack
+echo "Building broker-spawned images (run-worker, stream-client) and restarting containers..."
+ssh $SERVER "cd $REMOTE_PATH/machines/game-server && docker compose --profile build-only build run-worker stream-client && docker compose up --build -d"
 
 # 5. Health check
 echo "Checking health..."
