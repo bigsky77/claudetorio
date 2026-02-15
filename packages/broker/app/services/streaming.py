@@ -6,13 +6,14 @@ from ..config import config
 async def spawn_stream_client(
     slot: int,
     factorio_host: str | None = None,
-) -> asyncio.subprocess.Process | None:
+) -> str | None:
     """Spawn a stream-client Docker container for the given slot.
 
-    Returns the process, or None if FACTORIO_CLIENT_PATH is not configured
-    (streaming disabled).
+    Returns the short container ID, or None if streaming is disabled or
+    the container failed to start.
     """
     if not config.FACTORIO_CLIENT_PATH and not config.FACTORIO_CLIENT_VOLUME:
+        print("[streaming] WARNING: streaming disabled — neither FACTORIO_CLIENT_PATH nor FACTORIO_CLIENT_VOLUME is set", flush=True)
         return None
 
     container_name = f"stream-client-{slot}"
@@ -37,7 +38,7 @@ async def spawn_stream_client(
         "TZ": "UTC",
     }
 
-    cmd = ["docker", "run", "--rm", "--name", container_name]
+    cmd = ["docker", "run", "-d", "--rm", "--name", container_name]
 
     if network:
         cmd += ["--network", network]
@@ -66,9 +67,18 @@ async def spawn_stream_client(
     proc = await asyncio.create_subprocess_exec(
         *cmd,
         stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.STDOUT,
+        stderr=asyncio.subprocess.PIPE,
     )
-    return proc
+    stdout, stderr = await proc.communicate()
+
+    if proc.returncode != 0:
+        err = (stderr or stdout or b"").decode().strip()
+        print(f"[streaming] ERROR spawning {container_name}: {err}", flush=True)
+        return None
+
+    container_id = stdout.decode().strip()[:12]
+    print(f"[streaming] Started {container_name} (container {container_id})", flush=True)
+    return container_id
 
 
 async def stop_stream_client(slot: int) -> None:
