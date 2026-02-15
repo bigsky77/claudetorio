@@ -110,6 +110,13 @@ services:
     image: claudetorio-run-worker
     profiles: ["build-only"]
 
+  # Build-only target — image used by broker to spawn stream-client containers
+  stream-client:
+    build:
+      context: ../../packages/stream-client
+    image: claudetorio-stream-client
+    profiles: ["build-only"]
+
 networks:
   claudetorio_game:
     name: claudetorio_game
