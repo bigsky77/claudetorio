@@ -32,6 +32,8 @@ services:
       # Mount your Factorio installation (FULL version with graphics, not headless!)
       # Note: Not read-only so we can disable Steam API at runtime
       - ./factorio:/opt/factorio
+      # Override client config with FLE's canonical config (single source of truth)
+      - ../fle/fle/cluster/config:/opt/factorio/config:ro
 
       # Persistent data (config, etc)
       - ./factorio-data:/config/factorio-data

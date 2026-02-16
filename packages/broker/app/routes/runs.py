@@ -17,6 +17,7 @@ from ..services.streaming import (
     is_stream_client_running,
     spawn_stream_client,
     stop_stream_client,
+    wait_for_stream_client,
 )
 from ..state import AppState
 
@@ -206,8 +207,7 @@ async def create_run(
     # Create DB row
     run = Run(
         run_id=run_id,
-        status="running",
-        started_at=datetime.utcnow(),
+        status="waiting",
         slot=slot,
         task_key=req.task_key,
         model=req.model,
@@ -236,9 +236,16 @@ async def create_run(
         run.ended_at = datetime.utcnow()
         await db.commit()
         raise HTTPException(503, "Factorio server failed to start")
-    # Spawn run-worker Docker container
-    broker_url = "http://broker:8080"
+    # Spawn stream client before the run-worker so every run is visible from the start
     factorio_host = f"factorio-{slot}"
+    stream_cid = await spawn_stream_client(slot, factorio_host=factorio_host)
+    if stream_cid:
+        stream_ready = await wait_for_stream_client(slot)
+        if not stream_ready:
+            print(f"[run {run_id}] WARNING: stream client not ready, proceeding anyway", flush=True)
+
+    # Build run-worker env vars and stash them for the start-worker endpoint
+    broker_url = "http://broker:8080"
     rcon_port = config.BASE_RCON_PORT
     env_vars = {
         "BROKER_URL": broker_url,
@@ -248,13 +255,10 @@ async def create_run(
         "RCON_PORT": str(rcon_port),
         "RUN_WORKER_API_KEY": config.RUN_WORKER_API_KEY,
         "RUN_ID": run_id,
-        # FLE reads these at module-import time, so they must be in the
-        # container env before any Python import runs.
         "FLE_RCON_HOST": factorio_host,
         "FLE_RCON_PORT": str(rcon_port),
         "FLE_RCON_PASSWORD": config.RCON_PASSWORD,
     }
-    # User-provided credentials from the request
     if req.custom_api_url:
         env_vars["CUSTOM_API"] = "true"
         env_vars["CUSTOM_API_URL"] = req.custom_api_url
@@ -264,9 +268,37 @@ async def create_run(
         env_vars["ANTHROPIC_API_KEY"] = req.api_key
         env_vars["OPENAI_API_KEY"] = req.api_key
 
+    app_state.pending_run_envs[run_id] = env_vars
+
+    return CreateRunResponse(run_id=run_id, status="waiting")
+
+
+@router.post("/api/runs/{run_id}/start-worker", dependencies=[Depends(require_admin_key)])
+async def start_worker(
+    run_id: str,
+    db: AsyncSession = Depends(get_db),
+    app_state: AppState = Depends(get_app_state),
+):
+    run = await db.scalar(select(Run).where(Run.run_id == run_id))
+    if not run:
+        raise HTTPException(404, "Run not found")
+    if run.status != "waiting":
+        raise HTTPException(409, f"Run is not waiting (status={run.status})")
+
+    env_vars = app_state.pending_run_envs.pop(run_id, None)
+    if not env_vars:
+        raise HTTPException(409, "No pending environment for this run (broker may have restarted)")
+
+    run.status = "running"
+    run.started_at = datetime.utcnow()
+    await db.commit()
+
+    broker_url = env_vars["BROKER_URL"]
+
     # Debug: log env vars being passed (redact secrets)
     safe_keys = {k: (v[:4] + "..." if "KEY" in k or "PASSWORD" in k else v) for k, v in env_vars.items()}
-    print(f"[run {run_id}] env_vars: {safe_keys}", flush=True)
+    print(f"[run {run_id}] start-worker env_vars: {safe_keys}", flush=True)
+
     cmd = ["docker", "run", "--rm", "--name", f"run-worker-{run_id}"]
     if config.DOCKER_NETWORK:
         cmd += ["--network", config.DOCKER_NETWORK]
@@ -275,7 +307,7 @@ async def create_run(
     cmd += [
         config.RUN_WORKER_IMAGE,
         "uv", "run", "python", "main.py",
-        "--steps", str(req.max_steps),
+        "--steps", str(run.max_steps),
         "--broker-url", broker_url,
     ]
 
@@ -287,36 +319,7 @@ async def create_run(
     app_state.run_processes[run_id] = proc
     asyncio.create_task(_monitor_run(run_id, proc, app_state))
 
-    # Stream clients are attached lazily on explicit frontend request:
-    # POST /api/runs/{run_id}/stream/start
-
-    return CreateRunResponse(run_id=run_id, status="running")
-
-
-@router.post("/api/runs/{run_id}/stream/start", dependencies=[Depends(require_admin_key)])
-async def start_run_stream(
-    run_id: str,
-    db: AsyncSession = Depends(get_db),
-):
-    run = await db.scalar(select(Run).where(Run.run_id == run_id))
-    if not run:
-        raise HTTPException(404, "Run not found")
-    if run.slot is None:
-        raise HTTPException(409, "Run is not attached to a slot")
-    if run.status != "running":
-        raise HTTPException(409, f"Run is not running (status={run.status})")
-
-    factorio_host = f"factorio-{run.slot}"
-    await spawn_stream_client(run.slot, factorio_host=factorio_host)
-    endpoint = config.get_stream_public_endpoint(run.slot)
-    return {
-        "run_id": run_id,
-        "slot": run.slot,
-        "stream_url": endpoint["stream_url"],
-        "stream_host": endpoint["stream_host"],
-        "stream_port": endpoint["stream_port"],
-        "stream_scheme": endpoint["stream_scheme"],
-    }
+    return {"run_id": run_id, "status": "running"}
 
 
 @router.post("/api/runs/{run_id}/stop", dependencies=[Depends(require_admin_key)])
@@ -328,12 +331,15 @@ async def stop_run(
     run = await db.scalar(select(Run).where(Run.run_id == run_id))
     if not run:
         raise HTTPException(404, "Run not found")
-    if run.status != "running":
-        raise HTTPException(409, f"Run is not running (status={run.status})")
+    if run.status not in ("running", "waiting"):
+        raise HTTPException(409, f"Run is not running or waiting (status={run.status})")
 
     run.status = "stopped"
     run.ended_at = datetime.utcnow()
     await db.commit()
+
+    # Clean up pending env vars if worker was never started
+    app_state.pending_run_envs.pop(run_id, None)
 
     # Stop the run-worker Docker container
     proc = app_state.run_processes.get(run_id)

@@ -347,8 +347,13 @@ script.on_event(defines.events.on_script_path_request_finished, on_path_request_
 script.on_event(defines.events.on_player_joined_game, function(event)
     local player = game.get_player(event.player_index)
     if player then
-        player.print("[FLE] Join-proof scenario loaded - version: " .. RUNTIME_VERSION)
-        player.print("[FLE] Multiplayer sync enabled - all events pre-registered")
+        -- If this player isn't tracked as an agent, make them a spectator
+        if not global.agent_characters[event.player_index] then
+            player.set_controller({type = defines.controllers.spectator})
+            player.print("[FLE] You are now in spectator mode")
+        else
+            player.print("[FLE] Join-proof scenario loaded - version: " .. RUNTIME_VERSION)
+        end
     end
 end)
 

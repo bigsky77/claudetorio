@@ -159,6 +159,16 @@ export async function createRun(body: {
   return data;
 }
 
+export async function startWorker(runId: string): Promise<{ run_id: string; status: string } | null> {
+  try {
+    const res = await fetch(`/api/runs/${runId}/start-worker`, { method: 'POST' });
+    if (res.ok) return res.json();
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 export async function stopRun(runId: string): Promise<{ run_id: string; status: string } | null> {
   try {
     const res = await fetch(`/api/runs/${runId}/stop`, { method: 'POST' });
@@ -169,21 +179,3 @@ export async function stopRun(runId: string): Promise<{ run_id: string; status: 
   }
 }
 
-export async function startRunStream(
-  runId: string,
-): Promise<{
-  run_id: string;
-  slot: number;
-  stream_url: string;
-  stream_host?: string;
-  stream_port?: number;
-  stream_scheme?: string;
-} | null> {
-  try {
-    const res = await fetch(`/api/runs/${runId}/stream/start`, { method: 'POST' });
-    if (res.ok) return res.json();
-    return null;
-  } catch {
-    return null;
-  }
-}

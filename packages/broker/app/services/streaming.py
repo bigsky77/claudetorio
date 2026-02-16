@@ -81,6 +81,23 @@ async def spawn_stream_client(
     return container_id
 
 
+async def wait_for_stream_client(slot: int, timeout: int = 120) -> bool:
+    """Poll until the stream-client KasmVNC port is accepting connections."""
+    container_name = f"stream-client-{slot}"
+    deadline = asyncio.get_event_loop().time() + timeout
+    while asyncio.get_event_loop().time() < deadline:
+        try:
+            reader, writer = await asyncio.open_connection(container_name, 3000)
+            writer.close()
+            await writer.wait_closed()
+            print(f"[streaming] {container_name} is ready", flush=True)
+            return True
+        except Exception:
+            await asyncio.sleep(2)
+    print(f"[streaming] WARNING: {container_name} not ready after {timeout}s", flush=True)
+    return False
+
+
 async def stop_stream_client(slot: int) -> None:
     """Stop the stream-client container for the given slot (best-effort)."""
     container_name = f"stream-client-{slot}"

@@ -4,7 +4,7 @@ import { fetchRunInfo, fetchRunSteps } from '@/services/api';
 import type { RunInfo, RunStepInfo } from '@/interfaces';
 
 function isActive(status: string): boolean {
-  return status === 'running' || status === 'queued';
+  return status === 'running' || status === 'queued' || status === 'waiting';
 }
 
 export function useRunPolling(initialRun: RunInfo, initialSteps: RunStepInfo[]) {

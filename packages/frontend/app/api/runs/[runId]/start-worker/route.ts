@@ -8,17 +8,17 @@ export async function POST(
   const adminKey = process.env.BROKER_ADMIN_KEY || '';
 
   if (!brokerUrl) {
-    console.error('[api/runs/stream/start] BROKER_URL is not configured');
+    console.error('[api/runs/start-worker] BROKER_URL is not configured');
     return NextResponse.json({ error: 'BROKER_URL not configured' }, { status: 500 });
   }
 
   try {
     const { runId } = await params;
-    const target = `${brokerUrl}/api/runs/${runId}/stream/start`;
-    console.log(`[api/runs/stream/start] POST ${target}`);
+    const target = `${brokerUrl}/api/runs/${runId}/start-worker`;
+    console.log(`[api/runs/start-worker] POST ${target}`);
 
     const headers: Record<string, string> = {
-      Authorization: `Bearer ${adminKey}`,
+      'Authorization': `Bearer ${adminKey}`,
     };
 
     const res = await fetch(target, {
@@ -27,7 +27,7 @@ export async function POST(
     });
 
     const text = await res.text();
-    console.log(`[api/runs/stream/start] broker responded ${res.status}: ${text}`);
+    console.log(`[api/runs/start-worker] broker responded ${res.status}: ${text}`);
 
     let data;
     try {
@@ -38,7 +38,7 @@ export async function POST(
 
     return NextResponse.json(data, { status: res.status });
   } catch (err) {
-    console.error('[api/runs/stream/start] proxy error:', err);
-    return NextResponse.json({ error: 'Failed to start run stream', detail: String(err) }, { status: 500 });
+    console.error('[api/runs/start-worker] proxy error:', err);
+    return NextResponse.json({ error: 'Failed to start worker', detail: String(err) }, { status: 500 });
   }
 }

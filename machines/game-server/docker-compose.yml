@@ -42,7 +42,7 @@ services:
     command: sh -c "cp -f /src/* /dest/ && echo 'Factorio config volume populated'"
     volumes:
       - claudetorio_factorio_config:/dest
-      - ../../config/factorio:/src:ro
+      - ../../packages/fle/fle/cluster/config:/src:ro
     networks:
       - claudetorio_game
 
@@ -52,7 +52,7 @@ services:
     command: sh -c "cp -rf /src/* /dest/ && echo 'Factorio scenarios volume populated'"
     volumes:
       - claudetorio_factorio_scenarios:/dest
-      - ../../config/factorio-scenarios:/src:ro
+      - ../../packages/fle/fle/cluster/scenarios:/src:ro
     networks:
       - claudetorio_game
 

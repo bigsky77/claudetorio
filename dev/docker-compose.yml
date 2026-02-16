@@ -41,7 +41,7 @@ services:
     image: alpine
     volumes:
       - claudetorio_factorio_config:/dest
-      - ../config/factorio:/src #:ro
+      - ../packages/fle/fle/cluster/config:/src #:ro
     entrypoint: ["sh", "-c", "cp -f /src/* /dest/ && echo 'Factorio config volume populated'"]
 
   # Init: populate a named volume with Factorio scenario files so
@@ -50,7 +50,7 @@ services:
     image: alpine
     volumes:
       - claudetorio_factorio_scenarios:/dest
-      - ../config/factorio-scenarios:/src
+      - ../packages/fle/fle/cluster/scenarios:/src
     entrypoint: ["sh", "-c", "cp -rf /src/* /dest/ && echo 'Factorio scenarios volume populated'"]
 
   # Init: populate a named volume with Factorio client files so

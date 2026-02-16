@@ -6,6 +6,7 @@ import type { RunInfo } from '@/interfaces';
 
 const STATUS_COLORS: Record<string, string> = {
   running: 'bg-green-900/50 text-green-400',
+  waiting: 'bg-yellow-900/50 text-yellow-400',
   queued: 'bg-yellow-900/50 text-yellow-400',
   completed: 'bg-blue-900/50 text-blue-400',
   failed: 'bg-red-900/50 text-red-400',
@@ -29,19 +30,29 @@ export default function RunHeader({
   run,
   isActive,
   onStop,
+  onStartWorker,
 }: {
   run: RunInfo;
   isActive?: boolean;
   onStop?: () => Promise<void>;
+  onStartWorker?: () => Promise<void>;
 }) {
   const badgeClass = STATUS_COLORS[run.status] ?? 'bg-gray-700 text-gray-300';
   const [stopping, setStopping] = useState(false);
+  const [starting, setStarting] = useState(false);
 
   async function handleStop() {
     if (!onStop) return;
     setStopping(true);
     await onStop();
     setStopping(false);
+  }
+
+  async function handleStartWorker() {
+    if (!onStartWorker) return;
+    setStarting(true);
+    await onStartWorker();
+    setStarting(false);
   }
 
   return (
@@ -58,7 +69,16 @@ export default function RunHeader({
         <span className={`px-2 py-1 text-xs rounded font-medium ${badgeClass}`}>
           {run.status}
         </span>
-        {isActive && onStop && (
+        {onStartWorker && (
+          <button
+            onClick={handleStartWorker}
+            disabled={starting}
+            className="ml-auto px-4 py-1.5 bg-green-700 hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed rounded text-sm font-medium transition-colors"
+          >
+            {starting ? 'Starting...' : 'Start Worker'}
+          </button>
+        )}
+        {isActive && onStop && !onStartWorker && (
           <button
             onClick={handleStop}
             disabled={stopping}

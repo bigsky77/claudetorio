@@ -19,7 +19,8 @@ async def _volume_has_content(volume_name: str) -> bool:
 async def spawn_factorio(slot: int) -> str | None:
     """Spawn a Factorio server container for the given slot.
 
-    Uses FLE's open_world scenario for proper game-state initialization.
+    Creates a vanilla save and starts the server. FLE scripts are loaded
+    via RCON by the run-worker after the server is up.
     Returns the container ID, or None if not configured or spawn failed.
     """
     if not config.FACTORIO_IMAGE:
@@ -60,19 +61,35 @@ async def spawn_factorio(slot: int) -> str | None:
 
     udp_port = config.get_udp_port(slot)
 
-    # Explicit command: launch with FLE's open_world scenario
-    cmd += [
-        "/opt/factorio/bin/x64/factorio",
-        "--start-server-load-scenario", "open_world",
-        "--port", str(udp_port),
-        "--rcon-port", str(config.BASE_RCON_PORT),
-        "--rcon-password", config.RCON_PASSWORD,
-        "--server-settings", "/opt/factorio/config/server-settings.json",
-        "--map-gen-settings", "/opt/factorio/config/map-gen-settings.json",
-        "--map-settings", "/opt/factorio/config/map-settings.json",
-        "--server-adminlist", "/opt/factorio/config/server-adminlist.json",
-        "--server-banlist", "/opt/factorio/config/server-banlist.json",
-    ]
+    # Launch Factorio with a vanilla save instead of the open_world scenario.
+    # The open_world scenario's control.lua pre-registers event handlers that
+    # run every tick and call global.actions.* / global.alerts.on_tick — Lua
+    # functions injected by FLE via RCON.  When a multiplayer client joins
+    # *after* FLE init, its save copy has nil for those functions (Lua
+    # functions can't be serialized in `global`), so the on_tick handler
+    # diverges between server and client, causing instant desyncs.
+    #
+    # A vanilla save has no control.lua event handlers.  FLE loads everything
+    # (including any event registrations) via RCON, which IS replicated to
+    # connected peers as input actions — matching the MCP-era setup that
+    # worked without desyncs.
+    factorio_bin = "/opt/factorio/bin/x64/factorio"
+    save_path = "/factorio/saves/game.zip"
+    shell_cmd = (
+        f"{factorio_bin}"
+        f" --create {save_path}"
+        f" --map-gen-settings /opt/factorio/config/map-gen-settings.json"
+        f" --map-settings /opt/factorio/config/map-settings.json"
+        f" && {factorio_bin}"
+        f" --start-server {save_path}"
+        f" --port {udp_port}"
+        f" --rcon-port {config.BASE_RCON_PORT}"
+        f" --rcon-password {config.RCON_PASSWORD}"
+        f" --server-settings /opt/factorio/config/server-settings.json"
+        f" --server-adminlist /opt/factorio/config/server-adminlist.json"
+        f" --server-banlist /opt/factorio/config/server-banlist.json"
+    )
+    cmd += ["sh", "-c", shell_cmd]
 
     print(f"[factorio] Spawning {container_name}: {' '.join(cmd)}", flush=True)
 
