@@ -455,6 +455,26 @@ async def run(steps: int, broker_url: str, username: str):
         all_technologies_researched=False,
         clear_entities=False,
     )
+    # Set non-agent players (stream client) to spectator mode
+    instance.rcon_client.send_command(
+        "/sc for _, p in pairs(game.players) do "
+        "if not global.agent_characters then break end; "
+        "local is_agent = false; "
+        "for _, c in pairs(global.agent_characters) do "
+        "if c.valid and c.associated_player == p then is_agent = true; break end "
+        "end; "
+        "if not is_agent then p.set_controller({type = defines.controllers.spectator}) end "
+        "end"
+    )
+
+    # Remove enemies (global.remove_enemies doesn't exist on vanilla saves)
+    instance.rcon_client.send_command(
+        "/sc game.forces['enemy'].kill_all_units(); "
+        "game.map_settings.enemy_expansion.enabled = false; "
+        "game.map_settings.enemy_evolution.enabled = false; "
+        "for _, e in pairs(game.surfaces[1].find_entities_filtered({type='unit-spawner'})) do e.destroy() end"
+    )
+
     # Initialize version control for game state
     vcs_repo = FactorioMCPRepository(instance)
 

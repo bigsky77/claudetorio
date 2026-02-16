@@ -80,19 +80,28 @@ global.actions.request_path = function(player_index, start_x, start_y, goal_x, g
     return request_id
 end
 
--- Modify the pathfinding finished handler to clean up entities
---script.on_event(defines.events.on_script_path_request_finished, function(event)
---    -- Clean up clearance entities
---    if global.clearance_entities[event.id] then
---        for _, entity in pairs(global.clearance_entities[event.id]) do
---            if entity.valid then
---                entity.destroy()
---            end
---        end
---        global.clearance_entities[event.id] = nil
---    end
---end)
+-- Event handler for path request completion
+-- Registered via RCON (replicated to multiplayer clients as input actions)
+script.on_event(defines.events.on_script_path_request_finished, function(event)
+    if not global.path_requests then return end
+    local request_data = global.path_requests[event.id]
+    if not request_data then return end
 
--- NOTE: Event registration moved to scenario control.lua for join-proof operation
--- The on_script_path_request_finished handler is now registered in control.lua
--- DO NOT register events dynamically here - it causes script-event-mismatch errors
+    if event.path then
+        global.paths[event.id] = event.path
+    elseif event.try_again_later then
+        global.paths[event.id] = "busy"
+    else
+        global.paths[event.id] = "not_found"
+    end
+
+    -- Clean up clearance entities
+    if global.clearance_entities and global.clearance_entities[event.id] then
+        for _, entity in pairs(global.clearance_entities[event.id]) do
+            if entity.valid then
+                entity.destroy()
+            end
+        end
+        global.clearance_entities[event.id] = nil
+    end
+end)
