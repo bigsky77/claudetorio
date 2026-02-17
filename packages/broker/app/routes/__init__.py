@@ -4,6 +4,7 @@ from .leaderboard import router as leaderboard_router
 from .system import router as system_router
 from .runs import router as runs_router
 from .internal import router as internal_router
+from .auth import router as auth_router
 
 all_routers = [
     sessions_router,
@@ -12,4 +13,5 @@ all_routers = [
     system_router,
     runs_router,
     internal_router,
+    auth_router,
 ]

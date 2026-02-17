@@ -20,6 +20,13 @@ class User(Base):
     best_score: Mapped[float] = mapped_column(Float, server_default=text("0"))
     total_playtime_seconds: Mapped[int] = mapped_column(Integer, server_default=text("0"))
 
+    # OAuth identity fields
+    email: Mapped[Optional[str]] = mapped_column(String, nullable=True, unique=True)
+    display_name: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    avatar_url: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    oauth_provider: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    oauth_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+
     sessions: Mapped[List["Session"]] = relationship(back_populates="user")
     saves: Mapped[List["Save"]] = relationship(back_populates="user")
     score_history: Mapped[List["ScoreHistory"]] = relationship(back_populates="user")
