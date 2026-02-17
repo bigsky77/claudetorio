@@ -88,6 +88,7 @@ services:
       - FACTORIO_SCENARIOS_VOLUME=claudetorio_factorio_scenarios
       # Stream server configuration - subdomain routing through Caddy
       - STREAM_DOMAIN=stream.claudetorio.ai
+      - STREAM_URL=157.254.222.103
       # Stream client configuration
       - FACTORIO_CLIENT_VOLUME=claudetorio_factorio_client
       - STREAM_CLIENT_NETWORK=claudetorio_game

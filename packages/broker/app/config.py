@@ -40,7 +40,8 @@ class Config:
     FACTORIO_SCENARIOS_VOLUME = os.getenv("FACTORIO_SCENARIOS_VOLUME", "")  # Docker volume with FLE scenario files
     FACTORIO_SCENARIOS_PATH = os.getenv("FACTORIO_SCENARIOS_PATH", "")  # host path to scenario files
     # Stream server configuration (port-based public access)
-    STREAM_BASE_URL = os.getenv("STREAM_BASE_URL", "http://localhost")
+    # STREAM_URL is preferred; STREAM_BASE_URL is kept for backward compatibility.
+    STREAM_URL = os.getenv("STREAM_URL", os.getenv("STREAM_BASE_URL", "http://localhost"))
     STREAM_BASE_PORT = int(os.getenv("STREAM_BASE_PORT", "3003"))  # Slot 0 = 3003, Slot 1 = 3004, etc.
     STREAM_PUBLIC_HOST = os.getenv("STREAM_PUBLIC_HOST", "")  # Optional explicit public host/IP for frontend metadata
 
@@ -52,9 +53,10 @@ class Config:
     @classmethod
     def get_stream_public_endpoint(cls, slot: int) -> dict[str, str | int]:
         """Get public stream endpoint metadata for a given slot."""
-        parsed = urlparse(cls.STREAM_BASE_URL)
+        parsed = urlparse(cls.STREAM_URL)
         scheme = parsed.scheme or "http"
-        host = cls.STREAM_PUBLIC_HOST or parsed.hostname or "localhost"
+        parsed_host = parsed.hostname or parsed.path
+        host = cls.STREAM_PUBLIC_HOST or parsed_host or "localhost"
         port = cls.STREAM_BASE_PORT + slot
         return {
             "stream_url": f"{scheme}://{host}:{port}/",

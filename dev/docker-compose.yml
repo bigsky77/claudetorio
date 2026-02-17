@@ -84,7 +84,7 @@ services:
       - FACTORIO_CONFIG_VOLUME=claudetorio_factorio_config
       - FACTORIO_SCENARIOS_VOLUME=claudetorio_factorio_scenarios
       # Stream public endpoint configuration (port-based)
-      - STREAM_BASE_URL=http://localhost
+      - STREAM_URL=localhost
       - STREAM_BASE_PORT=3002
       - STREAM_PUBLIC_HOST=localhost
       # Docker settings for run-worker containers
