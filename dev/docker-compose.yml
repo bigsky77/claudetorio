@@ -110,6 +110,10 @@ services:
       - "3000:3000"
     environment:
       - BROKER_URL=http://broker:8080
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET:-dev-secret-change-this-in-production-at-least-32-chars}
+      - AUTH_URL=http://localhost:3000
+      - GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID}
+      - GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET}
     depends_on:
       - broker
 
