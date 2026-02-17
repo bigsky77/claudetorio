@@ -1,9 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useEscapeKey } from '@/hooks/use-escape-key';
 import { createRun } from '@/services/api';
+import { getApiKeys } from '@/utils/api-keys';
 
 type Provider = 'anthropic' | 'openai' | 'custom';
 
@@ -27,9 +28,21 @@ export default function StartRunForm({ onClose }: { onClose: () => void }) {
 
   useEscapeKey(onClose);
 
+  // Auto-fill API keys from localStorage on mount
+  useEffect(() => {
+    const saved = getApiKeys();
+    if (saved.anthropic) setApiKey(saved.anthropic);
+    if (saved.custom.url) setCustomApiUrl(saved.custom.url);
+    if (saved.custom.key) setCustomApiKey(saved.custom.key);
+  }, []);
+
   function handleProviderChange(p: Provider) {
     setProvider(p);
     setModel(PROVIDER_DEFAULTS[p] || model);
+    // Load the matching saved key for the selected provider
+    const saved = getApiKeys();
+    if (p === 'anthropic') setApiKey(saved.anthropic);
+    else if (p === 'openai') setApiKey(saved.openai);
   }
 
   async function handleSubmit(e: React.FormEvent) {
