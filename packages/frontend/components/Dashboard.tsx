@@ -10,6 +10,7 @@ import Leaderboard from './Leaderboard';
 import StreamModal from './StreamModal';
 import SessionModal from './SessionModal/SessionModal';
 import StartRunForm from './StartRunForm';
+import UserWidget from './UserWidget';
 
 export default function Dashboard() {
   const {
@@ -36,6 +37,7 @@ export default function Dashboard() {
 
   return (
     <main className="min-h-screen bg-gray-900 text-white p-8">
+      <UserWidget />
       <div className="max-w-6xl mx-auto">
         {/* Header */}
         <div className="text-center mb-12">
