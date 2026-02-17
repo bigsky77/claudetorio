@@ -77,23 +77,33 @@ jobs:
 
             # Fail fast on missing required env
             test -f .env || { echo "ERROR: machines/game-server/.env is missing"; exit 1; }
-            for key in POSTGRES_PASSWORD RCON_PASSWORD FACTORIO_IMAGE; do
+            for key in POSTGRES_PASSWORD RCON_PASSWORD FACTORIO_IMAGE FACTORIO_CLIENT_PATH; do
               val="$(grep -E "^${key}=" .env | tail -n1 | cut -d= -f2-)"
               if [ -z "$val" ]; then
                 echo "ERROR: required key '${key}' is missing/empty in .env"
                 exit 1
               fi
             done
+            FACTORIO_CLIENT_PATH="$(grep -E '^FACTORIO_CLIENT_PATH=' .env | tail -n1 | cut -d= -f2-)"
+            test -d "$FACTORIO_CLIENT_PATH" || { echo "ERROR: FACTORIO_CLIENT_PATH does not exist or is not a directory: $FACTORIO_CLIENT_PATH"; exit 1; }
 
             # Deterministically populate config/scenario volumes
             docker compose run --rm factorio-config-init
             docker compose run --rm factorio-scenarios-init
+            docker compose run --rm factorio-client-init
 
             # Sanity-check that expected files exist in config volume
             docker run --rm -v claudetorio_factorio_config:/v alpine sh -c "test -f /v/server-settings.json"
+            docker run --rm -v claudetorio_factorio_client:/v alpine sh -c "test -e /v/bin/x64/factorio || test -e /v/bin/factorio"
 
-            # Build broker-spawned image and recreate stack
-            docker build -t claudetorio-run-worker -f ../../packages/run-worker/Dockerfile ../../packages
+            # Build broker-spawned images used at runtime
+            docker compose --profile build-only build run-worker stream-client
+
+            # Verify required broker-spawned images exist locally
+            docker image inspect claudetorio-run-worker:latest >/dev/null
+            docker image inspect claudetorio-stream-client:latest >/dev/null
+
+            # Recreate stack with fresh config
             docker compose up --build -d --force-recreate
 
             # Verify broker runtime contract

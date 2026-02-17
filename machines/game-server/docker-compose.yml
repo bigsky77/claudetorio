@@ -60,7 +60,7 @@ services:
   # dynamically-spawned stream-client containers can mount them without host paths.
   factorio-client-init:
     image: alpine
-    command: sh -c "cp -rn /src/* /dest/ 2>/dev/null; echo 'Factorio client volume ready'"
+    command: sh -c "rm -rf /dest/* && cp -a /src/. /dest/ && echo 'Factorio client volume refreshed'"
     volumes:
       - claudetorio_factorio_client:/dest
       - ${FACTORIO_CLIENT_PATH}:/src:ro
