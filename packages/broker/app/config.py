@@ -51,6 +51,11 @@ class Config:
     REPLAY_RCON_BASE_PORT = int(os.getenv("REPLAY_RCON_BASE_PORT", "28000"))
     STEP_INTERVAL = float(os.getenv("STEP_INTERVAL", "5.0"))
     STREAM_CLIENT_SETTLE_TIME = int(os.getenv("STREAM_CLIENT_SETTLE_TIME", "15"))
+    # Two-server deployment: stream-agent on stream-server handles stream-client spawning
+    STREAM_AGENT_URL = os.getenv("STREAM_AGENT_URL", "")       # e.g. http://157.254.222.104:8090
+    STREAM_AGENT_KEY = os.getenv("STREAM_AGENT_KEY", "")       # shared secret
+    GAME_SERVER_PUBLIC_HOST = os.getenv("GAME_SERVER_PUBLIC_HOST", "")    # 157.254.222.103
+    STREAM_SERVER_PUBLIC_HOST = os.getenv("STREAM_SERVER_PUBLIC_HOST", "")  # 157.254.222.104
 
     @classmethod
     def get_udp_port(cls, slot: int) -> int:

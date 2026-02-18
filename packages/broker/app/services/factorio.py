@@ -57,9 +57,12 @@ async def spawn_factorio(slot: int) -> str | None:
     elif config.FACTORIO_SCENARIOS_PATH:
         cmd += ["-v", f"{config.FACTORIO_SCENARIOS_PATH}:/factorio/scenarios"]
 
-    cmd += [config.FACTORIO_IMAGE]
-
     udp_port = config.get_udp_port(slot)
+
+    # Expose UDP port to host so stream-clients on stream-server can connect
+    cmd += ["-p", f"{udp_port}:{udp_port}/udp"]
+
+    cmd += [config.FACTORIO_IMAGE]
 
     # Launch Factorio with a vanilla save instead of the open_world scenario.
     # The open_world scenario's control.lua pre-registers event handlers that

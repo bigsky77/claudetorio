@@ -1,9 +1,10 @@
 import asyncio
 
+import httpx
 from mcrcon import MCRcon
 
 from ..config import config
-from .streaming import _stop_container
+from .streaming import _stop_container, _stop_remote_container
 
 
 def allocate_replay_slot(active_replays: dict) -> int | None:
@@ -52,6 +53,10 @@ async def spawn_replay_factorio(run_id: str, slot: int, map_seed: int | None = N
         cmd += ["-v", f"{config.FACTORIO_SCENARIOS_VOLUME}:/factorio/scenarios"]
     elif config.FACTORIO_SCENARIOS_PATH:
         cmd += ["-v", f"{config.FACTORIO_SCENARIOS_PATH}:/factorio/scenarios"]
+
+    # Expose ports to host so stream-clients on stream-server can reach this container
+    cmd += ["-p", f"{udp_port}:{udp_port}/udp"]
+    cmd += ["-p", f"{rcon_port}:{rcon_port}"]
 
     cmd += [config.FACTORIO_IMAGE]
 
@@ -134,6 +139,47 @@ async def spawn_replay_stream_client(run_id: str, slot: int) -> bool:
 
     Returns True if the container started successfully.
     """
+    if config.STREAM_AGENT_URL:
+        # Remote path: delegate to stream-agent on stream-server
+        factorio_host = config.GAME_SERVER_PUBLIC_HOST
+        udp_port = config.REPLAY_UDP_BASE_PORT + slot
+        host_port = config.REPLAY_STREAM_BASE_PORT + slot
+        container_name = f"stream-client-replay-{run_id}"
+        print(
+            f"[replay] calling stream-agent to spawn {container_name} "
+            f"({factorio_host}:{udp_port} -> :{host_port})",
+            flush=True,
+        )
+        try:
+            async with httpx.AsyncClient() as client:
+                r = await client.post(
+                    f"{config.STREAM_AGENT_URL}/spawn/stream-client",
+                    json={
+                        "container_name": container_name,
+                        "factorio_host": factorio_host,
+                        "factorio_port": udp_port,
+                        "host_port": host_port,
+                        "title": f"ClaudeTorio Replay {run_id}",
+                        "image": config.STREAM_CLIENT_IMAGE,
+                        "client_volume": config.FACTORIO_CLIENT_VOLUME,
+                    },
+                    headers={"X-Stream-Agent-Key": config.STREAM_AGENT_KEY},
+                    timeout=130.0,
+                )
+            if r.status_code == 200:
+                print(f"[replay] stream-agent spawned {container_name}", flush=True)
+                return True
+            else:
+                print(
+                    f"[replay] stream-agent returned {r.status_code} for {container_name}: {r.text}",
+                    flush=True,
+                )
+                return False
+        except Exception as e:
+            print(f"[replay] ERROR calling stream-agent for {container_name}: {e}", flush=True)
+            return False
+
+    # Local path (dev / no stream-agent configured)
     if not config.FACTORIO_CLIENT_PATH and not config.FACTORIO_CLIENT_VOLUME:
         print("[replay] WARNING: streaming disabled — FACTORIO_CLIENT_PATH/VOLUME not set", flush=True)
         return False
@@ -192,6 +238,10 @@ async def spawn_replay_stream_client(run_id: str, slot: int) -> bool:
 
 async def wait_for_replay_stream_client(run_id: str, slot: int, timeout: int = 90) -> bool:
     """Poll until the replay stream-client KasmVNC port is accepting connections."""
+    if config.STREAM_AGENT_URL:
+        # stream-agent already blocked until ready; nothing to do here
+        return True
+
     container_name = f"stream-client-replay-{run_id}"
     deadline = asyncio.get_event_loop().time() + timeout
     while asyncio.get_event_loop().time() < deadline:
@@ -253,12 +303,17 @@ async def spawn_stream_worker_container(
 
 async def stop_replay_containers(run_id: str) -> None:
     """Stop all containers for a replay (best-effort)."""
-    for name in [
-        f"stream-worker-{run_id}",
-        f"stream-client-replay-{run_id}",
-        f"factorio-replay-{run_id}",
-    ]:
+    # stream-worker and factorio-replay always run on game-server
+    for name in [f"stream-worker-{run_id}", f"factorio-replay-{run_id}"]:
         await _stop_container(name)
+
+    # stream-client-replay lives on stream-server when using stream-agent
+    stream_client_name = f"stream-client-replay-{run_id}"
+    if config.STREAM_AGENT_URL:
+        await _stop_remote_container(stream_client_name)
+    else:
+        await _stop_container(stream_client_name)
+
     # Remove the factorio replay container (it has no --rm)
     await _remove_container(f"factorio-replay-{run_id}")
 

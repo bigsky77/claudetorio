@@ -41,27 +41,41 @@ uv run uvicorn main:app --host 0.0.0.0 --port 8080 --reload
 cd packages/run-worker
 uv sync
 RUN_ID=... BROKER_URL=... SERVER_HOST=... RCON_PORT=... RCON_PASSWORD=... uv run python main.py
+# Optional: MODEL=claude-opus-4-5 CUSTOM_API=true CUSTOM_API_URL=... CUSTOM_API_KEY=...
+```
+
+### Stream Agent (local, no Docker)
+```bash
+cd packages/stream-agent
+STREAM_AGENT_KEY=dev DOCKER_NETWORK=stream-network uvicorn main:app --host 0.0.0.0 --port 8090 --reload
 ```
 
 There are no Python unit tests. Infrastructure tests are Nix-only (`tests/factorio-server.nix`, `tests/integration.nix`).
 
 ## Architecture
 
+Production splits across two servers; dev runs everything locally via `dev/docker-compose.yml`.
+
 ```
-Browser
-  └── Frontend (Next.js :3000)
-        └── Broker API (FastAPI :8080)
-              ├── PostgreSQL (state)
-              ├── Redis (slot locks)
-              └── Docker socket (spawns all game containers)
-                    ├── factorio-{slot}          ← headless game server
-                    ├── run-worker-{run_id}       ← LLM agent loop
-                    ├── factorio-replay-{run_id}  ← replay game server (on demand)
-                    ├── stream-client-replay-{run_id} ← KasmVNC stream
-                    └── stream-worker-{run_id}    ← replay step replayer
+game-server (157.254.222.103)
+  ├── broker (8080)           ← spawns game containers; calls stream-agent for stream-clients
+  ├── postgres + redis
+  ├── frontend (3000)
+  ├── factorio-{slot}         ← headless, UDP exposed to host
+  ├── run-worker-{run_id}     ← LLM agent loop
+  ├── factorio-replay-{run_id} ← UDP + RCON exposed to host
+  └── stream-worker-{run_id}  ← replays steps via RCON to local factorio-replay
+
+stream-server (157.254.222.104)
+  ├── caddy (80/443)          ← TLS; routes :{STREAM_BASE_PORT+slot} → stream-client-{slot}:3000
+  ├── stream-agent (8090)     ← HTTP API: spawn/stop stream-client containers on this daemon
+  └── stream-client-{slot}    ← KasmVNC viewer; UDP to game-server:34197+slot
+  └── stream-client-replay-{run_id}  ← KasmVNC viewer; UDP to game-server:35100+slot
 ```
 
-The broker mounts `/var/run/docker.sock` and uses `docker run` to spawn all child containers — they are **not** compose services. Only broker, frontend, postgres, and redis run as compose services.
+The broker mounts `/var/run/docker.sock` and uses `docker run` to spawn game containers. Stream-client containers are spawned via HTTP to stream-agent (when `STREAM_AGENT_URL` is set) so they land on stream-server's Docker daemon. In dev, `STREAM_AGENT_URL` is unset and stream-clients are spawned locally.
+
+**Named volumes for dynamic spawning:** `claudetorio_factorio_config`, `claudetorio_factorio_scenarios`, and `claudetorio_factorio_client` are pre-populated by Alpine init containers so dynamically-spawned `docker run` containers can mount config/assets without host paths.
 
 ## Run Lifecycle
 
@@ -69,7 +83,7 @@ The broker mounts `/var/run/docker.sock` and uses `docker run` to spawn all chil
 2. `POST /api/runs/{id}/start-worker` → broker spawns `run-worker-{run_id}` Docker container, status=`running`
 3. run-worker: LLM observe-think-act loop, reports each step via `POST /api/runs/{id}/steps`
 4. run-worker exits → `_monitor_run` updates DB status to `completed`/`failed`, releases slot lock, stops Factorio
-5. `POST /api/runs/{id}/replay` → spawns `factorio-replay-{run_id}` + `stream-client-replay-{run_id}` + `stream-worker-{run_id}`; stream-worker fetches all DB steps and re-executes them at STEP_INTERVAL pace
+5. `POST /api/runs/{id}/replay` → spawns `factorio-replay-{run_id}` + `stream-client-replay-{run_id}` (via stream-agent in prod) + `stream-worker-{run_id}`; stream-worker fetches all DB steps and re-executes them at STEP_INTERVAL pace
 6. `DELETE /api/runs/{id}/replay` → stops all three replay containers
 
 ## Port Conventions
@@ -78,7 +92,7 @@ The broker mounts `/var/run/docker.sock` and uses `docker run` to spawn all chil
 |----------|---------|------|
 | Live Factorio UDP | `BASE_UDP_PORT + slot` | 34197 |
 | Live Factorio RCON | `BASE_RCON_PORT + slot` | 27000 (dev: 27015) |
-| Live stream (KasmVNC) | `STREAM_BASE_PORT + slot` | 3002 (dev) |
+| Live stream (KasmVNC) | `STREAM_BASE_PORT + slot` | 3002 (dev) / 3003 (prod) |
 | Replay Factorio UDP | `REPLAY_UDP_BASE_PORT + slot` | 35100 |
 | Replay Factorio RCON | `REPLAY_RCON_BASE_PORT + slot` | 28000 |
 | Replay stream | `REPLAY_STREAM_BASE_PORT + slot` | 4002 |
@@ -105,12 +119,24 @@ packages/broker/
       internal.py            # Internal run-worker reporting endpoints
     services/
       factorio.py            # spawn_factorio, wait_for_factorio, stop_factorio
-      streaming.py           # spawn_stream_client, wait_for_stream_client
+      streaming.py           # spawn_stream_client (local or via stream-agent)
       replay.py              # All replay container lifecycle functions
       slots.py               # Redis slot lock management
       rcon.py                # RCON helpers
     tasks.py                 # Background: score_polling_loop, session_timeout_checker
 ```
+
+`AppState` (in `state.py`) stores the redis connection, `run_processes` dict (active `asyncio.subprocess.Process` for monitoring), and `active_replays` dict keyed by run_id. The lifespan starts two background tasks: `score_polling_loop` (periodic production score scraping) and `session_timeout_checker` (kills stale sessions).
+
+## FLE (Factorio Learning Environment)
+
+`packages/fle/` is a vendored copy of the FLE library (also on PyPI). It wraps Factorio's RCON interface for LLM agent use:
+
+- **`FactorioInstance`** (`fle/env/instance.py`) — RCON connection; `eval(code)` executes Lua in the game
+- **`FactorioGymEnv`** (`fle/env/gym_env/`) — gym.Env interface: `get_observation()` → formatted game state text; `step(Action)` → executes code, returns reward/info
+- **`APIFactory`** (`fle/agents/llm/`) — multi-provider LLM dispatch (Anthropic, OpenAI-compatible); `acall()` is patched in run-worker to limit retries to 3 (default is infinite)
+
+**VCS directives:** The LLM can embed `# VCS: UNDO`, `# VCS: TAG name`, `# VCS: RESTORE name`, or `# VCS: HISTORY` comments in generated code. The run-worker intercepts these before calling `eval()` and routes them to `FactorioMCPRepository` for game-state version control.
 
 ## RCON Warmup Pattern
 
@@ -157,17 +183,30 @@ For the broker (see `dev/docker-compose.yml` for dev values):
 | Variable | Purpose |
 |----------|---------|
 | `FACTORIO_IMAGE` | Required — Factorio server image (e.g. `factoriotools/factorio:1.1.110`) |
-| `FACTORIO_CLIENT_VOLUME` | Docker volume with Factorio client files (for stream-client) |
-| `DOCKER_NETWORK` | Network for spawned containers to reach each other |
+| `FACTORIO_CLIENT_VOLUME` | Docker volume with Factorio client files (for stream-client in dev; unused in prod — stream-agent has its own) |
+| `DOCKER_NETWORK` | Network for spawned game containers |
 | `BROKER_ADMIN_KEY` | Auth header for admin endpoints |
 | `RUN_WORKER_API_KEY` | Auth for run-worker → broker reporting |
 | `STREAM_WORKER_IMAGE` | Image name for stream-worker containers |
 | `RCON_PASSWORD` | Shared RCON password across all Factorio containers |
+| `STREAM_AGENT_URL` | e.g. `http://157.254.222.104:8090` — when set, stream-clients are spawned on stream-server via HTTP instead of locally |
+| `STREAM_AGENT_KEY` | Shared secret for broker ↔ stream-agent auth |
+| `GAME_SERVER_PUBLIC_HOST` | Public IP of game-server (passed to stream-agent so stream-clients know where to connect) |
+
+For run-worker:
+
+| Variable | Purpose |
+|----------|---------|
+| `MODEL` | LLM model name (default: `claude-sonnet-4-5-20250929`) |
+| `CUSTOM_API` | Set to `true` to use a custom OpenAI-compatible API |
+| `CUSTOM_API_URL` / `CUSTOM_API_KEY` | Endpoint + key for custom API |
 
 ## Deployment
 
 Push to `main` triggers GitHub Actions (`.github/workflows/deploy.yml`):
-- Changes in `packages/{broker,frontend,fle,run-worker,stream-worker}/` → deploy to **game-server**
-- Changes in `packages/stream-client/` → deploy to **stream-server**
+- Changes in `packages/{broker,frontend,fle,run-worker,stream-worker}/` or `machines/game-server/` → deploy to **game-server**
+- Changes in `packages/{stream-client,stream-agent}/` or `machines/stream-server/` → deploy to **stream-server**
 
-Manual deploy scripts are in `scripts/`. Infrastructure (NixOS machines) is in `machines/`.
+Manual deploy scripts: `machines/game-server/deploy.sh` and `machines/stream-server/deploy.sh`.
+
+Infrastructure (NixOS machine config + firewall rules) is in `machines/game-server/configuration.nix` and `machines/stream-server/configuration.nix`.
