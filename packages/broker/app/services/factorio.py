@@ -174,6 +174,26 @@ async def _get_container_logs(name: str, tail: int = 50) -> str:
         return f"(failed to get logs: {e})"
 
 
+async def get_map_seed(slot: int) -> int | None:
+    """Fetch the map generation seed from a running Factorio server via RCON."""
+    host = f"factorio-{slot}"
+    port = config.BASE_RCON_PORT
+    try:
+        rcon = MCRcon(host, config.RCON_PASSWORD, port=port)
+        rcon.connect()
+        # First /sc is swallowed by the "achievements disabled" warning; send a throwaway
+        rcon.command("/sc rcon.print('warmup')")
+        result = rcon.command("/sc rcon.print(game.surfaces['nauvis'].map_gen_settings.seed)")
+        rcon.disconnect()
+        seed = int(result.strip()) if result and result.strip().lstrip('-').isdigit() else None
+        if seed is not None:
+            print(f"[factorio] Got map seed for slot {slot}: {seed}", flush=True)
+        return seed
+    except Exception as e:
+        print(f"[factorio] WARNING: could not get map seed for slot {slot}: {e}", flush=True)
+        return None
+
+
 async def wait_for_factorio(slot: int, timeout: int = 180, retries: int = 3, retry_interval: int = 180) -> bool:
     """Wait for Factorio RCON to become available.
 

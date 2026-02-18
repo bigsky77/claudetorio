@@ -13,9 +13,20 @@ async_session_factory = async_sessionmaker(engine, expire_on_commit=False)
 
 
 async def init_db():
-    """Create all tables if they don't exist."""
+    """Create all tables if they don't exist, and apply any incremental migrations."""
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        # Incremental migrations (idempotent — safe on fresh or existing DBs)
+        await conn.execute(
+            __import__("sqlalchemy").text(
+                "ALTER TABLE runs DROP COLUMN IF EXISTS map_exchange_string"
+            )
+        )
+        await conn.execute(
+            __import__("sqlalchemy").text(
+                "ALTER TABLE runs ADD COLUMN IF NOT EXISTS map_seed INTEGER"
+            )
+        )
 
 
 async def close_db():

@@ -1,5 +1,4 @@
 import asyncio
-import os
 import uuid
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -11,25 +10,20 @@ from ..db import async_session_factory
 from ..dependencies import get_db, get_app_state, require_admin_key
 from ..models import Run, RunStep
 from ..schemas import CreateRunRequest, CreateRunResponse, RunInfo, RunStepInfo
-from ..services.factorio import spawn_factorio, stop_factorio, wait_for_factorio
-from ..services.slots import get_free_slot, claim_slot_lock, release_slot_lock
-from ..services.streaming import (
-    is_stream_client_running,
-    spawn_stream_client,
-    stop_stream_client,
-    wait_for_stream_client,
+from ..services.factorio import spawn_factorio, stop_factorio, wait_for_factorio, get_map_seed
+from ..services.replay import (
+    allocate_replay_slot,
+    spawn_replay_factorio,
+    wait_for_replay_factorio,
+    spawn_replay_stream_client,
+    wait_for_replay_stream_client,
+    spawn_stream_worker_container,
+    stop_replay_containers,
 )
+from ..services.slots import get_free_slot, claim_slot_lock, release_slot_lock
 from ..state import AppState
 
 router = APIRouter()
-
-
-async def _get_live_stream_endpoint(slot: int | None) -> dict[str, str | int] | None:
-    if slot is None:
-        return None
-    if await is_stream_client_running(slot):
-        return config.get_stream_public_endpoint(slot)
-    return None
 
 
 async def _monitor_run(run_id: str, proc: asyncio.subprocess.Process, app_state: AppState):
@@ -54,8 +48,15 @@ async def _monitor_run(run_id: str, proc: asyncio.subprocess.Process, app_state:
         # Safety net: release slot lock if worker didn't
         if run and run.slot is not None:
             await release_slot_lock(run.slot, app_state.redis)
-            await stop_stream_client(run.slot)
             await stop_factorio(run.slot)
+
+
+async def _monitor_replay(run_id: str, proc: asyncio.subprocess.Process, app_state: AppState):
+    """Monitor a replay subprocess and clean up when it exits."""
+    await proc.wait()
+    print(f"[replay] stream-worker-{run_id} exited (code {proc.returncode})", flush=True)
+    await stop_replay_containers(run_id)
+    app_state.active_replays.pop(run_id, None)
 
 
 @router.get("/api/runs")
@@ -63,6 +64,7 @@ async def list_runs(
     status: str = Query(None),
     limit: int = Query(50, ge=1, le=200),
     db: AsyncSession = Depends(get_db),
+    app_state: AppState = Depends(get_app_state),
 ):
     query = select(Run).order_by(Run.created_at.desc()).limit(limit)
     if status:
@@ -81,14 +83,6 @@ async def list_runs(
         )
         step_counts = dict(count_result.all())
 
-    stream_endpoints: dict[int, dict[str, str | int]] = {}
-    for r in runs:
-        if r.slot is None or r.slot in stream_endpoints:
-            continue
-        maybe_endpoint = await _get_live_stream_endpoint(r.slot)
-        if maybe_endpoint:
-            stream_endpoints[r.slot] = maybe_endpoint
-
     return [
         RunInfo(
             run_id=r.run_id,
@@ -104,17 +98,17 @@ async def list_runs(
             error=r.error,
             final_score=r.final_score,
             step_count=step_counts.get(r.run_id, 0),
-            stream_url=str(stream_endpoints[r.slot]["stream_url"]) if r.slot is not None and r.slot in stream_endpoints else None,
-            stream_host=str(stream_endpoints[r.slot]["stream_host"]) if r.slot is not None and r.slot in stream_endpoints else None,
-            stream_port=int(stream_endpoints[r.slot]["stream_port"]) if r.slot is not None and r.slot in stream_endpoints else None,
-            stream_scheme=str(stream_endpoints[r.slot]["stream_scheme"]) if r.slot is not None and r.slot in stream_endpoints else None,
+            stream_url=app_state.active_replays[r.run_id]["stream_url"] if r.run_id in app_state.active_replays else None,
+            stream_host=None,
+            stream_port=None,
+            stream_scheme=None,
         )
         for r in runs
     ]
 
 
 @router.get("/api/runs/{run_id}")
-async def get_run(run_id: str, db: AsyncSession = Depends(get_db)):
+async def get_run(run_id: str, db: AsyncSession = Depends(get_db), app_state: AppState = Depends(get_app_state)):
     run = await db.scalar(select(Run).where(Run.run_id == run_id))
     if not run:
         raise HTTPException(404, "Run not found")
@@ -124,7 +118,7 @@ async def get_run(run_id: str, db: AsyncSession = Depends(get_db)):
     )
     step_count = step_count_result.scalar() or 0
 
-    endpoint = await _get_live_stream_endpoint(run.slot)
+    replay = app_state.active_replays.get(run_id)
 
     return RunInfo(
         run_id=run.run_id,
@@ -140,10 +134,10 @@ async def get_run(run_id: str, db: AsyncSession = Depends(get_db)):
         error=run.error,
         final_score=run.final_score,
         step_count=step_count,
-        stream_url=str(endpoint["stream_url"]) if endpoint else None,
-        stream_host=str(endpoint["stream_host"]) if endpoint else None,
-        stream_port=int(endpoint["stream_port"]) if endpoint else None,
-        stream_scheme=str(endpoint["stream_scheme"]) if endpoint else None,
+        stream_url=replay["stream_url"] if replay else None,
+        stream_host=None,
+        stream_port=None,
+        stream_scheme=None,
     )
 
 
@@ -236,13 +230,14 @@ async def create_run(
         run.ended_at = datetime.utcnow()
         await db.commit()
         raise HTTPException(503, "Factorio server failed to start")
-    # Spawn stream client before the run-worker so every run is visible from the start
+
+    # Fetch and store the map seed so replays can regenerate the same map
+    seed = await get_map_seed(slot)
+    if seed is not None:
+        run.map_seed = seed
+        await db.commit()
+
     factorio_host = f"factorio-{slot}"
-    stream_cid = await spawn_stream_client(slot, factorio_host=factorio_host)
-    if stream_cid:
-        stream_ready = await wait_for_stream_client(slot)
-        if not stream_ready:
-            print(f"[run {run_id}] WARNING: stream client not ready, proceeding anyway", flush=True)
 
     # Build run-worker env vars and stash them for the start-worker endpoint
     broker_url = "http://broker:8080"
@@ -353,7 +348,79 @@ async def stop_run(
     # Safety net: release slot lock
     if run.slot is not None:
         await release_slot_lock(run.slot, app_state.redis)
-        await stop_stream_client(run.slot)
         await stop_factorio(run.slot)
+
+    return {"run_id": run_id, "status": "stopped"}
+
+
+@router.post("/api/runs/{run_id}/replay", dependencies=[Depends(require_admin_key)])
+async def start_replay(
+    run_id: str,
+    db: AsyncSession = Depends(get_db),
+    app_state: AppState = Depends(get_app_state),
+):
+    run = await db.scalar(select(Run).where(Run.run_id == run_id))
+    if not run:
+        raise HTTPException(404, "Run not found")
+
+    # Check the run has at least one step
+    step_count_result = await db.execute(
+        select(func.count(RunStep.id)).where(RunStep.run_id == run_id)
+    )
+    step_count = step_count_result.scalar() or 0
+    if step_count == 0:
+        raise HTTPException(409, "Run has no steps to replay")
+
+    # Prevent duplicate replays
+    if run_id in app_state.active_replays:
+        raise HTTPException(409, "Replay already active for this run")
+
+    slot = allocate_replay_slot(app_state.active_replays)
+    if slot is None:
+        raise HTTPException(503, "No replay slots available (max 5 concurrent replays)")
+
+    # Spawn replay Factorio server (use stored map seed for map fidelity)
+    ok = await spawn_replay_factorio(run_id, slot, map_seed=run.map_seed)
+    if not ok:
+        raise HTTPException(503, "Failed to spawn replay Factorio server")
+
+    ready = await wait_for_replay_factorio(run_id, slot)
+    if not ready:
+        await stop_replay_containers(run_id)
+        raise HTTPException(503, "Replay Factorio server failed to become ready")
+
+    # Spawn replay stream client
+    stream_ok = await spawn_replay_stream_client(run_id, slot)
+    if stream_ok:
+        stream_ready = await wait_for_replay_stream_client(run_id, slot)
+        if not stream_ready:
+            print(f"[replay {run_id}] WARNING: stream client not ready, proceeding anyway", flush=True)
+
+    print(f"[replay {run_id}] Waiting {config.STREAM_CLIENT_SETTLE_TIME}s for stream client to connect...", flush=True)
+    await asyncio.sleep(config.STREAM_CLIENT_SETTLE_TIME)
+
+    # Spawn stream-worker container
+    broker_url = "http://broker:8080"
+    proc = await spawn_stream_worker_container(run_id, slot, broker_url)
+
+    endpoint = config.get_replay_stream_public_endpoint(slot)
+    stream_url = str(endpoint["stream_url"])
+
+    app_state.active_replays[run_id] = {"slot": slot, "stream_url": stream_url, "proc": proc}
+    asyncio.create_task(_monitor_replay(run_id, proc, app_state))
+
+    return {"run_id": run_id, "stream_url": stream_url}
+
+
+@router.delete("/api/runs/{run_id}/replay", dependencies=[Depends(require_admin_key)])
+async def stop_replay(
+    run_id: str,
+    app_state: AppState = Depends(get_app_state),
+):
+    if run_id not in app_state.active_replays:
+        raise HTTPException(404, "No active replay for this run")
+
+    app_state.active_replays.pop(run_id, None)
+    await stop_replay_containers(run_id)
 
     return {"run_id": run_id, "status": "stopped"}

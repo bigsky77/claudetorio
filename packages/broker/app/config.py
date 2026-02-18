@@ -44,6 +44,13 @@ class Config:
     STREAM_URL = os.getenv("STREAM_URL", os.getenv("STREAM_BASE_URL", "http://localhost"))
     STREAM_BASE_PORT = int(os.getenv("STREAM_BASE_PORT", "3003"))  # Slot 0 = 3003, Slot 1 = 3004, etc.
     STREAM_PUBLIC_HOST = os.getenv("STREAM_PUBLIC_HOST", "")  # Optional explicit public host/IP for frontend metadata
+    # Replay containers
+    STREAM_WORKER_IMAGE = os.getenv("STREAM_WORKER_IMAGE", "claudetorio-stream-worker")
+    REPLAY_STREAM_BASE_PORT = int(os.getenv("REPLAY_STREAM_BASE_PORT", "4002"))
+    REPLAY_UDP_BASE_PORT = int(os.getenv("REPLAY_UDP_BASE_PORT", "35100"))
+    REPLAY_RCON_BASE_PORT = int(os.getenv("REPLAY_RCON_BASE_PORT", "28000"))
+    STEP_INTERVAL = float(os.getenv("STEP_INTERVAL", "5.0"))
+    STREAM_CLIENT_SETTLE_TIME = int(os.getenv("STREAM_CLIENT_SETTLE_TIME", "15"))
 
     @classmethod
     def get_udp_port(cls, slot: int) -> int:
@@ -69,6 +76,21 @@ class Config:
     def get_stream_url(cls, slot: int) -> str:
         """Get the stream URL for a given slot."""
         return str(cls.get_stream_public_endpoint(slot)["stream_url"])
+
+    @classmethod
+    def get_replay_stream_public_endpoint(cls, slot: int) -> dict[str, str | int]:
+        """Get public stream endpoint metadata for a replay slot."""
+        parsed = urlparse(cls.STREAM_URL)
+        scheme = parsed.scheme or "http"
+        parsed_host = parsed.hostname or parsed.path
+        host = cls.STREAM_PUBLIC_HOST or parsed_host or "localhost"
+        port = cls.REPLAY_STREAM_BASE_PORT + slot
+        return {
+            "stream_url": f"{scheme}://{host}:{port}/",
+            "stream_host": host,
+            "stream_port": port,
+            "stream_scheme": scheme,
+        }
 
 
 config = Config()

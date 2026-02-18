@@ -31,15 +31,21 @@ export default function RunHeader({
   isActive,
   onStop,
   onStartWorker,
+  onStartReplay,
+  onStopReplay,
 }: {
   run: RunInfo;
   isActive?: boolean;
   onStop?: () => Promise<void>;
   onStartWorker?: () => Promise<void>;
+  onStartReplay?: () => Promise<void>;
+  onStopReplay?: () => Promise<void>;
 }) {
   const badgeClass = STATUS_COLORS[run.status] ?? 'bg-gray-700 text-gray-300';
   const [stopping, setStopping] = useState(false);
   const [starting, setStarting] = useState(false);
+  const [startingReplay, setStartingReplay] = useState(false);
+  const [stoppingReplay, setStoppingReplay] = useState(false);
 
   async function handleStop() {
     if (!onStop) return;
@@ -53,6 +59,20 @@ export default function RunHeader({
     setStarting(true);
     await onStartWorker();
     setStarting(false);
+  }
+
+  async function handleStartReplay() {
+    if (!onStartReplay) return;
+    setStartingReplay(true);
+    await onStartReplay();
+    setStartingReplay(false);
+  }
+
+  async function handleStopReplay() {
+    if (!onStopReplay) return;
+    setStoppingReplay(true);
+    await onStopReplay();
+    setStoppingReplay(false);
   }
 
   return (
@@ -69,24 +89,44 @@ export default function RunHeader({
         <span className={`px-2 py-1 text-xs rounded font-medium ${badgeClass}`}>
           {run.status}
         </span>
-        {onStartWorker && (
-          <button
-            onClick={handleStartWorker}
-            disabled={starting}
-            className="ml-auto px-4 py-1.5 bg-green-700 hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed rounded text-sm font-medium transition-colors"
-          >
-            {starting ? 'Starting...' : 'Start Worker'}
-          </button>
-        )}
-        {isActive && onStop && !onStartWorker && (
-          <button
-            onClick={handleStop}
-            disabled={stopping}
-            className="ml-auto px-4 py-1.5 bg-red-700 hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed rounded text-sm font-medium transition-colors"
-          >
-            {stopping ? 'Stopping...' : 'Stop Run'}
-          </button>
-        )}
+        <div className="ml-auto flex gap-2">
+          {onStartWorker && (
+            <button
+              onClick={handleStartWorker}
+              disabled={starting}
+              className="px-4 py-1.5 bg-green-700 hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed rounded text-sm font-medium transition-colors"
+            >
+              {starting ? 'Starting...' : 'Start Worker'}
+            </button>
+          )}
+          {isActive && onStop && !onStartWorker && (
+            <button
+              onClick={handleStop}
+              disabled={stopping}
+              className="px-4 py-1.5 bg-red-700 hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed rounded text-sm font-medium transition-colors"
+            >
+              {stopping ? 'Stopping...' : 'Stop Run'}
+            </button>
+          )}
+          {onStopReplay && (
+            <button
+              onClick={handleStopReplay}
+              disabled={stoppingReplay}
+              className="px-4 py-1.5 bg-orange-700 hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed rounded text-sm font-medium transition-colors"
+            >
+              {stoppingReplay ? 'Stopping...' : 'Stop Stream'}
+            </button>
+          )}
+          {onStartReplay && !onStopReplay && (
+            <button
+              onClick={handleStartReplay}
+              disabled={startingReplay}
+              className="px-4 py-1.5 bg-blue-700 hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed rounded text-sm font-medium transition-colors"
+            >
+              {startingReplay ? 'Starting...' : 'Watch Replay'}
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Metadata cards */}
