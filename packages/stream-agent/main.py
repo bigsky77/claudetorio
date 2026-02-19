@@ -1,5 +1,6 @@
 import asyncio
 import os
+import shutil
 
 from fastapi import Depends, FastAPI, Header, HTTPException
 from pydantic import BaseModel
@@ -8,6 +9,9 @@ STREAM_AGENT_KEY = os.getenv("STREAM_AGENT_KEY", "")
 DOCKER_NETWORK = os.getenv("DOCKER_NETWORK", "stream-network")
 STREAM_CLIENT_IMAGE = os.getenv("STREAM_CLIENT_IMAGE", "claudetorio-stream-client")
 FACTORIO_CLIENT_VOLUME = os.getenv("FACTORIO_CLIENT_VOLUME", "claudetorio_factorio_client")
+KASMVNC_READY_TIMEOUT_SECONDS = 120
+FACTORIO_LAUNCH_DETECT_TIMEOUT_SECONDS = 45
+FACTORIO_LAUNCH_MARKERS = ("[factorio-launch]", "=== Factorio Stream Client ===")
 
 
 def require_auth(x_stream_agent_key: str = Header(...)):
@@ -35,6 +39,8 @@ class SpawnRequest(BaseModel):
 
 @app.post("/spawn/stream-client")
 async def spawn_stream_client(req: SpawnRequest, _=Depends(require_auth)):
+    _ensure_docker_available()
+
     image = req.image or STREAM_CLIENT_IMAGE
     client_volume = req.client_volume or FACTORIO_CLIENT_VOLUME
 
@@ -87,23 +93,39 @@ async def spawn_stream_client(req: SpawnRequest, _=Depends(require_auth)):
         flush=True,
     )
 
-    ready = await _wait_for_port(req.container_name, 3000, timeout=120)
+    ready = await _wait_for_port(req.container_name, 3000, timeout=KASMVNC_READY_TIMEOUT_SECONDS)
     if not ready:
-        print(f"[stream-agent] WARNING: {req.container_name} not ready after 120s", flush=True)
+        print(
+            f"[stream-agent] WARNING: {req.container_name} not ready after {KASMVNC_READY_TIMEOUT_SECONDS}s",
+            flush=True,
+        )
         raise HTTPException(status_code=504, detail="Container started but port 3000 not ready in time")
 
-    print(f"[stream-agent] {req.container_name} is ready", flush=True)
+    launch_detected = await _wait_for_factorio_launch(
+        req.container_name,
+        timeout=FACTORIO_LAUNCH_DETECT_TIMEOUT_SECONDS,
+    )
+    if not launch_detected:
+        print(
+            f"[stream-agent] WARNING: {req.container_name} KasmVNC ready but Factorio launch not detected",
+            flush=True,
+        )
+        raise HTTPException(status_code=504, detail="KasmVNC ready but Factorio launch not detected")
+
+    print(f"[stream-agent] {req.container_name} is ready and Factorio launch was detected", flush=True)
     return {"ok": True}
 
 
 @app.delete("/containers/{name}")
 async def delete_container(name: str, _=Depends(require_auth)):
+    _ensure_docker_available()
     await _stop_container(name)
     return {"ok": True}
 
 
 async def _stop_container(name: str) -> None:
     try:
+        _ensure_docker_available()
         proc = await asyncio.create_subprocess_exec(
             "docker", "stop", "-t", "5", name,
             stdout=asyncio.subprocess.DEVNULL,
@@ -125,3 +147,44 @@ async def _wait_for_port(host: str, port: int, timeout: int = 120) -> bool:
         except Exception:
             await asyncio.sleep(2)
     return False
+
+
+async def _wait_for_factorio_launch(container_name: str, timeout: int = FACTORIO_LAUNCH_DETECT_TIMEOUT_SECONDS) -> bool:
+    deadline = asyncio.get_event_loop().time() + timeout
+    while asyncio.get_event_loop().time() < deadline:
+        if await _logs_contain_launch_marker(container_name):
+            return True
+        if await _factorio_process_running(container_name):
+            return True
+        await asyncio.sleep(2)
+    return False
+
+
+async def _logs_contain_launch_marker(container_name: str) -> bool:
+    proc = await asyncio.create_subprocess_exec(
+        "docker", "logs", "--tail", "200", container_name,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.STDOUT,
+    )
+    output, _ = await proc.communicate()
+    if proc.returncode != 0:
+        return False
+    text = output.decode(errors="replace")
+    return any(marker in text for marker in FACTORIO_LAUNCH_MARKERS)
+
+
+async def _factorio_process_running(container_name: str) -> bool:
+    proc = await asyncio.create_subprocess_exec(
+        "docker", "exec", container_name, "sh", "-c", "ps -eo args | grep -i '[f]actorio'",
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.DEVNULL,
+    )
+    output, _ = await proc.communicate()
+    return proc.returncode == 0 and bool(output.decode().strip())
+
+
+def _ensure_docker_available() -> None:
+    if not shutil.which("docker"):
+        raise HTTPException(status_code=500, detail="Docker CLI not found in stream-agent container")
+    if not os.path.exists("/var/run/docker.sock"):
+        raise HTTPException(status_code=500, detail="Docker socket /var/run/docker.sock is not mounted")

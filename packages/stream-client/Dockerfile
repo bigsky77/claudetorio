@@ -1,7 +1,7 @@
 # Factorio streaming client container using LinuxServer's KasmVNC base
 # Connects to an existing Factorio server and streams the view via web browser
-
-FROM ghcr.io/linuxserver/baseimage-kasmvnc:ubuntunoble
+# NOTE: pinned by digest for deterministic production deploys.
+FROM ghcr.io/linuxserver/baseimage-kasmvnc@sha256:c6d902c207d6e4a66ca41ce36dda549cd58a5bc8d353468b24b0cf780eb528c8
 
 # Install dependencies for Factorio
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -49,4 +49,4 @@ ENV \
 # KasmVNC web interface
 EXPOSE 3000
 
-# The base image handles everything else - it will run /defaults/autostart
+# The base image handles process startup; this image provides /defaults/startwm.sh.

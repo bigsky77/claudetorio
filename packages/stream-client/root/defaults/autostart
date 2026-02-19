@@ -1,10 +1,4 @@
 #!/bin/sh
-# This file runs when openbox starts
-# It launches Factorio to connect to the game server
-
-# Source environment if available (use . instead of source for sh compatibility)
-[ -f /etc/environment ] && . /etc/environment
-
-# Start Factorio in background (allows openbox to continue)
-# start-factorio.sh polls xdpyinfo until the display is ready
-/scripts/start-factorio.sh &
+# Intentionally left as a no-op.
+# Factorio startup is orchestrated from /defaults/startwm.sh to avoid
+# Openbox/DISPLAY race conditions observed on production hosts.

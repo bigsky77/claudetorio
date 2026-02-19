@@ -41,6 +41,25 @@ vim .env  # Set STREAM_DOMAIN to your domain
 ./deploy.sh
 ```
 
+### Rebuild Policy (Pinned Base Image)
+
+- `packages/stream-client/Dockerfile` pins `ghcr.io/linuxserver/baseimage-kasmvnc` by digest.
+- Do not switch back to a floating tag (`:ubuntunoble`) in production.
+- When upgrading, update the digest intentionally, rebuild, then redeploy.
+
+### Explicit Stream-Client Rebuild / Redeploy
+
+```bash
+cd /opt/claudetorio/machines/stream-server
+
+# Rebuild stream-client from the currently pinned digest
+docker compose --profile build-only build stream-client
+
+# Refresh Factorio client volume and restart stack
+docker compose run --rm factorio-client-init
+docker compose up --build -d
+```
+
 ## Access
 
 Once deployed with a valid domain:
@@ -61,6 +80,25 @@ ssh factorio-server-mini "docker logs caddy-proxy --tail 100"
 
 # Stream client logs
 ssh factorio-server-mini "docker logs factorio-stream-0 --tail 100"
+```
+
+## Production Diagnostics
+
+```bash
+# 1) stream-agent health
+curl -sf http://localhost:8090/health
+
+# 2) stream-client logs
+docker logs stream-client-<slot> --tail 200
+
+# 3) DISPLAY is set in the stream-client container
+docker exec stream-client-<slot> env | grep DISPLAY
+
+# 4) Factorio binary exists and is executable
+docker exec stream-client-<slot> ls -l /opt/factorio/bin/x64/factorio
+
+# 5) Confirm launch marker appears in logs
+docker logs stream-client-<slot> --tail 300 | grep -E "\\[factorio-launch\\]|Factorio Stream Client"
 ```
 
 ## NixOS
