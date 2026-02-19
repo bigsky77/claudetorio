@@ -53,8 +53,11 @@ async def _monitor_run(run_id: str, proc: asyncio.subprocess.Process, app_state:
 
 async def _monitor_replay(run_id: str, proc: asyncio.subprocess.Process, app_state: AppState):
     """Monitor a replay subprocess and clean up when it exits."""
-    await proc.wait()
+    stdout_bytes, _ = await proc.communicate()
+    output = stdout_bytes.decode(errors="replace").strip() if stdout_bytes else ""
     print(f"[replay] stream-worker-{run_id} exited (code {proc.returncode})", flush=True)
+    if output:
+        print(f"[replay] stream-worker-{run_id} output:\n{output}", flush=True)
     replay = app_state.active_replays.pop(run_id, None)
     slot = replay["slot"] if replay else None
     await stop_replay_containers(run_id, slot)
