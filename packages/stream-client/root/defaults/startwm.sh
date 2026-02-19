@@ -20,7 +20,8 @@ done
 echo "[startwm] Display ${DISPLAY} ready after ${ELAPSED}s"
 
 # Launch Factorio startup independently from Openbox autostart race timing.
-/scripts/start-factorio.sh >> /proc/1/fd/1 2>> /proc/1/fd/2 &
+# Use inherited stdout/stderr to avoid permission issues with /proc/1/fd/*.
+/scripts/start-factorio.sh &
 echo "[startwm] Launched /scripts/start-factorio.sh in background"
 
 exec openbox-session

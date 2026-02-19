@@ -12,8 +12,6 @@
 	# returns 200, which is fine since we control all subdomains.
 	on_demand_tls {
 		ask http://stream-agent:8090/health
-		interval 1m
-		burst 20
 	}
 }
 
