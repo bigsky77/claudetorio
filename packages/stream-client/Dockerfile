@@ -27,6 +27,10 @@ COPY root/ /
 COPY scripts/ /scripts/
 RUN chmod +x /scripts/*.sh
 
+# Copy custom init scripts (run as root by s6-overlay before display starts)
+COPY custom-cont-init.d/ /custom-cont-init.d/
+RUN chmod +x /custom-cont-init.d/*
+
 # Environment variables for KasmVNC
 # NOTE: Do NOT set PASSWORD here - it triggers nginx basic auth
 # To enable auth, set PASSWORD in docker-compose instead

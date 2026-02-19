@@ -1,14 +1,20 @@
 # ClaudeTorio Stream Server - Caddy Reverse Proxy Configuration
 #
 # This Caddyfile terminates TLS and proxies to KasmVNC stream clients.
-# Caddy automatically obtains and renews Let's Encrypt certificates.
-#
-# Uses wildcard subdomain routing: c{N}.stream.domain -> stream-client-{N}:3000
-# Stream-client containers are spawned dynamically by the broker.
+# Uses on-demand TLS so Caddy issues individual certs per subdomain
+# (c0, c1, cr0, ...) via HTTP-01/TLS-ALPN-01 — no DNS-01 needed.
 
 {
-	# Global options
 	email admin@claudetorio.dev
+
+	# On-demand TLS: issue individual certs per connecting hostname.
+	# The ask endpoint validates hostnames — stream-agent /health always
+	# returns 200, which is fine since we control all subdomains.
+	on_demand_tls {
+		ask http://stream-agent:8090/health
+		interval 1m
+		burst 20
+	}
 }
 
 # Main stream domain - health check and index
@@ -31,6 +37,10 @@
 # Wildcard subdomain: c{N}.stream.domain -> stream-client-{N}:3000
 #                     cr{N}.stream.domain -> stream-client-replay-{N}:3000
 *.{$STREAM_DOMAIN:stream.localhost} {
+	tls {
+		on_demand
+	}
+
 	@slot header_regexp slot Host ^c(\d+)\.
 	@replay header_regexp replay Host ^cr(\d+)\.
 

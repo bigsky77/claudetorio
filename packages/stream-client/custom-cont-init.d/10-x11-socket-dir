@@ -1,0 +1,8 @@
+#!/bin/bash
+# Pre-create the X11 Unix socket directory before the X server starts.
+# The KasmVNC base image may start the X server as a non-root user, which
+# cannot create /tmp/.X11-unix itself (requires euid=0). Creating it here
+# during s6-overlay init (which runs as root) avoids the error:
+#   _XSERVTransmkdir: ERROR: euid != 0, directory /tmp/.X11-unix will not be created.
+mkdir -p /tmp/.X11-unix
+chmod 1777 /tmp/.X11-unix
