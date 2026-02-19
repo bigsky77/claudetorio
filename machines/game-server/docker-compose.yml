@@ -92,6 +92,7 @@ services:
       - REPLAY_STREAM_BASE_PORT=4002
       - REPLAY_UDP_BASE_PORT=35100
       - REPLAY_RCON_BASE_PORT=28000
+      - STREAM_CLIENT_SETTLE_TIME=45
     depends_on:
       postgres:
         condition: service_healthy

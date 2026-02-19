@@ -121,8 +121,19 @@ if [ -f "$FACTORIO_DIR/lib/libsteam_api.so" ]; then
     mv "$FACTORIO_DIR/lib/libsteam_api.so" "$FACTORIO_DIR/lib/libsteam_api.so.disabled" 2>/dev/null || true
 fi
 
-# Wait a moment for the display to be ready
-sleep 2
+# Wait for the X display to be ready (up to 10 minutes)
+echo "Waiting for X display ${DISPLAY}..."
+TIMEOUT=600
+ELAPSED=0
+until xdpyinfo -display "${DISPLAY}" >/dev/null 2>&1; do
+    if [ "$ELAPSED" -ge "$TIMEOUT" ]; then
+        echo "ERROR: X display ${DISPLAY} not ready after ${TIMEOUT}s, giving up" >&2
+        exit 1
+    fi
+    sleep 1
+    ELAPSED=$((ELAPSED + 1))
+done
+echo "X display ready after ${ELAPSED}s"
 
 # Start Factorio as a client connecting to the specified server
 # -c uses a per-container config to avoid lock conflicts

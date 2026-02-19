@@ -14,6 +14,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libxi6 \
     libgl1 \
     libasound2t64 \
+    x11-utils \
     && rm -rf /var/lib/apt/lists/*
 
 # Create factorio directories
@@ -25,10 +26,6 @@ COPY root/ /
 # Copy our scripts
 COPY scripts/ /scripts/
 RUN chmod +x /scripts/*.sh
-
-# Copy custom init scripts to start Factorio automatically
-COPY custom-cont-init.d/ /custom-cont-init.d/
-RUN chmod +x /custom-cont-init.d/*
 
 # Environment variables for KasmVNC
 # NOTE: Do NOT set PASSWORD here - it triggers nginx basic auth

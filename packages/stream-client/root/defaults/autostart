@@ -5,8 +5,6 @@
 # Source environment if available (use . instead of source for sh compatibility)
 [ -f /etc/environment ] && . /etc/environment
 
-# Small delay to ensure display is ready
-sleep 3
-
 # Start Factorio in background (allows openbox to continue)
+# start-factorio.sh polls xdpyinfo until the display is ready
 /scripts/start-factorio.sh &
