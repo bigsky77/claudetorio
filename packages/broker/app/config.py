@@ -56,6 +56,7 @@ class Config:
     STREAM_AGENT_KEY = os.getenv("STREAM_AGENT_KEY", "")       # shared secret
     GAME_SERVER_PUBLIC_HOST = os.getenv("GAME_SERVER_PUBLIC_HOST", "")    # 157.254.222.103
     STREAM_SERVER_PUBLIC_HOST = os.getenv("STREAM_SERVER_PUBLIC_HOST", "")  # 157.254.222.104
+    STREAM_DOMAIN = os.getenv("STREAM_DOMAIN", "")  # e.g. "stream.claudetorio.ai"; empty = port-based (dev)
 
     @classmethod
     def get_udp_port(cls, slot: int) -> int:
@@ -67,6 +68,15 @@ class Config:
         """Get public stream endpoint metadata for a given slot."""
         parsed = urlparse(cls.STREAM_URL)
         scheme = parsed.scheme or "http"
+        if cls.STREAM_DOMAIN:
+            # Production: Caddy wildcard subdomain routing
+            return {
+                "stream_url": f"{scheme}://c{slot}.{cls.STREAM_DOMAIN}/",
+                "stream_host": f"c{slot}.{cls.STREAM_DOMAIN}",
+                "stream_port": 443 if scheme == "https" else 80,
+                "stream_scheme": scheme,
+            }
+        # Dev/local: port-based direct access
         parsed_host = parsed.hostname or parsed.path
         host = cls.STREAM_PUBLIC_HOST or parsed_host or "localhost"
         port = cls.STREAM_BASE_PORT + slot
@@ -87,6 +97,13 @@ class Config:
         """Get public stream endpoint metadata for a replay slot."""
         parsed = urlparse(cls.STREAM_URL)
         scheme = parsed.scheme or "http"
+        if cls.STREAM_DOMAIN:
+            return {
+                "stream_url": f"{scheme}://cr{slot}.{cls.STREAM_DOMAIN}/",
+                "stream_host": f"cr{slot}.{cls.STREAM_DOMAIN}",
+                "stream_port": 443 if scheme == "https" else 80,
+                "stream_scheme": scheme,
+            }
         parsed_host = parsed.hostname or parsed.path
         host = cls.STREAM_PUBLIC_HOST or parsed_host or "localhost"
         port = cls.REPLAY_STREAM_BASE_PORT + slot

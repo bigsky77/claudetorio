@@ -29,21 +29,40 @@
 }
 
 # Wildcard subdomain: c{N}.stream.domain -> stream-client-{N}:3000
+#                     cr{N}.stream.domain -> stream-client-replay-{N}:3000
 *.{$STREAM_DOMAIN:stream.localhost} {
 	@slot header_regexp slot Host ^c(\d+)\.
+	@replay header_regexp replay Host ^cr(\d+)\.
 
-	reverse_proxy @slot stream-client-{re.slot.1}:3000 {
-		# WebSocket support for KasmVNC
-		header_up Host {upstream_hostport}
-		header_up X-Real-IP {remote_host}
-		header_up X-Forwarded-Proto {scheme}
+	handle @replay {
+		reverse_proxy stream-client-replay-{re.replay.1}:3000 {
+			header_up Host {upstream_hostport}
+			header_up X-Real-IP {remote_host}
+			header_up X-Forwarded-Proto {scheme}
 
-		transport http {
-			response_header_timeout 0
-			read_buffer 0
+			transport http {
+				response_header_timeout 0
+				read_buffer 0
+			}
+
+			flush_interval -1
 		}
+	}
 
-		flush_interval -1
+	handle @slot {
+		reverse_proxy stream-client-{re.slot.1}:3000 {
+			# WebSocket support for KasmVNC
+			header_up Host {upstream_hostport}
+			header_up X-Real-IP {remote_host}
+			header_up X-Forwarded-Proto {scheme}
+
+			transport http {
+				response_header_timeout 0
+				read_buffer 0
+			}
+
+			flush_interval -1
+		}
 	}
 
 	log {

@@ -160,6 +160,9 @@ jobs:
             # Restart stack (includes stream-agent)
             docker compose up --build -d
 
+            # Reload Caddy config (bind-mounted Caddyfile changes aren't picked up without this)
+            docker compose exec -T caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile
+
             # Health check
             sleep 5
             curl -sf http://localhost:8090/health || echo "stream-agent health check pending..."

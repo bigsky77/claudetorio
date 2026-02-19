@@ -55,8 +55,9 @@ async def _monitor_replay(run_id: str, proc: asyncio.subprocess.Process, app_sta
     """Monitor a replay subprocess and clean up when it exits."""
     await proc.wait()
     print(f"[replay] stream-worker-{run_id} exited (code {proc.returncode})", flush=True)
-    await stop_replay_containers(run_id)
-    app_state.active_replays.pop(run_id, None)
+    replay = app_state.active_replays.pop(run_id, None)
+    slot = replay["slot"] if replay else None
+    await stop_replay_containers(run_id, slot)
 
 
 @router.get("/api/runs")
@@ -386,7 +387,7 @@ async def start_replay(
 
     ready = await wait_for_replay_factorio(run_id, slot)
     if not ready:
-        await stop_replay_containers(run_id)
+        await stop_replay_containers(run_id, slot)
         raise HTTPException(503, "Replay Factorio server failed to become ready")
 
     # Spawn replay stream client
@@ -420,7 +421,8 @@ async def stop_replay(
     if run_id not in app_state.active_replays:
         raise HTTPException(404, "No active replay for this run")
 
-    app_state.active_replays.pop(run_id, None)
-    await stop_replay_containers(run_id)
+    replay = app_state.active_replays.pop(run_id, None)
+    slot = replay["slot"] if replay else None
+    await stop_replay_containers(run_id, slot)
 
     return {"run_id": run_id, "status": "stopped"}
