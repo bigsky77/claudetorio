@@ -20,7 +20,7 @@ from ..services.replay import (
     spawn_stream_worker_container,
     stop_replay_containers,
 )
-from ..services.slots import get_free_slot, claim_slot_lock, release_slot_lock
+from ..services.slots import claim_any_free_slot, release_slot_lock
 from ..state import AppState
 
 router = APIRouter()
@@ -186,18 +186,13 @@ async def create_run(
     db: AsyncSession = Depends(get_db),
     app_state: AppState = Depends(get_app_state),
 ):
-    # Allocate a slot
-    slot = await get_free_slot(db)
-    if slot is None:
-        raise HTTPException(503, "No available slots")
-
     run_id = uuid.uuid4().hex[:12]
     username = f"run_{run_id}"
 
-    # Claim Redis lock for the slot
-    locked = await claim_slot_lock(slot, username, app_state.redis)
-    if not locked:
-        raise HTTPException(503, "Slot lock contention, try again")
+    # Claim the first lockable free slot (skips stale/contended locks)
+    slot = await claim_any_free_slot(db, username, app_state.redis)
+    if slot is None:
+        raise HTTPException(503, "No available slots")
 
     # Create DB row
     run = Run(

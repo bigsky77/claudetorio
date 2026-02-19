@@ -20,7 +20,7 @@ from ..services.rcon import (
     _sync_get_production, _sync_get_factory_data, _sync_get_entities_list,
 )
 from ..services.factorio import spawn_factorio, stop_factorio, wait_for_factorio
-from ..services.slots import get_free_slot, claim_slot_lock, release_slot_lock
+from ..services.slots import claim_any_free_slot, release_slot_lock
 from ..services.streaming import spawn_stream_client, stop_stream_client
 from ..state import AppState
 
@@ -54,18 +54,12 @@ async def claim_session(
             detail=f"User '{username}' already has active session {existing.session_id} on slot {existing.slot}",
         )
 
-    # Find and claim a free slot
-    slot = await get_free_slot(db)
+    # Find and claim a lockable free slot
+    slot = await claim_any_free_slot(db, username, app_state.redis)
     if slot is None:
         raise HTTPException(
             status_code=503,
             detail="No slots available. Try again later or wait for a session to end.",
-        )
-
-    if not await claim_slot_lock(slot, username, app_state.redis):
-        raise HTTPException(
-            status_code=503,
-            detail="Slot was claimed by another user. Please try again.",
         )
 
     try:
