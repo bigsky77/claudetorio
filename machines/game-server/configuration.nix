@@ -32,12 +32,13 @@
       3000  # Frontend
       8080  # Broker API
       27015 # RCON (opened by factorio module, but explicit here)
+      # Replay RCON ports — stream-worker (on game-server) connects to factorio-replay via host
+      28000 28001 28002 28003 28004
     ];
-    # UDP ports for multiple Factorio instances
-    allowedUDPPorts = [
-      34197 34198 34199 34200 34201 34202 34203 34204 34205 34206
-      34207 34208 34209 34210 34211 34212 34213 34214 34215 34216
-    ];
+    # UDP ports for live Factorio slots (stream-clients on stream-server connect here)
+    allowedUDPPorts =
+      lib.range 34197 34216 ++   # live Factorio slots 0-19
+      lib.range 35100 35104;     # replay Factorio slots 0-4
   };
 
   # ClaudeTorio Factorio server

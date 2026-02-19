@@ -1,5 +1,7 @@
 import asyncio
 
+import httpx
+
 from ..config import config
 
 
@@ -9,9 +11,49 @@ async def spawn_stream_client(
 ) -> str | None:
     """Spawn a stream-client Docker container for the given slot.
 
-    Returns the short container ID, or None if streaming is disabled or
-    the container failed to start.
+    Returns the short container ID (or "remote"), or None if streaming is
+    disabled or the container failed to start.
     """
+    if config.STREAM_AGENT_URL:
+        # Remote path: delegate to stream-agent on stream-server
+        server_host = config.GAME_SERVER_PUBLIC_HOST or f"factorio-{slot}"
+        udp_port = config.get_udp_port(slot)
+        host_port = config.STREAM_BASE_PORT + slot
+        print(
+            f"[streaming] calling stream-agent to spawn stream-client-{slot} "
+            f"({server_host}:{udp_port} -> :{host_port})",
+            flush=True,
+        )
+        try:
+            async with httpx.AsyncClient() as client:
+                r = await client.post(
+                    f"{config.STREAM_AGENT_URL}/spawn/stream-client",
+                    json={
+                        "container_name": f"stream-client-{slot}",
+                        "factorio_host": server_host,
+                        "factorio_port": udp_port,
+                        "host_port": host_port,
+                        "title": f"ClaudeTorio Slot {slot}",
+                        "image": config.STREAM_CLIENT_IMAGE,
+                        "client_volume": config.FACTORIO_CLIENT_VOLUME,
+                    },
+                    headers={"X-Stream-Agent-Key": config.STREAM_AGENT_KEY},
+                    timeout=130.0,
+                )
+            if r.status_code == 200:
+                print(f"[streaming] stream-agent spawned stream-client-{slot}", flush=True)
+                return "remote"
+            else:
+                print(
+                    f"[streaming] stream-agent returned {r.status_code} for stream-client-{slot}: {r.text}",
+                    flush=True,
+                )
+                return None
+        except Exception as e:
+            print(f"[streaming] ERROR calling stream-agent for stream-client-{slot}: {e}", flush=True)
+            return None
+
+    # Local path (dev / no stream-agent configured)
     if not config.FACTORIO_CLIENT_PATH and not config.FACTORIO_CLIENT_VOLUME:
         print("[streaming] WARNING: streaming disabled — neither FACTORIO_CLIENT_PATH nor FACTORIO_CLIENT_VOLUME is set", flush=True)
         return None
@@ -83,6 +125,10 @@ async def spawn_stream_client(
 
 async def wait_for_stream_client(slot: int, timeout: int = 120) -> bool:
     """Poll until the stream-client KasmVNC port is accepting connections."""
+    if config.STREAM_AGENT_URL:
+        # stream-agent already blocked until ready; nothing to do here
+        return True
+
     container_name = f"stream-client-{slot}"
     deadline = asyncio.get_event_loop().time() + timeout
     while asyncio.get_event_loop().time() < deadline:
@@ -101,6 +147,9 @@ async def wait_for_stream_client(slot: int, timeout: int = 120) -> bool:
 async def stop_stream_client(slot: int) -> None:
     """Stop the stream-client container for the given slot (best-effort)."""
     container_name = f"stream-client-{slot}"
+    if config.STREAM_AGENT_URL:
+        await _stop_remote_container(container_name)
+        return
     await _stop_container(container_name)
 
 
@@ -117,6 +166,19 @@ async def is_stream_client_running(slot: int) -> bool:
         return stdout.decode().strip() == "true"
     except Exception:
         return False
+
+
+async def _stop_remote_container(container_name: str) -> None:
+    """Call stream-agent to stop a remote container (best-effort)."""
+    try:
+        async with httpx.AsyncClient() as client:
+            await client.delete(
+                f"{config.STREAM_AGENT_URL}/containers/{container_name}",
+                headers={"X-Stream-Agent-Key": config.STREAM_AGENT_KEY},
+                timeout=30.0,
+            )
+    except Exception as e:
+        print(f"[streaming] WARNING: stream-agent DELETE {container_name} failed: {e}", flush=True)
 
 
 async def _stop_container(name: str) -> None:

@@ -10,13 +10,15 @@
     enable = true;
     allowedTCPPorts = [
       22    # SSH
-      3002  # Stream frontend
-      3003  # WebRTC signaling
-      # Future TURN ports
-      # 3478
+      80    # HTTP (Caddy)
+      443   # HTTPS (Caddy TLS)
+      8090  # stream-agent API (broker → stream-agent)
+      # Live stream slots 0-19 (KasmVNC viewers)
+      3003 3004 3005 3006 3007 3008 3009 3010 3011 3012
+      3013 3014 3015 3016 3017 3018 3019 3020 3021 3022
+      # Replay stream slots 0-4
+      4002 4003 4004 4005 4006
     ];
-    # Future TURN relay ports
-    # allowedUDPPorts = lib.range 49152 49200;
   };
 
   # Docker for KasmVNC and Factorio client

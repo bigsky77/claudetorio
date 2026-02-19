@@ -25,13 +25,13 @@ jobs:
           DEPLOY_STREAM=false
 
           # Check if stream-related files changed
-          if echo "$CHANGED" | grep -qE '^(packages/stream-client/|machines/stream-server/)'; then
+          if echo "$CHANGED" | grep -qE '^(packages/stream-client/|packages/stream-agent/|machines/stream-server/)'; then
             DEPLOY_STREAM=true
           fi
 
           # Check if game-server related files changed
-          # (packages except stream-client, machines except stream-server, or config)
-          if echo "$CHANGED" | grep -qE '^(packages/(broker|frontend|agent-runner|fle|run-worker)/|machines/game-server/|config/)'; then
+          # (packages except stream-client/stream-agent, machines except stream-server, or config)
+          if echo "$CHANGED" | grep -qE '^(packages/(broker|frontend|agent-runner|fle|run-worker|stream-worker)/|machines/game-server/|config/)'; then
             DEPLOY_GAME=true
           fi
 
@@ -77,7 +77,7 @@ jobs:
 
             # Fail fast on missing required env
             test -f .env || { echo "ERROR: machines/game-server/.env is missing"; exit 1; }
-            for key in POSTGRES_PASSWORD RCON_PASSWORD FACTORIO_IMAGE; do
+            for key in POSTGRES_PASSWORD RCON_PASSWORD FACTORIO_IMAGE STREAM_AGENT_KEY; do
               val="$(grep -E "^${key}=" .env | tail -n1 | cut -d= -f2-)"
               if [ -z "$val" ]; then
                 echo "ERROR: required key '${key}' is missing/empty in .env"
@@ -92,13 +92,20 @@ jobs:
             # Sanity-check that expected files exist in config volume
             docker run --rm -v claudetorio_factorio_config:/v alpine sh -c "test -f /v/server-settings.json"
 
-            # Build broker-spawned image and recreate stack
-            docker build -t claudetorio-run-worker -f ../../packages/run-worker/Dockerfile ../../packages
+            # Build broker-spawned images used at runtime
+            docker compose --profile build-only build run-worker stream-worker
+
+            # Verify required broker-spawned images exist locally
+            docker image inspect claudetorio-run-worker:latest >/dev/null
+            docker image inspect claudetorio-stream-worker:latest >/dev/null
+
+            # Recreate stack with fresh config
             docker compose up --build -d --force-recreate
 
             # Verify broker runtime contract
             docker inspect claudetorio-broker --format '{{range .Config.Env}}{{println .}}{{end}}' | grep -q '^DOCKER_NETWORK=claudetorio_game$'
             docker inspect claudetorio-broker --format '{{range .Config.Env}}{{println .}}{{end}}' | grep -q '^FACTORIO_CONFIG_VOLUME=claudetorio_factorio_config$'
+            docker inspect claudetorio-broker --format '{{range .Config.Env}}{{println .}}{{end}}' | grep -q '^STREAM_AGENT_URL='
 
             # Health check
             sleep 5
@@ -126,14 +133,40 @@ jobs:
             # Record new SHA
             git rev-parse HEAD > .deployed-sha
 
-            # Build broker-spawned image and restart stream stack
             cd machines/stream-server
-            docker build -t claudetorio-stream-client ../../packages/stream-client
+
+            # Fail fast on missing required env
+            test -f .env || { echo "ERROR: machines/stream-server/.env is missing"; exit 1; }
+            for key in STREAM_AGENT_KEY FACTORIO_CLIENT_PATH; do
+              val="$(grep -E "^${key}=" .env | tail -n1 | cut -d= -f2-)"
+              if [ -z "$val" ]; then
+                echo "ERROR: required key '${key}' is missing/empty in .env"
+                exit 1
+              fi
+            done
+            FACTORIO_CLIENT_PATH="$(grep -E '^FACTORIO_CLIENT_PATH=' .env | tail -n1 | cut -d= -f2-)"
+            test -d "$FACTORIO_CLIENT_PATH" || { echo "ERROR: FACTORIO_CLIENT_PATH does not exist: $FACTORIO_CLIENT_PATH"; exit 1; }
+
+            # Build broker-spawned images
+            docker compose --profile build-only build stream-client stream-worker
+
+            # Verify images exist
+            docker image inspect claudetorio-stream-client:latest >/dev/null
+
+            # Populate Factorio client volume
+            docker compose run --rm factorio-client-init
+            docker run --rm -v claudetorio_factorio_client:/v alpine sh -c "test -e /v/bin/x64/factorio || test -e /v/bin/factorio"
+
+            # Restart stack (includes stream-agent)
             docker compose up --build -d
 
+            # Reload Caddy config (bind-mounted Caddyfile changes aren't picked up without this)
+            docker compose exec -T caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile
+
             # Health check
-            sleep 10
-            docker ps | grep -q caddy && echo "Stream server healthy" || echo "Health check pending..."
+            sleep 5
+            curl -sf http://localhost:8090/health || echo "stream-agent health check pending..."
+            docker ps | grep -q caddy && echo "Caddy running" || echo "Caddy health check pending..."
 
             echo "Stream server deployed: $(cat /opt/claudetorio/.deployed-sha)"
           EOF

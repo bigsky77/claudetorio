@@ -122,6 +122,7 @@ class Run(Base):
     step_timeout_seconds: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("60"))
     error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     final_score: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    map_seed: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
 
     steps: Mapped[List["RunStep"]] = relationship(back_populates="run")
 

@@ -57,9 +57,12 @@ async def spawn_factorio(slot: int) -> str | None:
     elif config.FACTORIO_SCENARIOS_PATH:
         cmd += ["-v", f"{config.FACTORIO_SCENARIOS_PATH}:/factorio/scenarios"]
 
-    cmd += [config.FACTORIO_IMAGE]
-
     udp_port = config.get_udp_port(slot)
+
+    # Expose UDP port to host so stream-clients on stream-server can connect
+    cmd += ["-p", f"{udp_port}:{udp_port}/udp"]
+
+    cmd += [config.FACTORIO_IMAGE]
 
     # Launch Factorio with a vanilla save instead of the open_world scenario.
     # The open_world scenario's control.lua pre-registers event handlers that
@@ -172,6 +175,26 @@ async def _get_container_logs(name: str, tail: int = 50) -> str:
         return stdout.decode(errors="replace").strip()
     except Exception as e:
         return f"(failed to get logs: {e})"
+
+
+async def get_map_seed(slot: int) -> int | None:
+    """Fetch the map generation seed from a running Factorio server via RCON."""
+    host = f"factorio-{slot}"
+    port = config.BASE_RCON_PORT
+    try:
+        rcon = MCRcon(host, config.RCON_PASSWORD, port=port)
+        rcon.connect()
+        # First /sc is swallowed by the "achievements disabled" warning; send a throwaway
+        rcon.command("/sc rcon.print('warmup')")
+        result = rcon.command("/sc rcon.print(game.surfaces['nauvis'].map_gen_settings.seed)")
+        rcon.disconnect()
+        seed = int(result.strip()) if result and result.strip().lstrip('-').isdigit() else None
+        if seed is not None:
+            print(f"[factorio] Got map seed for slot {slot}: {seed}", flush=True)
+        return seed
+    except Exception as e:
+        print(f"[factorio] WARNING: could not get map seed for slot {slot}: {e}", flush=True)
+        return None
 
 
 async def wait_for_factorio(slot: int, timeout: int = 180, retries: int = 3, retry_interval: int = 180) -> bool:

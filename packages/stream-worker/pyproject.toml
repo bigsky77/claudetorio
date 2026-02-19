@@ -1,0 +1,10 @@
+[project]
+name = "stream-worker"
+version = "0.1.0"
+description = "Async replay stream worker for Claudetorio"
+requires-python = ">=3.11"
+dependencies = [
+    "httpx",
+    "python-dotenv",
+    "factorio-learning-environment @ file:///${PROJECT_ROOT}/../fle",
+]

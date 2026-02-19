@@ -14,7 +14,7 @@ services:
       - "5432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U claudetorio"]
-      interval: 5s
+      interval: 10s
       timeout: 3s
       retries: 5
 
@@ -93,6 +93,10 @@ services:
       - STREAM_CLIENT_IMAGE=claudetorio-stream-client
       - FACTORIO_CLIENT_VOLUME=claudetorio_factorio_client
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - STREAM_WORKER_IMAGE=claudetorio-stream-worker
+      - REPLAY_STREAM_BASE_PORT=4002
+      - REPLAY_UDP_BASE_PORT=35100
+      - REPLAY_RCON_BASE_PORT=28000
     depends_on:
       postgres:
         condition: service_healthy
@@ -131,6 +135,14 @@ services:
       dockerfile: run-worker/Dockerfile
     image: claudetorio-run-worker
     entrypoint: ["sh", "-c", "echo 'stream client image ready'"]
+    restart: "no"
+  # Build-only target — image used by broker to spawn stream-worker containers
+  stream-worker:
+    build:
+      context: ../packages
+      dockerfile: stream-worker/Dockerfile
+    image: claudetorio-stream-worker
+    entrypoint: ["sh", "-c", "echo 'stream-worker image ready'"]
     restart: "no"
 
 volumes:

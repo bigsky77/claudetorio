@@ -56,17 +56,6 @@ services:
     networks:
       - claudetorio_game
 
-  # Populate named volume with Factorio client files so
-  # dynamically-spawned stream-client containers can mount them without host paths.
-  factorio-client-init:
-    image: alpine
-    command: sh -c "cp -rn /src/* /dest/ 2>/dev/null; echo 'Factorio client volume ready'"
-    volumes:
-      - claudetorio_factorio_client:/dest
-      - ${FACTORIO_CLIENT_PATH}:/src:ro
-    networks:
-      - claudetorio_game
-
   broker:
     build:
       context: ../../packages/broker
@@ -86,15 +75,23 @@ services:
       - FACTORIO_IMAGE=${FACTORIO_IMAGE}
       - FACTORIO_CONFIG_VOLUME=claudetorio_factorio_config
       - FACTORIO_SCENARIOS_VOLUME=claudetorio_factorio_scenarios
-      # Stream server configuration - subdomain routing through Caddy
-      - STREAM_DOMAIN=stream.claudetorio.ai
-      - STREAM_URL=157.254.222.103
-      # Stream client configuration
-      - FACTORIO_CLIENT_VOLUME=claudetorio_factorio_client
-      - STREAM_CLIENT_NETWORK=claudetorio_game
+      # Stream server configuration
+      - STREAM_URL=${STREAM_URL:-https://stream.claudetorio.ai}
+      - STREAM_PUBLIC_HOST=${STREAM_PUBLIC_HOST:-157.254.222.104}
+      - STREAM_BASE_PORT=${STREAM_BASE_PORT:-3003}
+      # Two-server deployment: stream-agent on stream-server spawns stream-clients
+      - STREAM_AGENT_URL=${STREAM_AGENT_URL:-http://157.254.222.104:8090}
+      - STREAM_AGENT_KEY=${STREAM_AGENT_KEY}
+      - STREAM_DOMAIN=${STREAM_DOMAIN:-stream.claudetorio.ai}
+      - GAME_SERVER_PUBLIC_HOST=${GAME_SERVER_PUBLIC_HOST:-157.254.222.103}
+      - STREAM_SERVER_PUBLIC_HOST=${STREAM_SERVER_PUBLIC_HOST:-157.254.222.104}
       # Docker settings for run-worker containers
       - DOCKER_NETWORK=claudetorio_game
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - STREAM_WORKER_IMAGE=claudetorio-stream-worker
+      - REPLAY_STREAM_BASE_PORT=4002
+      - REPLAY_UDP_BASE_PORT=35100
+      - REPLAY_RCON_BASE_PORT=28000
     depends_on:
       postgres:
         condition: service_healthy
@@ -111,8 +108,8 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - NEXT_PUBLIC_API_URL=http://157.254.222.103:8080
-      - NEXT_PUBLIC_STREAM_URL=https://157.254.222.104:3003
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://157.254.222.103:8080}
+      - NEXT_PUBLIC_STREAM_URL=${NEXT_PUBLIC_STREAM_URL:-https://157.254.222.104:3003}
       - BROKER_URL=http://broker:8080
     networks:
       - claudetorio_game
@@ -125,11 +122,12 @@ services:
     image: claudetorio-run-worker
     profiles: ["build-only"]
 
-  # Build-only target — image used by broker to spawn stream-client containers
-  stream-client:
+  # Build-only target — image used by broker to spawn stream-worker containers
+  stream-worker:
     build:
-      context: ../../packages/stream-client
-    image: claudetorio-stream-client
+      context: ../../packages
+      dockerfile: stream-worker/Dockerfile
+    image: claudetorio-stream-worker
     profiles: ["build-only"]
 
 networks:
@@ -142,5 +140,3 @@ volumes:
     name: claudetorio_factorio_config
   claudetorio_factorio_scenarios:
     name: claudetorio_factorio_scenarios
-  claudetorio_factorio_client:
-    name: claudetorio_factorio_client

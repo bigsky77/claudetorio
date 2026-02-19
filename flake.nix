@@ -202,6 +202,270 @@
           })
         ];
       };
+      # Game Server VM — mirrors production game-server role
+      # Runs: broker, postgres, redis, frontend, run-worker, stream-worker
+      # Port map (host → guest):
+      #   SSH :2222, Broker :8080, Frontend :3000
+      #   Factorio UDP :34197-34201 (live slots 0-4)
+      #   Factorio UDP :35100-35102 (replay slots 0-2)
+      game-server-vm = nixpkgs.lib.nixosSystem {
+        inherit system;
+        modules = [
+          ({ config, pkgs, lib, modulesPath, ... }: {
+            imports = [
+              (modulesPath + "/profiles/qemu-guest.nix")
+              (modulesPath + "/virtualisation/qemu-vm.nix")
+            ];
+
+            system.stateVersion = "24.05";
+
+            virtualisation = {
+              memorySize = 8192;
+              cores = 4;
+              diskSize = 40000;
+              graphics = false;
+
+              forwardPorts = [
+                { from = "host"; host.port = 2222; guest.port = 22; }
+                { from = "host"; host.port = 8080; guest.port = 8080; }
+                { from = "host"; host.port = 3000; guest.port = 3000; }
+                # Live Factorio UDP slots 0-4
+                { from = "host"; host.port = 34197; guest.port = 34197; proto = "udp"; }
+                { from = "host"; host.port = 34198; guest.port = 34198; proto = "udp"; }
+                { from = "host"; host.port = 34199; guest.port = 34199; proto = "udp"; }
+                { from = "host"; host.port = 34200; guest.port = 34200; proto = "udp"; }
+                { from = "host"; host.port = 34201; guest.port = 34201; proto = "udp"; }
+                # Replay Factorio UDP slots 0-2
+                { from = "host"; host.port = 35100; guest.port = 35100; proto = "udp"; }
+                { from = "host"; host.port = 35101; guest.port = 35101; proto = "udp"; }
+                { from = "host"; host.port = 35102; guest.port = 35102; proto = "udp"; }
+              ];
+
+              sharedDirectories.claudetorio = {
+                source = toString ./.;
+                target = "/mnt/claudetorio";
+              };
+
+              docker = {
+                enable = true;
+                autoPrune.enable = true;
+              };
+            };
+
+            networking = {
+              hostName = "claudetorio-game";
+              firewall.enable = false;
+            };
+
+            services.openssh = {
+              enable = true;
+              settings.PermitRootLogin = "yes";
+            };
+
+            environment.systemPackages = with pkgs; [
+              docker-compose git curl jq mcrcon vim htop tmux
+            ];
+
+            users.users.dev = {
+              isNormalUser = true;
+              extraGroups = [ "docker" "wheel" ];
+              initialPassword = "dev";
+              home = "/home/dev";
+            };
+
+            users.users.root.initialPassword = "root";
+            security.sudo.wheelNeedsPassword = false;
+            services.getty.autologinUser = "dev";
+            nixpkgs.config.allowUnfree = true;
+
+            systemd.services.claudetorio-deploy = {
+              description = "ClaudeTorio game-server initial deploy";
+              after = [ "docker.service" "network.target" ];
+              wantedBy = [ "multi-user.target" ];
+              serviceConfig = {
+                Type = "oneshot";
+                RemainAfterExit = true;
+              };
+              path = with pkgs; [ docker docker-compose bash coreutils ];
+              script = ''
+                set -euo pipefail
+                export PATH=/run/current-system/sw/bin:$PATH
+
+                mkdir -p /etc/claudetorio
+                {
+                  echo "POSTGRES_PASSWORD=dev_password"
+                  echo "RCON_PASSWORD=dev_rcon_password"
+                  echo "FACTORIO_IMAGE=factoriotools/factorio:1.1.110"
+                  echo "STREAM_AGENT_KEY=dev_stream_agent_key"
+                  echo "STREAM_AGENT_URL=http://10.0.2.2:8090"
+                  echo "GAME_SERVER_PUBLIC_HOST=10.0.2.2"
+                  echo "STREAM_SERVER_PUBLIC_HOST=10.0.2.2"
+                  echo "STREAM_URL=http://10.0.2.2"
+                  echo "STREAM_PUBLIC_HOST=10.0.2.2"
+                  echo "NEXT_PUBLIC_API_URL=http://localhost:8080"
+                  echo "NEXT_PUBLIC_STREAM_URL=http://localhost:3003"
+                } > /etc/claudetorio/game-server.env
+
+                cd /mnt/claudetorio/machines/game-server
+                E="--env-file /etc/claudetorio/game-server.env"
+
+                docker compose $E run --rm factorio-config-init
+                docker compose $E run --rm factorio-scenarios-init
+                docker run --rm -v claudetorio_factorio_config:/v alpine sh -c "test -f /v/server-settings.json"
+                docker compose $E --profile build-only build run-worker stream-worker
+                docker compose $E up --build -d --force-recreate
+              '';
+            };
+
+            environment.etc."motd".text = ''
+
+              ========================================
+              ClaudeTorio Game Server VM
+              ========================================
+
+              Shared folder: /mnt/claudetorio
+
+              Ports forwarded to host:
+                SSH:      localhost:2222
+                Broker:   localhost:8080
+                Frontend: localhost:3000
+
+              Cross-VM: 10.0.2.2 = host (stream-server-vm at host:8090)
+
+              User: dev / Password: dev
+              ========================================
+
+            '';
+          })
+        ];
+      };
+
+      # Stream Server VM — mirrors production stream-server role
+      # Runs: stream-agent, caddy, stream-client (spawned dynamically)
+      # Port map (host → guest):
+      #   SSH :2223, stream-agent :8090
+      #   Live streams :3003-3007 (slots 0-4)
+      #   Replay streams :4002-4003 (slots 0-1)
+      stream-server-vm = nixpkgs.lib.nixosSystem {
+        inherit system;
+        modules = [
+          ({ config, pkgs, lib, modulesPath, ... }: {
+            imports = [
+              (modulesPath + "/profiles/qemu-guest.nix")
+              (modulesPath + "/virtualisation/qemu-vm.nix")
+            ];
+
+            system.stateVersion = "24.05";
+
+            virtualisation = {
+              memorySize = 4096;
+              cores = 2;
+              diskSize = 20000;
+              graphics = false;
+
+              forwardPorts = [
+                { from = "host"; host.port = 2223; guest.port = 22; }
+                { from = "host"; host.port = 8090; guest.port = 8090; }
+                # Live stream slots 0-4
+                { from = "host"; host.port = 3003; guest.port = 3003; }
+                { from = "host"; host.port = 3004; guest.port = 3004; }
+                { from = "host"; host.port = 3005; guest.port = 3005; }
+                { from = "host"; host.port = 3006; guest.port = 3006; }
+                { from = "host"; host.port = 3007; guest.port = 3007; }
+                # Replay stream slots 0-1
+                { from = "host"; host.port = 4002; guest.port = 4002; }
+                { from = "host"; host.port = 4003; guest.port = 4003; }
+              ];
+
+              sharedDirectories.claudetorio = {
+                source = toString ./.;
+                target = "/mnt/claudetorio";
+              };
+
+              docker = {
+                enable = true;
+                autoPrune.enable = true;
+              };
+            };
+
+            networking = {
+              hostName = "claudetorio-stream";
+              firewall.enable = false;
+            };
+
+            services.openssh = {
+              enable = true;
+              settings.PermitRootLogin = "yes";
+            };
+
+            environment.systemPackages = with pkgs; [
+              docker-compose git curl jq vim htop tmux
+            ];
+
+            users.users.dev = {
+              isNormalUser = true;
+              extraGroups = [ "docker" "wheel" ];
+              initialPassword = "dev";
+              home = "/home/dev";
+            };
+
+            users.users.root.initialPassword = "root";
+            security.sudo.wheelNeedsPassword = false;
+            services.getty.autologinUser = "dev";
+            nixpkgs.config.allowUnfree = true;
+
+            systemd.services.claudetorio-deploy = {
+              description = "ClaudeTorio stream-server initial deploy";
+              after = [ "docker.service" "network.target" ];
+              wantedBy = [ "multi-user.target" ];
+              serviceConfig = {
+                Type = "oneshot";
+                RemainAfterExit = true;
+              };
+              path = with pkgs; [ docker docker-compose bash coreutils ];
+              script = ''
+                set -euo pipefail
+                export PATH=/run/current-system/sw/bin:$PATH
+
+                mkdir -p /etc/claudetorio /opt/factorio
+                {
+                  echo "STREAM_DOMAIN=stream.localhost"
+                  echo "STREAM_AGENT_KEY=dev_stream_agent_key"
+                  echo "FACTORIO_CLIENT_PATH=/opt/factorio"
+                } > /etc/claudetorio/stream-server.env
+
+                cd /mnt/claudetorio/machines/stream-server
+                E="--env-file /etc/claudetorio/stream-server.env"
+
+                docker compose $E --profile build-only build stream-client stream-worker
+                docker compose $E run --rm factorio-client-init || true
+                docker compose $E up --build -d
+              '';
+            };
+
+            environment.etc."motd".text = ''
+
+              ========================================
+              ClaudeTorio Stream Server VM
+              ========================================
+
+              Shared folder: /mnt/claudetorio
+
+              Ports forwarded to host:
+                SSH:          localhost:2223
+                Stream-agent: localhost:8090
+                Streams:      localhost:3003-3007
+
+              Cross-VM: 10.0.2.2 = host (game-server-vm at host:8080)
+
+              User: dev / Password: dev
+              ========================================
+
+            '';
+          })
+        ];
+      };
+
     };
 
     # ===========================================

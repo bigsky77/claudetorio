@@ -179,3 +179,21 @@ export async function stopRun(runId: string): Promise<{ run_id: string; status: 
   }
 }
 
+export async function startReplay(runId: string): Promise<{ stream_url: string } | null> {
+  try {
+    const res = await fetch(`/api/runs/${runId}/replay`, { method: 'POST' });
+    if (res.ok) return res.json();
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+export async function stopReplay(runId: string): Promise<void> {
+  try {
+    await fetch(`/api/runs/${runId}/replay`, { method: 'DELETE' });
+  } catch {
+    // best-effort
+  }
+}
+

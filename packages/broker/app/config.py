@@ -44,6 +44,19 @@ class Config:
     STREAM_URL = os.getenv("STREAM_URL", os.getenv("STREAM_BASE_URL", "http://localhost"))
     STREAM_BASE_PORT = int(os.getenv("STREAM_BASE_PORT", "3003"))  # Slot 0 = 3003, Slot 1 = 3004, etc.
     STREAM_PUBLIC_HOST = os.getenv("STREAM_PUBLIC_HOST", "")  # Optional explicit public host/IP for frontend metadata
+    # Replay containers
+    STREAM_WORKER_IMAGE = os.getenv("STREAM_WORKER_IMAGE", "claudetorio-stream-worker")
+    REPLAY_STREAM_BASE_PORT = int(os.getenv("REPLAY_STREAM_BASE_PORT", "4002"))
+    REPLAY_UDP_BASE_PORT = int(os.getenv("REPLAY_UDP_BASE_PORT", "35100"))
+    REPLAY_RCON_BASE_PORT = int(os.getenv("REPLAY_RCON_BASE_PORT", "28000"))
+    STEP_INTERVAL = float(os.getenv("STEP_INTERVAL", "5.0"))
+    STREAM_CLIENT_SETTLE_TIME = int(os.getenv("STREAM_CLIENT_SETTLE_TIME", "15"))
+    # Two-server deployment: stream-agent on stream-server handles stream-client spawning
+    STREAM_AGENT_URL = os.getenv("STREAM_AGENT_URL", "")       # e.g. http://157.254.222.104:8090
+    STREAM_AGENT_KEY = os.getenv("STREAM_AGENT_KEY", "")       # shared secret
+    GAME_SERVER_PUBLIC_HOST = os.getenv("GAME_SERVER_PUBLIC_HOST", "")    # 157.254.222.103
+    STREAM_SERVER_PUBLIC_HOST = os.getenv("STREAM_SERVER_PUBLIC_HOST", "")  # 157.254.222.104
+    STREAM_DOMAIN = os.getenv("STREAM_DOMAIN", "")  # e.g. "stream.claudetorio.ai"; empty = port-based (dev)
 
     @classmethod
     def get_udp_port(cls, slot: int) -> int:
@@ -55,6 +68,15 @@ class Config:
         """Get public stream endpoint metadata for a given slot."""
         parsed = urlparse(cls.STREAM_URL)
         scheme = parsed.scheme or "http"
+        if cls.STREAM_DOMAIN:
+            # Production: Caddy wildcard subdomain routing
+            return {
+                "stream_url": f"{scheme}://c{slot}.{cls.STREAM_DOMAIN}/",
+                "stream_host": f"c{slot}.{cls.STREAM_DOMAIN}",
+                "stream_port": 443 if scheme == "https" else 80,
+                "stream_scheme": scheme,
+            }
+        # Dev/local: port-based direct access
         parsed_host = parsed.hostname or parsed.path
         host = cls.STREAM_PUBLIC_HOST or parsed_host or "localhost"
         port = cls.STREAM_BASE_PORT + slot
@@ -69,6 +91,28 @@ class Config:
     def get_stream_url(cls, slot: int) -> str:
         """Get the stream URL for a given slot."""
         return str(cls.get_stream_public_endpoint(slot)["stream_url"])
+
+    @classmethod
+    def get_replay_stream_public_endpoint(cls, slot: int) -> dict[str, str | int]:
+        """Get public stream endpoint metadata for a replay slot."""
+        parsed = urlparse(cls.STREAM_URL)
+        scheme = parsed.scheme or "http"
+        if cls.STREAM_DOMAIN:
+            return {
+                "stream_url": f"{scheme}://cr{slot}.{cls.STREAM_DOMAIN}/",
+                "stream_host": f"cr{slot}.{cls.STREAM_DOMAIN}",
+                "stream_port": 443 if scheme == "https" else 80,
+                "stream_scheme": scheme,
+            }
+        parsed_host = parsed.hostname or parsed.path
+        host = cls.STREAM_PUBLIC_HOST or parsed_host or "localhost"
+        port = cls.REPLAY_STREAM_BASE_PORT + slot
+        return {
+            "stream_url": f"{scheme}://{host}:{port}/",
+            "stream_host": host,
+            "stream_port": port,
+            "stream_scheme": scheme,
+        }
 
 
 config = Config()

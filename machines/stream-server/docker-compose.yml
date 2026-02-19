@@ -16,17 +16,56 @@ services:
     networks:
       - stream-network
 
-  # Build-only target — image used by broker to spawn stream-client containers
+  # Lightweight HTTP API: receives spawn/stop requests from broker and manages
+  # stream-client containers on this host's Docker daemon.
+  stream-agent:
+    build:
+      context: ../../packages/stream-agent
+    image: claudetorio-stream-agent
+    container_name: claudetorio-stream-agent
+    restart: unless-stopped
+    ports:
+      - "8090:8090"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - STREAM_AGENT_KEY=${STREAM_AGENT_KEY}
+      - STREAM_CLIENT_IMAGE=claudetorio-stream-client
+      - FACTORIO_CLIENT_VOLUME=claudetorio_factorio_client
+      - DOCKER_NETWORK=stream-network
+    networks:
+      - stream-network
+
+  # Populate named volume with Factorio client files so
+  # dynamically-spawned stream-client containers can mount them without host paths.
+  factorio-client-init:
+    image: alpine
+    command: sh -c "rm -rf /dest/* && cp -a /src/. /dest/ && echo 'Factorio client volume refreshed'"
+    volumes:
+      - claudetorio_factorio_client:/dest
+      - ${FACTORIO_CLIENT_PATH}:/src:ro
+
+  # Build-only targets — images spawned dynamically by stream-agent
   stream-client:
     build:
       context: ../../packages/stream-client
     image: claudetorio-stream-client
     profiles: ["build-only"]
 
+  stream-worker:
+    build:
+      context: ../../packages
+      dockerfile: stream-worker/Dockerfile
+    image: claudetorio-stream-worker
+    profiles: ["build-only"]
+
 networks:
   stream-network:
+    name: stream-network
     driver: bridge
 
 volumes:
   caddy_data:
   caddy_config:
+  claudetorio_factorio_client:
+    name: claudetorio_factorio_client
