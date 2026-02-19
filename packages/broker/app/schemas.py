@@ -90,6 +90,7 @@ class RunInfo(BaseModel):
     final_score: Optional[float] = None
     step_count: int = 0
     stream_url: Optional[str] = None
+    replay_worker_running: Optional[bool] = None
     stream_host: Optional[str] = None
     stream_port: Optional[int] = None
     stream_scheme: Optional[str] = None

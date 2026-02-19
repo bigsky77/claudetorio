@@ -63,6 +63,38 @@ async def _monitor_replay(run_id: str, proc: asyncio.subprocess.Process, app_sta
     await stop_replay_containers(run_id, slot)
 
 
+async def _start_run_worker(run: Run, env_vars: dict, app_state: AppState):
+    """Start run-worker container and register monitor task."""
+    run.status = "running"
+    run.started_at = datetime.utcnow()
+
+    broker_url = env_vars["BROKER_URL"]
+
+    # Debug: log env vars being passed (redact secrets)
+    safe_keys = {k: (v[:4] + "..." if "KEY" in k or "PASSWORD" in k else v) for k, v in env_vars.items()}
+    print(f"[run {run.run_id}] start-worker env_vars: {safe_keys}", flush=True)
+
+    cmd = ["docker", "run", "--rm", "--name", f"run-worker-{run.run_id}"]
+    if config.DOCKER_NETWORK:
+        cmd += ["--network", config.DOCKER_NETWORK]
+    for k, v in env_vars.items():
+        cmd += ["-e", f"{k}={v}"]
+    cmd += [
+        config.RUN_WORKER_IMAGE,
+        "uv", "run", "python", "main.py",
+        "--steps", str(run.max_steps),
+        "--broker-url", broker_url,
+    ]
+
+    proc = await asyncio.create_subprocess_exec(
+        *cmd,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.STDOUT,
+    )
+    app_state.run_processes[run.run_id] = proc
+    asyncio.create_task(_monitor_run(run.run_id, proc, app_state))
+
+
 @router.get("/api/runs")
 async def list_runs(
     status: str = Query(None),
@@ -103,6 +135,10 @@ async def list_runs(
             final_score=r.final_score,
             step_count=step_counts.get(r.run_id, 0),
             stream_url=app_state.active_replays[r.run_id]["stream_url"] if r.run_id in app_state.active_replays else None,
+            replay_worker_running=(
+                bool(app_state.active_replays[r.run_id].get("proc"))
+                and app_state.active_replays[r.run_id]["proc"].returncode is None
+            ) if r.run_id in app_state.active_replays else None,
             stream_host=None,
             stream_port=None,
             stream_scheme=None,
@@ -139,6 +175,7 @@ async def get_run(run_id: str, db: AsyncSession = Depends(get_db), app_state: Ap
         final_score=run.final_score,
         step_count=step_count,
         stream_url=replay["stream_url"] if replay else None,
+        replay_worker_running=(bool(replay.get("proc")) and replay["proc"].returncode is None) if replay else None,
         stream_host=None,
         stream_port=None,
         stream_scheme=None,
@@ -238,7 +275,7 @@ async def create_run(
 
     factorio_host = f"factorio-{slot}"
 
-    # Build run-worker env vars and stash them for the start-worker endpoint
+    # Build run-worker env vars and start the run-worker automatically.
     broker_url = "http://broker:8080"
     rcon_port = config.BASE_RCON_PORT
     env_vars = {
@@ -262,9 +299,19 @@ async def create_run(
         env_vars["ANTHROPIC_API_KEY"] = req.api_key
         env_vars["OPENAI_API_KEY"] = req.api_key
 
-    app_state.pending_run_envs[run_id] = env_vars
+    try:
+        await _start_run_worker(run, env_vars, app_state)
+        await db.commit()
+    except Exception as e:
+        await stop_factorio(slot)
+        await release_slot_lock(slot, app_state.redis)
+        run.status = "failed"
+        run.error = f"Failed to start run-worker: {e}"
+        run.ended_at = datetime.utcnow()
+        await db.commit()
+        raise HTTPException(503, "Failed to start run-worker")
 
-    return CreateRunResponse(run_id=run_id, status="waiting")
+    return CreateRunResponse(run_id=run_id, status="running")
 
 
 @router.post("/api/runs/{run_id}/start-worker", dependencies=[Depends(require_admin_key)])
@@ -283,35 +330,8 @@ async def start_worker(
     if not env_vars:
         raise HTTPException(409, "No pending environment for this run (broker may have restarted)")
 
-    run.status = "running"
-    run.started_at = datetime.utcnow()
+    await _start_run_worker(run, env_vars, app_state)
     await db.commit()
-
-    broker_url = env_vars["BROKER_URL"]
-
-    # Debug: log env vars being passed (redact secrets)
-    safe_keys = {k: (v[:4] + "..." if "KEY" in k or "PASSWORD" in k else v) for k, v in env_vars.items()}
-    print(f"[run {run_id}] start-worker env_vars: {safe_keys}", flush=True)
-
-    cmd = ["docker", "run", "--rm", "--name", f"run-worker-{run_id}"]
-    if config.DOCKER_NETWORK:
-        cmd += ["--network", config.DOCKER_NETWORK]
-    for k, v in env_vars.items():
-        cmd += ["-e", f"{k}={v}"]
-    cmd += [
-        config.RUN_WORKER_IMAGE,
-        "uv", "run", "python", "main.py",
-        "--steps", str(run.max_steps),
-        "--broker-url", broker_url,
-    ]
-
-    proc = await asyncio.create_subprocess_exec(
-        *cmd,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.STDOUT,
-    )
-    app_state.run_processes[run_id] = proc
-    asyncio.create_task(_monitor_run(run_id, proc, app_state))
 
     return {"run_id": run_id, "status": "running"}
 
@@ -395,20 +415,37 @@ async def start_replay(
         if not stream_ready:
             print(f"[replay {run_id}] WARNING: stream client not ready, proceeding anyway", flush=True)
 
-    print(f"[replay {run_id}] Waiting {config.STREAM_CLIENT_SETTLE_TIME}s for stream client to connect...", flush=True)
-    await asyncio.sleep(config.STREAM_CLIENT_SETTLE_TIME)
-
-    # Spawn stream-worker container
-    broker_url = "http://broker:8080"
-    proc = await spawn_stream_worker_container(run_id, slot, broker_url)
-
     endpoint = config.get_replay_stream_public_endpoint(slot)
     stream_url = str(endpoint["stream_url"])
 
-    app_state.active_replays[run_id] = {"slot": slot, "stream_url": stream_url, "proc": proc}
-    asyncio.create_task(_monitor_replay(run_id, proc, app_state))
+    app_state.active_replays[run_id] = {"slot": slot, "stream_url": stream_url, "proc": None}
 
     return {"run_id": run_id, "stream_url": stream_url}
+
+
+@router.post("/api/runs/{run_id}/replay/start-worker", dependencies=[Depends(require_admin_key)])
+async def start_replay_worker(
+    run_id: str,
+    app_state: AppState = Depends(get_app_state),
+):
+    replay = app_state.active_replays.get(run_id)
+    if not replay:
+        raise HTTPException(404, "No active replay for this run")
+
+    proc = replay.get("proc")
+    if proc and proc.returncode is None:
+        raise HTTPException(409, "Replay worker already running")
+
+    slot = replay["slot"]
+    print(f"[replay {run_id}] Waiting {config.STREAM_CLIENT_SETTLE_TIME}s for stream client to connect...", flush=True)
+    await asyncio.sleep(config.STREAM_CLIENT_SETTLE_TIME)
+
+    broker_url = "http://broker:8080"
+    proc = await spawn_stream_worker_container(run_id, slot, broker_url)
+    replay["proc"] = proc
+    asyncio.create_task(_monitor_replay(run_id, proc, app_state))
+
+    return {"run_id": run_id, "status": "running"}
 
 
 @router.delete("/api/runs/{run_id}/replay", dependencies=[Depends(require_admin_key)])

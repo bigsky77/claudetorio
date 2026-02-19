@@ -32,6 +32,7 @@ export default function RunHeader({
   onStop,
   onStartWorker,
   onStartReplay,
+  onStartReplayWorker,
   onStopReplay,
 }: {
   run: RunInfo;
@@ -39,12 +40,14 @@ export default function RunHeader({
   onStop?: () => Promise<void>;
   onStartWorker?: () => Promise<void>;
   onStartReplay?: () => Promise<void>;
+  onStartReplayWorker?: () => Promise<void>;
   onStopReplay?: () => Promise<void>;
 }) {
   const badgeClass = STATUS_COLORS[run.status] ?? 'bg-gray-700 text-gray-300';
   const [stopping, setStopping] = useState(false);
   const [starting, setStarting] = useState(false);
   const [startingReplay, setStartingReplay] = useState(false);
+  const [startingReplayWorker, setStartingReplayWorker] = useState(false);
   const [stoppingReplay, setStoppingReplay] = useState(false);
 
   async function handleStop() {
@@ -73,6 +76,13 @@ export default function RunHeader({
     setStoppingReplay(true);
     await onStopReplay();
     setStoppingReplay(false);
+  }
+
+  async function handleStartReplayWorker() {
+    if (!onStartReplayWorker) return;
+    setStartingReplayWorker(true);
+    await onStartReplayWorker();
+    setStartingReplayWorker(false);
   }
 
   return (
@@ -124,6 +134,15 @@ export default function RunHeader({
               className="px-4 py-1.5 bg-blue-700 hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed rounded text-sm font-medium transition-colors"
             >
               {startingReplay ? 'Starting...' : 'Watch Replay'}
+            </button>
+          )}
+          {onStartReplayWorker && (
+            <button
+              onClick={handleStartReplayWorker}
+              disabled={startingReplayWorker}
+              className="px-4 py-1.5 bg-indigo-700 hover:bg-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed rounded text-sm font-medium transition-colors"
+            >
+              {startingReplayWorker ? 'Starting...' : 'Start Replay Worker'}
             </button>
           )}
         </div>

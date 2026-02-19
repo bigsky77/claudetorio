@@ -1,9 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { RunInfo, RunStepInfo } from '@/interfaces';
 import { useRunPolling } from '@/hooks/use-run-polling';
-import { stopRun, startWorker, startReplay, stopReplay } from '@/services/api';
+import { stopRun, startReplay, startReplayWorker, stopReplay } from '@/services/api';
 import RunHeader from './RunHeader';
 import RunChart from './RunChart';
 import StreamPanel from './StreamPanel';
@@ -20,16 +20,18 @@ export default function RunDetailClient({
 }) {
   const { run, steps, isActive, refetch } = useRunPolling(initialRun, initialSteps);
   const [replayUrl, setReplayUrl] = useState<string | null>(run.stream_url ?? initialStreamUrl ?? null);
+  const [replayWorkerRunning, setReplayWorkerRunning] = useState<boolean>(Boolean(run.replay_worker_running));
 
   const showStream = Boolean(replayUrl);
 
+  useEffect(() => {
+    if (run.replay_worker_running != null) {
+      setReplayWorkerRunning(Boolean(run.replay_worker_running));
+    }
+  }, [run.replay_worker_running]);
+
   async function handleStop() {
     await stopRun(run.run_id);
-    await refetch();
-  }
-
-  async function handleStartWorker() {
-    await startWorker(run.run_id);
     await refetch();
   }
 
@@ -37,12 +39,22 @@ export default function RunDetailClient({
     const result = await startReplay(run.run_id);
     if (result?.stream_url) {
       setReplayUrl(result.stream_url);
+      setReplayWorkerRunning(false);
+    }
+  }
+
+  async function handleStartReplayWorker() {
+    const result = await startReplayWorker(run.run_id);
+    if (result?.status === 'running') {
+      setReplayWorkerRunning(true);
+      await refetch();
     }
   }
 
   async function handleStopReplay() {
     await stopReplay(run.run_id);
     setReplayUrl(null);
+    setReplayWorkerRunning(false);
   }
 
   return (
@@ -52,8 +64,8 @@ export default function RunDetailClient({
           run={run}
           isActive={isActive}
           onStop={handleStop}
-          onStartWorker={run.status === 'waiting' ? handleStartWorker : undefined}
           onStartReplay={!replayUrl && run.step_count > 0 ? handleStartReplay : undefined}
+          onStartReplayWorker={replayUrl && !replayWorkerRunning ? handleStartReplayWorker : undefined}
           onStopReplay={replayUrl ? handleStopReplay : undefined}
         />
 
