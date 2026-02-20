@@ -48,6 +48,7 @@ def follow_agent(rcon_client) -> None:
         "/sc local char = global.agent_characters and global.agent_characters[1];"
         " for _, p in pairs(game.connected_players) do"
         " p.game_view_settings.show_controller_gui = false;"
+        " p.game_view_settings.show_fog_of_war = false;"
         " p.game_view_settings.show_minimap = false;"
         " p.game_view_settings.show_research_info = false;"
         " p.game_view_settings.show_entity_info = false;"
@@ -55,6 +56,7 @@ def follow_agent(rcon_client) -> None:
         " p.game_view_settings.update_entity_selection = false;"
         " p.game_view_settings.show_side_menu = false;"
         " if char and char.valid then"
+        " p.teleport(char.position, char.surface);"
         f" p.zoom_to_world(char.position, {CAMERA_ZOOM})"
         " end end"
     )

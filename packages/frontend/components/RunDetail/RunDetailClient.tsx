@@ -1,12 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import type { RunInfo, RunStepInfo } from '@/interfaces';
 import { useRunPolling } from '@/hooks/use-run-polling';
 import { stopRun, startReplay, startReplayWorker, stopReplay, stopReplayWorker } from '@/services/api';
 import RunHeader from './RunHeader';
 import StreamPanel from './StreamPanel';
-import MatrixLogPanel from './MatrixLogPanel';
+import MatrixLogPanel, { RuntimeDisplayPayload } from './MatrixLogPanel';
 
 export default function RunDetailClient({
   initialRun,
@@ -20,6 +20,12 @@ export default function RunDetailClient({
   const { run, steps, isActive, refetch } = useRunPolling(initialRun, initialSteps);
   const [replayUrl, setReplayUrl] = useState<string | null>(run.stream_url ?? initialStreamUrl ?? null);
   const [replayWorkerStarted, setReplayWorkerStarted] = useState(false);
+  const [runtimeDisplay, setRuntimeDisplay] = useState<{
+    text: string;
+    tone: RuntimeDisplayPayload['tone'];
+    fadeMode: RuntimeDisplayPayload['fadeMode'];
+    displayKey: number;
+  } | null>(null);
 
   async function handleStop() {
     await stopRun(run.run_id);
@@ -49,6 +55,15 @@ export default function RunDetailClient({
     setReplayWorkerStarted(false);
   }
 
+  const handleDisplayChange = useCallback((payload: RuntimeDisplayPayload) => {
+    setRuntimeDisplay((prev) => ({
+      text: payload.text,
+      tone: payload.tone,
+      fadeMode: payload.fadeMode,
+      displayKey: (prev?.displayKey ?? 0) + 1,
+    }));
+  }, []);
+
   return (
     <main className="relative h-screen w-full overflow-hidden text-white">
       {replayUrl ? (
@@ -57,8 +72,8 @@ export default function RunDetailClient({
         <div className="absolute inset-0 bg-gradient-to-br from-black via-zinc-950 to-black" />
       )}
 
-      <div className="relative z-10 h-full w-full p-4 lg:p-6 pointer-events-none">
-        <div className="mx-auto flex h-full max-w-[1600px] flex-col gap-4">
+      <div className="relative z-10 h-full w-full pointer-events-none">
+        <div className="relative mx-auto h-full max-w-[1600px] p-4 lg:p-6">
           <div className="pointer-events-auto">
             <RunHeader
               run={run}
@@ -70,9 +85,25 @@ export default function RunDetailClient({
             />
           </div>
 
-          <div className="flex flex-1 items-end lg:items-stretch">
-            <div className="pointer-events-auto ml-auto w-full lg:max-w-[440px] lg:h-full">
-              <MatrixLogPanel steps={steps} isActive={isActive} />
+          {runtimeDisplay && (
+            <pre
+              key={runtimeDisplay.displayKey}
+              className={`runtime-overlay-text ${
+                runtimeDisplay.fadeMode === 'slow' ? 'runtime-fade-slow' : 'runtime-fade-normal'
+              } ${
+                runtimeDisplay.tone === 'error' ? 'text-red-300' : 'text-emerald-300'
+              }`}
+            >
+              {runtimeDisplay.text}
+            </pre>
+          )}
+
+          <div className="pointer-events-auto absolute bottom-4 left-4 lg:bottom-6 lg:left-6">
+            <div className="w-[290px] sm:w-[360px]">
+              <MatrixLogPanel
+                steps={steps}
+                onDisplayChange={handleDisplayChange}
+              />
             </div>
           </div>
         </div>
