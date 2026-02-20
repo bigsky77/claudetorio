@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Optional, List
 
 from sqlalchemy import (
-    String, Integer, Float, Boolean, Text, Index,
+    String, Integer, BigInteger, Float, Boolean, Text, Index,
     ForeignKey, JSON, text,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
@@ -122,7 +122,7 @@ class Run(Base):
     step_timeout_seconds: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("60"))
     error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     final_score: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
-    map_seed: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    map_seed: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
 
     steps: Mapped[List["RunStep"]] = relationship(back_populates="run")
 

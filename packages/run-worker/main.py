@@ -329,8 +329,26 @@ async def run(steps: int, broker_url: str, username: str):
     if os.getenv("CUSTOM_API", "").lower() in ("true", "1", "yes"):
         custom_url = os.getenv("CUSTOM_API_URL")
         custom_key = os.getenv("CUSTOM_API_KEY")
-        if not custom_url or not custom_key:
-            raise ValueError("CUSTOM_API=true requires CUSTOM_API_URL and CUSTOM_API_KEY")
+        if not custom_url:
+            raise ValueError("CUSTOM_API=true requires CUSTOM_API_URL")
+
+        # Automatically fix common errors for local Docker setups
+        if "localhost" in custom_url or "127.0.0.1" in custom_url:
+            # Replace localhost with host.docker.internal to escape the container
+            custom_url = custom_url.replace("localhost", "host.docker.internal")
+            custom_url = custom_url.replace("127.0.0.1", "host.docker.internal")
+            
+        # If user accidentally used the native Ollama endpoint, correct it to OpenAI compatible one
+        if custom_url.endswith("/api/generate") or custom_url.endswith("/api/chat"):
+            custom_url = custom_url.replace("/api/generate", "/v1").replace("/api/chat", "/v1")
+        elif custom_url.endswith(":11434") or custom_url.endswith(":11434/"):
+            custom_url = custom_url.rstrip("/") + "/v1"
+
+        # Set a dummy key if none is provided, allowing local APIs like Ollama 
+        # to work without explicitly setting CUSTOM_API_KEY
+        if not custom_key:
+            os.environ["CUSTOM_API_KEY"] = "dummy"
+
         custom_provider = {
             "base_url": custom_url,
             "api_key_env": "CUSTOM_API_KEY",
