@@ -14,6 +14,7 @@ RCON_PORT = int(os.environ["RCON_PORT"])
 RCON_PASSWORD = os.getenv("RCON_PASSWORD", "factorio")
 STEP_INTERVAL = float(os.getenv("STEP_INTERVAL", "5.0"))
 POLL_INTERVAL = float(os.getenv("POLL_INTERVAL", "10.0"))
+CAMERA_ZOOM = float(os.getenv("CAMERA_ZOOM", "0.5"))
 
 # Set FLE env vars before importing FLE
 os.environ["FLE_RCON_HOST"] = SERVER_HOST
@@ -39,6 +40,21 @@ def fetch_run_status() -> str:
         resp = client.get(f"{BROKER_URL}/api/runs/{RUN_ID}", timeout=30)
         resp.raise_for_status()
         return resp.json()["status"]
+
+
+def follow_agent(rcon_client) -> None:
+    """Move all connected spectators' cameras to the agent character."""
+    cmd = (
+        "/sc local char = global.agent_characters and global.agent_characters[1];"
+        " if char and char.valid then"
+        " for _, p in pairs(game.connected_players) do"
+        f" p.zoom_to_world(char.position, {CAMERA_ZOOM})"
+        " end end"
+    )
+    try:
+        rcon_client.send_command(cmd)
+    except Exception as e:
+        print(f"[stream-worker] Camera follow error: {e}", flush=True)
 
 
 def main():
@@ -93,6 +109,7 @@ def main():
                 except Exception as e:
                     print(f"[stream-worker] Step {step['step_idx']} error: {e}", flush=True)
                 last_step_idx = step["step_idx"]
+                follow_agent(instance.rcon_client)
                 time.sleep(STEP_INTERVAL)
             # Don't sleep — immediately try to fetch more steps
             continue
@@ -109,6 +126,7 @@ def main():
             break
 
         print(f"[stream-worker] No new steps (run={status}), polling in {POLL_INTERVAL}s", flush=True)
+        follow_agent(instance.rcon_client)
         time.sleep(POLL_INTERVAL)
 
     print(f"[stream-worker] Replay complete for run {RUN_ID}", flush=True)
