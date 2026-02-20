@@ -1,11 +1,20 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useEscapeKey } from '@/hooks/use-escape-key';
 import { createRun } from '@/services/api';
 
 type Provider = 'anthropic' | 'openai' | 'custom';
+type StoredFormData = Partial<{
+  provider: Provider;
+  model: string;
+  taskKey: string;
+  maxSteps: number;
+  apiKey: string;
+  customApiUrl: string;
+  customApiKey: string;
+}>;
 
 const PROVIDER_DEFAULTS: Record<Provider, string> = {
   anthropic: 'claude-sonnet-4-5-20250929',
@@ -13,19 +22,76 @@ const PROVIDER_DEFAULTS: Record<Provider, string> = {
   custom: '',
 };
 
+const FORM_STORAGE_KEY = 'claudetorio.startRunForm.v1';
+
+function isProvider(value: unknown): value is Provider {
+  return value === 'anthropic' || value === 'openai' || value === 'custom';
+}
+
+function readStoredFormData(): StoredFormData | null {
+  if (typeof window === 'undefined') return null;
+
+  const stored = localStorage.getItem(FORM_STORAGE_KEY);
+  if (!stored) return null;
+
+  try {
+    return JSON.parse(stored) as StoredFormData;
+  } catch {
+    localStorage.removeItem(FORM_STORAGE_KEY);
+    return null;
+  }
+}
+
 export default function StartRunForm({ onClose }: { onClose: () => void }) {
   const router = useRouter();
-  const [provider, setProvider] = useState<Provider>('anthropic');
-  const [model, setModel] = useState(PROVIDER_DEFAULTS.anthropic);
-  const [taskKey, setTaskKey] = useState('open_play');
-  const [maxSteps, setMaxSteps] = useState(200);
-  const [apiKey, setApiKey] = useState('');
-  const [customApiUrl, setCustomApiUrl] = useState('');
-  const [customApiKey, setCustomApiKey] = useState('');
+  const [provider, setProvider] = useState<Provider>(() => {
+    const stored = readStoredFormData();
+    return isProvider(stored?.provider) ? stored.provider : 'anthropic';
+  });
+  const [model, setModel] = useState(() => {
+    const stored = readStoredFormData();
+    const storedProvider = isProvider(stored?.provider) ? stored.provider : 'anthropic';
+    return typeof stored?.model === 'string' ? stored.model : PROVIDER_DEFAULTS[storedProvider];
+  });
+  const [taskKey, setTaskKey] = useState(() => {
+    const stored = readStoredFormData();
+    return typeof stored?.taskKey === 'string' ? stored.taskKey : 'open_play';
+  });
+  const [maxSteps, setMaxSteps] = useState(() => {
+    const stored = readStoredFormData();
+    return typeof stored?.maxSteps === 'number' && stored.maxSteps > 0 ? stored.maxSteps : 200;
+  });
+  const [apiKey, setApiKey] = useState(() => {
+    const stored = readStoredFormData();
+    return typeof stored?.apiKey === 'string' ? stored.apiKey : '';
+  });
+  const [customApiUrl, setCustomApiUrl] = useState(() => {
+    const stored = readStoredFormData();
+    return typeof stored?.customApiUrl === 'string' ? stored.customApiUrl : '';
+  });
+  const [customApiKey, setCustomApiKey] = useState(() => {
+    const stored = readStoredFormData();
+    return typeof stored?.customApiKey === 'string' ? stored.customApiKey : '';
+  });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEscapeKey(onClose);
+
+  useEffect(() => {
+    localStorage.setItem(
+      FORM_STORAGE_KEY,
+      JSON.stringify({
+        provider,
+        model,
+        taskKey,
+        maxSteps,
+        apiKey,
+        customApiUrl,
+        customApiKey,
+      }),
+    );
+  }, [provider, model, taskKey, maxSteps, apiKey, customApiUrl, customApiKey]);
 
   function handleProviderChange(p: Provider) {
     setProvider(p);
