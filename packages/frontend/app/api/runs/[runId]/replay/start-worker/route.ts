@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-export async function POST(
-  _request: NextRequest,
+async function proxyToBroker(
+  method: 'POST' | 'DELETE',
   { params }: { params: Promise<{ runId: string }> },
 ) {
   const brokerUrl = process.env.BROKER_URL || process.env.NEXT_PUBLIC_API_URL || '';
@@ -15,10 +15,10 @@ export async function POST(
   try {
     const { runId } = await params;
     const target = `${brokerUrl}/api/runs/${runId}/replay/start-worker`;
-    console.log(`[api/runs/replay/start-worker] POST ${target}`);
+    console.log(`[api/runs/replay/start-worker] ${method} ${target}`);
 
     const res = await fetch(target, {
-      method: 'POST',
+      method,
       headers: { Authorization: `Bearer ${adminKey}` },
     });
 
@@ -35,6 +35,20 @@ export async function POST(
     return NextResponse.json(data, { status: res.status });
   } catch (err) {
     console.error('[api/runs/replay/start-worker] proxy error:', err);
-    return NextResponse.json({ error: 'Failed to start replay worker', detail: String(err) }, { status: 500 });
+    return NextResponse.json({ error: `Failed to ${method === 'POST' ? 'start' : 'stop'} replay worker`, detail: String(err) }, { status: 500 });
   }
+}
+
+export async function POST(
+  _request: NextRequest,
+  ctx: { params: Promise<{ runId: string }> },
+) {
+  return proxyToBroker('POST', ctx);
+}
+
+export async function DELETE(
+  _request: NextRequest,
+  ctx: { params: Promise<{ runId: string }> },
+) {
+  return proxyToBroker('DELETE', ctx);
 }

@@ -86,25 +86,27 @@ export default function RunHeader({
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3 rounded-2xl border border-white/10 bg-black/45 p-3 backdrop-blur-md shadow-2xl">
       {/* Back link + title */}
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-2">
         <Link
           href="/"
-          className="text-gray-400 hover:text-white transition-colors text-sm"
+          className="text-gray-300 hover:text-white transition-colors text-sm"
         >
           &larr; Back
         </Link>
-        <h1 className="text-2xl font-bold font-mono truncate">{run.run_id}</h1>
-        <span className={`px-2 py-1 text-xs rounded font-medium ${badgeClass}`}>
+        <h1 className="text-base sm:text-lg font-semibold font-mono truncate max-w-[24rem]">
+          {run.run_id}
+        </h1>
+        <span className={`px-2 py-1 text-[11px] rounded font-medium uppercase tracking-wide ${badgeClass}`}>
           {run.status}
         </span>
-        <div className="ml-auto flex gap-2">
+        <div className="ml-auto flex flex-wrap justify-end gap-2">
           {onStartWorker && (
             <button
               onClick={handleStartWorker}
               disabled={starting}
-              className="px-4 py-1.5 bg-green-700 hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed rounded text-sm font-medium transition-colors"
+              className="px-3 py-1.5 bg-green-700/90 hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed rounded text-xs sm:text-sm font-medium transition-colors"
             >
               {starting ? 'Starting...' : 'Start Worker'}
             </button>
@@ -113,7 +115,7 @@ export default function RunHeader({
             <button
               onClick={handleStop}
               disabled={stopping}
-              className="px-4 py-1.5 bg-red-700 hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed rounded text-sm font-medium transition-colors"
+              className="px-3 py-1.5 bg-red-700/90 hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed rounded text-xs sm:text-sm font-medium transition-colors"
             >
               {stopping ? 'Stopping...' : 'Stop Run'}
             </button>
@@ -122,7 +124,7 @@ export default function RunHeader({
             <button
               onClick={handleStopReplay}
               disabled={stoppingReplay}
-              className="px-4 py-1.5 bg-orange-700 hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed rounded text-sm font-medium transition-colors"
+              className="px-3 py-1.5 bg-orange-700/90 hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed rounded text-xs sm:text-sm font-medium transition-colors"
             >
               {stoppingReplay ? 'Stopping...' : 'Stop Stream'}
             </button>
@@ -131,7 +133,7 @@ export default function RunHeader({
             <button
               onClick={handleStartReplay}
               disabled={startingReplay}
-              className="px-4 py-1.5 bg-blue-700 hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed rounded text-sm font-medium transition-colors"
+              className="px-3 py-1.5 bg-blue-700/90 hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed rounded text-xs sm:text-sm font-medium transition-colors"
             >
               {startingReplay ? 'Starting...' : 'Watch Replay'}
             </button>
@@ -140,7 +142,7 @@ export default function RunHeader({
             <button
               onClick={handleStartReplayWorker}
               disabled={startingReplayWorker}
-              className="px-4 py-1.5 bg-indigo-700 hover:bg-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed rounded text-sm font-medium transition-colors"
+              className="px-3 py-1.5 bg-indigo-700/90 hover:bg-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed rounded text-xs sm:text-sm font-medium transition-colors"
             >
               {startingReplayWorker ? 'Starting...' : 'Start Replay Worker'}
             </button>
@@ -149,7 +151,7 @@ export default function RunHeader({
       </div>
 
       {/* Metadata cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
         <Card label="Model" value={run.model} />
         <Card label="Task" value={run.task_key} />
         <Card
@@ -169,7 +171,7 @@ export default function RunHeader({
 
       {/* Error banner */}
       {run.error && (
-        <div className="bg-red-900/30 border border-red-700 rounded-lg px-4 py-3 text-red-400 text-sm">
+        <div className="bg-red-900/40 border border-red-700 rounded-lg px-3 py-2 text-red-300 text-sm">
           <span className="font-semibold">Error: </span>
           {run.error}
         </div>
@@ -180,9 +182,9 @@ export default function RunHeader({
 
 function Card({ label, value }: { label: string; value: string }) {
   return (
-    <div className="bg-gray-800 rounded-lg p-3">
-      <div className="text-xs text-gray-500 uppercase tracking-wide">{label}</div>
-      <div className="text-sm font-medium text-gray-200 mt-1 truncate">
+    <div className="rounded-lg border border-white/10 bg-black/35 px-2.5 py-2">
+      <div className="text-[10px] text-gray-400 uppercase tracking-widest">{label}</div>
+      <div className="text-xs sm:text-sm font-medium text-gray-100 mt-1 truncate">
         {value}
       </div>
     </div>
