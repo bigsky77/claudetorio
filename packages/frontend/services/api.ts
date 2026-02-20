@@ -199,6 +199,16 @@ export async function startReplayWorker(runId: string): Promise<{ run_id: string
   }
 }
 
+export async function stopReplayWorker(runId: string): Promise<{ run_id: string; status: string } | null> {
+  try {
+    const res = await fetch(`/api/runs/${runId}/replay/start-worker`, { method: 'DELETE' });
+    if (res.ok) return res.json();
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 export async function stopReplay(runId: string): Promise<void> {
   try {
     await fetch(`/api/runs/${runId}/replay`, { method: 'DELETE' });
