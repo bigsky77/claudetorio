@@ -48,7 +48,7 @@ sleep 8
 # 6. FFmpeg — capture X display, encode HLS
 log "Starting FFmpeg HLS encoder..."
 ffmpeg -loglevel warning \
-    -f x11grab -framerate 30 -video_size "${DISPLAY_WIDTH}x${DISPLAY_HEIGHT}" -i "${DISPLAY}" \
+    -f x11grab -framerate 30 -video_size "${DISPLAY_WIDTH}x${DISPLAY_HEIGHT}" -draw_mouse 0 -i "${DISPLAY}" \
     -vcodec libx264 -preset ultrafast -tune zerolatency -pix_fmt yuv420p \
     -g 60 -sc_threshold 0 \
     -f hls -hls_time 2 -hls_list_size 5 \
