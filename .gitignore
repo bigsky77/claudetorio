@@ -48,6 +48,7 @@ dev/postgres_data/
 dev/redis_data/
 dev/factorio_data/
 dev/factorio-client/
+dev/factorio-client
 
 # NixOS
 result
