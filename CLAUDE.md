@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-Claudetorio orchestrates autonomous LLM agents playing Factorio 24/7. The key design principle is separating cheap headless simulation (CPU-only Factorio servers) from expensive rendering (GPU-backed KasmVNC streams), with streams spawned on demand.
+Claudetorio orchestrates autonomous LLM agents playing Factorio 24/7. The key design principle is separating cheap headless simulation (CPU-only Factorio servers) from expensive rendering (GPU-backed HLS streams), with streams spawned on demand.
 
 ## Common Commands
 
@@ -19,6 +19,11 @@ docker compose -f dev/docker-compose.yml up broker frontend postgres redis
 # Rebuild a specific image after code changes
 docker compose -f dev/docker-compose.yml build run-worker
 docker compose -f dev/docker-compose.yml build stream-worker
+
+# Tear down (stop orphan containers first — broker spawns run-workers and headless
+# Factorio containers outside of compose, so they must be stopped manually)
+docker ps --filter name=run-worker --filter name=factorio --filter name=stream-worker -q | xargs -r docker stop
+docker compose -f dev/docker-compose.yml down -v
 ```
 
 ### Frontend
@@ -69,8 +74,8 @@ game-server (157.254.222.103)
 stream-server (157.254.222.104)
   ├── caddy (80/443)          ← TLS; routes :{STREAM_BASE_PORT+slot} → stream-client-{slot}:3000
   ├── stream-agent (8090)     ← HTTP API: spawn/stop stream-client containers on this daemon
-  └── stream-client-{slot}    ← KasmVNC viewer; UDP to game-server:34197+slot
-  └── stream-client-replay-{run_id}  ← KasmVNC viewer; UDP to game-server:35100+slot
+  └── stream-client-{slot}    ← FFmpeg→HLS→nginx; UDP to game-server:34197+slot
+  └── stream-client-replay-{run_id}  ← FFmpeg→HLS→nginx; UDP to game-server:35100+slot
 ```
 
 The broker mounts `/var/run/docker.sock` and uses `docker run` to spawn game containers. Stream-client containers are spawned via HTTP to stream-agent (when `STREAM_AGENT_URL` is set) so they land on stream-server's Docker daemon. In dev, `STREAM_AGENT_URL` is unset and stream-clients are spawned locally.
@@ -92,7 +97,7 @@ The broker mounts `/var/run/docker.sock` and uses `docker run` to spawn game con
 |----------|---------|------|
 | Live Factorio UDP | `BASE_UDP_PORT + slot` | 34197 |
 | Live Factorio RCON | `BASE_RCON_PORT + slot` | 27000 (dev: 27015) |
-| Live stream (KasmVNC) | `STREAM_BASE_PORT + slot` | 3002 (dev) / 3003 (prod) |
+| Live stream (HLS/nginx) | `STREAM_BASE_PORT + slot` | 3002 (dev) / 3003 (prod) |
 | Replay Factorio UDP | `REPLAY_UDP_BASE_PORT + slot` | 35100 |
 | Replay Factorio RCON | `REPLAY_RCON_BASE_PORT + slot` | 28000 |
 | Replay stream | `REPLAY_STREAM_BASE_PORT + slot` | 4002 |
@@ -138,6 +143,25 @@ packages/broker/
 
 **VCS directives:** The LLM can embed `# VCS: UNDO`, `# VCS: TAG name`, `# VCS: RESTORE name`, or `# VCS: HISTORY` comments in generated code. The run-worker intercepts these before calling `eval()` and routes them to `FactorioMCPRepository` for game-state version control.
 
+## Stream Client
+
+`packages/stream-client/` runs Xvfb + Openbox + Factorio client + FFmpeg + nginx in a single container. Startup order is orchestrated by `entrypoint.sh`:
+
+1. Xvfb starts a virtual display
+2. Openbox provides a window manager
+3. `scripts/start-factorio.sh` launches the Factorio client (connects to `SERVER_HOST:SERVER_PORT`)
+4. FFmpeg x11grabs the display and writes HLS segments to `/tmp/hls/` (`-draw_mouse 0` hides the cursor)
+5. nginx serves `/tmp/hls/stream.m3u8` + `.ts` segments on port 3000, plus a standalone `index.html` hls.js player at `/`
+
+The stream-agent waits for port 3000 then polls `docker exec test -f /tmp/hls/stream.m3u8` before declaring the container ready.
+
+## Other Packages
+
+- **`packages/stream-worker/`** — replays recorded steps into a fresh Factorio instance via RCON at `STEP_INTERVAL` pace; sends `follow_agent` camera commands after each step. Key env vars: `STEP_INTERVAL` (default 5s), `POLL_INTERVAL` (default 10s), `CAMERA_ZOOM` (default 0.5).
+- **`packages/agent-runner/`** — standalone scripts (`connect.sh`, `disconnect.sh`, `status.sh`) for opening an SSH tunnel to the game-server and running an agent locally against production.
+- **`mcps/fle-mcp/`** — MCP server exposing Factorio control tools (render, execute, etc.) so Claude Code can directly interact with a running game.
+- **`packages/fle-scenario-fix/`** — historical patch that fixed a multiplayer desync: FLE registers RCON event handlers at runtime, but clients joining mid-session can't deserialize them. Fix pre-populates `control.lua` with all registrations. Now integrated into `packages/fle/`.
+
 ## RCON Warmup Pattern
 
 Any Python worker that connects FLE to a fresh Factorio server **must** do this before calling `FactorioInstance(...)`:
@@ -163,6 +187,8 @@ instance = FactorioInstance(address=host, tcp_port=rcon_port, fast=True, ...)
 
 This pattern appears in both `run-worker/main.py:427-457` and `stream-worker/main.py`.
 
+**Important:** In `run-worker/main.py`, `load_dotenv()` must be called before any FLE imports — FLE reads env vars at module import time.
+
 ## Factorio Save Strategy
 
 Factorio servers are started with a **vanilla save** (`--create`), not the `open_world` scenario. The open_world scenario's `control.lua` registers global event handlers that can't be serialized — when a multiplayer client joins after FLE init, those Lua functions are nil, causing instant desyncs. FLE loads everything via RCON, which is replicated to all peers.
@@ -173,7 +199,7 @@ Factorio servers are started with a **vanilla save** (`--create`), not the `open
 - `app/api/runs/[runId]/*/route.ts` — proxy to broker with `BROKER_ADMIN_KEY` header; never expose the key to the browser
 - `NEXT_PUBLIC_API_URL` and `NEXT_PUBLIC_STREAM_URL` are inlined at **build time** (Docker `ARG`); changing them requires a rebuild
 - Client components poll run/step state via `useRunPolling` hook
-- `StreamPanel` renders a KasmVNC iframe from the replay `stream_url`
+- `StreamPanel` renders an hls.js `<video>` element from the replay `stream_url`; appends `/stream.m3u8` to the base URL
 - `stream_url` on `RunInfo` is only populated when a replay is active (`app_state.active_replays[run_id]`); live runs no longer auto-spawn a stream client
 
 ## Key Environment Variables
@@ -200,6 +226,16 @@ For run-worker:
 | `MODEL` | LLM model name (default: `claude-sonnet-4-5-20250929`) |
 | `CUSTOM_API` | Set to `true` to use a custom OpenAI-compatible API |
 | `CUSTOM_API_URL` / `CUSTOM_API_KEY` | Endpoint + key for custom API |
+
+For stream-worker:
+
+| Variable | Purpose |
+|----------|---------|
+| `STEP_INTERVAL` | Seconds to wait between replayed steps (default: 5.0) |
+| `POLL_INTERVAL` | Seconds to wait when no new steps are available (default: 10.0) |
+| `CAMERA_ZOOM` | `zoom_to_world` zoom level for spectators (default: 0.5) |
+
+**Production stream URL routing:** When `STREAM_DOMAIN` is set on the broker, Caddy on stream-server routes by subdomain — `c{slot}.{STREAM_DOMAIN}` for live streams and `cr{slot}.{STREAM_DOMAIN}` for replay streams (requires a wildcard TLS cert). In dev, port-based routing is used instead (`{STREAM_URL}:{STREAM_BASE_PORT+slot}`).
 
 ## Deployment
 

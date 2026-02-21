@@ -1,52 +1,33 @@
-# Factorio streaming client container using LinuxServer's KasmVNC base
-# Connects to an existing Factorio server and streams the view via web browser
-# NOTE: pinned by digest for deterministic production deploys.
-FROM ghcr.io/linuxserver/baseimage-kasmvnc@sha256:c6d902c207d6e4a66ca41ce36dda549cd58a5bc8d353468b24b0cf780eb528c8
+FROM ubuntu:22.04
 
-# Install dependencies for Factorio
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    wget \
-    xz-utils \
-    ca-certificates \
-    libxrandr2 \
-    libxcursor1 \
-    libxinerama1 \
-    libxi6 \
-    libgl1 \
-    libasound2t64 \
-    x11-utils \
+ENV DEBIAN_FRONTEND=noninteractive
+
+# universe repo required for ffmpeg with libx264 on Ubuntu 22.04
+RUN apt-get update && apt-get install -y --no-install-recommends software-properties-common \
+    && add-apt-repository universe \
+    && apt-get update && apt-get install -y --no-install-recommends \
+        xvfb openbox x11-utils \
+        ffmpeg \
+        nginx \
+        libxrandr2 libxcursor1 libxinerama1 libxi6 libgl1 libasound2 \
+        wget xz-utils ca-certificates curl procps \
     && rm -rf /var/lib/apt/lists/*
 
-# Create factorio directories
-RUN mkdir -p /opt/factorio /config/factorio-data
+RUN mkdir -p /opt/factorio /tmp/hls /tmp/factorio-data /tmp/factorio-client \
+             /var/log/nginx /var/lib/nginx /run/nginx
 
-# Copy startup configuration
-COPY root/ /
+COPY scripts/start-factorio.sh /scripts/start-factorio.sh
+COPY entrypoint.sh /entrypoint.sh
+COPY nginx.conf /etc/nginx/nginx.conf
+COPY index.html /var/www/hls/index.html
 
-# Copy our scripts
-COPY scripts/ /scripts/
-RUN chmod +x /scripts/*.sh
+RUN chmod +x /scripts/start-factorio.sh /entrypoint.sh
 
-# Copy custom init scripts (run as root by s6-overlay before display starts)
-COPY custom-cont-init.d/ /custom-cont-init.d/
-RUN chmod +x /custom-cont-init.d/*
-
-# Environment variables for KasmVNC
-# NOTE: Do NOT set PASSWORD here - it triggers nginx basic auth
-# To enable auth, set PASSWORD in docker-compose instead
-ENV \
-    TITLE="Factorio Stream" \
+ENV DISPLAY=:1 \
     DISPLAY_WIDTH=1280 \
     DISPLAY_HEIGHT=720 \
-    DISPLAY_REFRESH_RATE=30 \
-    CUSTOM_USER=viewer
-
-# Server to connect to (override in docker-compose)
-ENV \
     SERVER_HOST=localhost \
     SERVER_PORT=34197
 
-# KasmVNC web interface
 EXPOSE 3000
-
-# The base image handles process startup; this image provides /defaults/startwm.sh.
+CMD ["/entrypoint.sh"]

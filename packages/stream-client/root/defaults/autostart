@@ -1,4 +1,0 @@
-#!/bin/sh
-# Intentionally left as a no-op.
-# Factorio startup is orchestrated from /defaults/startwm.sh to avoid
-# Openbox/DISPLAY race conditions observed on production hosts.

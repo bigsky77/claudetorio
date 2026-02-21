@@ -47,29 +47,14 @@
 			header_up Host {upstream_hostport}
 			header_up X-Real-IP {remote_host}
 			header_up X-Forwarded-Proto {scheme}
-
-			transport http {
-				response_header_timeout 0
-				read_buffer 0
-			}
-
-			flush_interval -1
 		}
 	}
 
 	handle @slot {
 		reverse_proxy stream-client-{re.slot.1}:3000 {
-			# WebSocket support for KasmVNC
 			header_up Host {upstream_hostport}
 			header_up X-Real-IP {remote_host}
 			header_up X-Forwarded-Proto {scheme}
-
-			transport http {
-				response_header_timeout 0
-				read_buffer 0
-			}
-
-			flush_interval -1
 		}
 	}
 

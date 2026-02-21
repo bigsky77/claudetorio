@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Claudetorio Stream</title>
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    html, body { width:100%; height:100%; background:#000; overflow:hidden; }
+    video { width:100%; height:100%; object-fit:contain; display:block; }
+  </style>
+</head>
+<body>
+  <video id="v" autoplay muted playsinline></video>
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@1/dist/hls.min.js"></script>
+  <script>
+    const v = document.getElementById('v');
+    const src = '/stream.m3u8';
+    if (Hls.isSupported()) {
+      const hls = new Hls({ liveSyncDurationCount: 3, maxBufferLength: 20 });
+      hls.loadSource(src);
+      hls.attachMedia(v);
+      hls.on(Hls.Events.MANIFEST_PARSED, () => v.play().catch(()=>{}));
+      hls.on(Hls.Events.ERROR, (_, d) => {
+        if (d.fatal) setTimeout(() => hls.loadSource(src), 3000);
+      });
+    } else if (v.canPlayType('application/vnd.apple.mpegurl')) {
+      v.src = src;
+      v.addEventListener('loadedmetadata', () => v.play().catch(()=>{}));
+    }
+  </script>
+</body>
+</html>
