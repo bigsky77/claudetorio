@@ -1,0 +1,4 @@
+# narrate.py and speak.py use only Python stdlib.
+# No external packages required for the vtuber-streamer Python scripts.
+# Avatar server dependencies are installed from claudetorio-stream-avatar's own
+# requirements.txt / pyproject.toml during the Docker build.

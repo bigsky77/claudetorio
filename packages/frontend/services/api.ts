@@ -216,3 +216,34 @@ export async function stopReplay(runId: string): Promise<void> {
     // best-effort
   }
 }
+
+export async function startVtuber(
+  runId: string,
+  body: {
+    anthropic_api_key: string;
+    elevenlabs_api_key: string;
+    rtmp_url?: string;
+    channel?: string;
+    platform?: string;
+  },
+): Promise<{ status: string; vtuber_stream_url: string; channel?: string; platform?: string } | null> {
+  try {
+    const res = await fetch(`/api/runs/${runId}/vtuber`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (res.ok) return res.json();
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+export async function stopVtuber(runId: string): Promise<void> {
+  try {
+    await fetch(`/api/runs/${runId}/vtuber`, { method: 'DELETE' });
+  } catch {
+    // best-effort
+  }
+}

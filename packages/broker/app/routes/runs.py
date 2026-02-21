@@ -9,7 +9,7 @@ from ..config import config
 from ..db import async_session_factory
 from ..dependencies import get_db, get_app_state, require_admin_key
 from ..models import Run, RunStep
-from ..schemas import CreateRunRequest, CreateRunResponse, RunInfo, RunStepInfo
+from ..schemas import CreateRunRequest, CreateRunResponse, RunInfo, RunStepInfo, StartVtuberRequest
 from ..services.factorio import spawn_factorio, stop_factorio, wait_for_factorio, get_map_seed
 from ..services.replay import (
     allocate_replay_slot,
@@ -21,6 +21,7 @@ from ..services.replay import (
     stop_replay_containers,
 )
 from ..services.slots import claim_any_free_slot, release_slot_lock
+from ..services.vtuber import spawn_vtuber_container, stop_vtuber_container, get_game_stream_url_for_container
 from ..state import AppState
 
 router = APIRouter()
@@ -60,7 +61,29 @@ async def _monitor_replay(run_id: str, proc: asyncio.subprocess.Process, app_sta
         print(f"[replay] stream-worker-{run_id} output:\n{output}", flush=True)
     replay = app_state.active_replays.pop(run_id, None)
     slot = replay["slot"] if replay else None
+    # Stop vtuber-streamer if it's still running alongside this replay
+    if replay and replay.get("vtuber_proc") and replay["vtuber_proc"].returncode is None:
+        print(f"[vtuber] Stopping vtuber-streamer-{run_id} (replay ended)", flush=True)
+        await stop_vtuber_container(run_id)
     await stop_replay_containers(run_id, slot)
+
+
+async def _monitor_vtuber(run_id: str, proc: asyncio.subprocess.Process, app_state: AppState):
+    """Monitor vtuber-streamer subprocess and clear state when it exits.
+
+    The replay continues independently — this only clears the vtuber state.
+    """
+    stdout_bytes, _ = await proc.communicate()
+    output = stdout_bytes.decode(errors="replace").strip() if stdout_bytes else ""
+    print(f"[vtuber] vtuber-streamer-{run_id} exited (code {proc.returncode})", flush=True)
+    if output:
+        print(f"[vtuber] vtuber-streamer-{run_id} output:\n{output[-1000:]}", flush=True)
+    replay = app_state.active_replays.get(run_id)
+    if replay:
+        replay["vtuber_proc"] = None
+        replay["vtuber_stream_url"] = None
+        replay["vtuber_channel"] = None
+        replay["vtuber_platform"] = None
 
 
 async def _start_run_worker(run: Run, env_vars: dict, app_state: AppState):
@@ -142,6 +165,9 @@ async def list_runs(
             stream_host=None,
             stream_port=None,
             stream_scheme=None,
+            vtuber_stream_url=app_state.active_replays[r.run_id].get("vtuber_stream_url") if r.run_id in app_state.active_replays else None,
+            vtuber_channel=app_state.active_replays[r.run_id].get("vtuber_channel") if r.run_id in app_state.active_replays else None,
+            vtuber_platform=app_state.active_replays[r.run_id].get("vtuber_platform") if r.run_id in app_state.active_replays else None,
         )
         for r in runs
     ]
@@ -179,6 +205,9 @@ async def get_run(run_id: str, db: AsyncSession = Depends(get_db), app_state: Ap
         stream_host=None,
         stream_port=None,
         stream_scheme=None,
+        vtuber_stream_url=replay.get("vtuber_stream_url") if replay else None,
+        vtuber_channel=replay.get("vtuber_channel") if replay else None,
+        vtuber_platform=replay.get("vtuber_platform") if replay else None,
     )
 
 
@@ -459,5 +488,70 @@ async def stop_replay(
     replay = app_state.active_replays.pop(run_id, None)
     slot = replay["slot"] if replay else None
     await stop_replay_containers(run_id, slot)
+
+    return {"run_id": run_id, "status": "stopped"}
+
+
+@router.post("/api/runs/{run_id}/vtuber", dependencies=[Depends(require_admin_key)])
+async def start_vtuber(
+    run_id: str,
+    req: StartVtuberRequest,
+    app_state: AppState = Depends(get_app_state),
+):
+    from ..services.vtuber import get_vtuber_stream_url
+
+    replay = app_state.active_replays.get(run_id)
+    if not replay:
+        raise HTTPException(404, "No active replay for this run")
+
+    existing_proc = replay.get("vtuber_proc")
+    if existing_proc and existing_proc.returncode is None:
+        raise HTTPException(409, "VTuber stream already active for this run")
+
+    slot = replay["slot"]
+    game_stream_url = get_game_stream_url_for_container(slot, replay["stream_url"])
+    vtuber_stream_url = get_vtuber_stream_url(slot)
+
+    proc = await spawn_vtuber_container(
+        run_id=run_id,
+        slot=slot,
+        game_stream_url=game_stream_url,
+        anthropic_api_key=req.anthropic_api_key,
+        elevenlabs_api_key=req.elevenlabs_api_key,
+        rtmp_url=req.rtmp_url or None,
+        channel=req.channel or None,
+        platform=req.platform or None,
+    )
+
+    replay["vtuber_proc"] = proc
+    replay["vtuber_stream_url"] = vtuber_stream_url
+    replay["vtuber_channel"] = req.channel or None
+    replay["vtuber_platform"] = req.platform or None
+
+    asyncio.create_task(_monitor_vtuber(run_id, proc, app_state))
+
+    return {
+        "status": "started",
+        "vtuber_stream_url": vtuber_stream_url,
+        "channel": req.channel,
+        "platform": req.platform,
+    }
+
+
+@router.delete("/api/runs/{run_id}/vtuber", dependencies=[Depends(require_admin_key)])
+async def stop_vtuber(
+    run_id: str,
+    app_state: AppState = Depends(get_app_state),
+):
+    replay = app_state.active_replays.get(run_id)
+    if not replay:
+        raise HTTPException(404, "No active replay for this run")
+
+    await stop_vtuber_container(run_id)
+
+    replay["vtuber_proc"] = None
+    replay["vtuber_stream_url"] = None
+    replay["vtuber_channel"] = None
+    replay["vtuber_platform"] = None
 
     return {"run_id": run_id, "status": "stopped"}

@@ -10,6 +10,7 @@ import Leaderboard from './Leaderboard';
 import StreamModal from './StreamModal';
 import SessionModal from './SessionModal/SessionModal';
 import StartRunForm from './StartRunForm';
+import FeaturedStream from './FeaturedStream';
 
 export default function Dashboard() {
   const {
@@ -52,6 +53,15 @@ export default function Dashboard() {
             Start Run
           </button>
         </div>
+
+        {/* Featured VTuber Stream */}
+        {status && (status.vtuber_stream_url || status.vtuber_channel) && (
+          <FeaturedStream
+            vtuberStreamUrl={status.vtuber_stream_url}
+            vtuberChannel={status.vtuber_channel}
+            vtuberPlatform={status.vtuber_platform}
+          />
+        )}
 
         {/* Status Cards */}
         {status && <StatusCards status={status} />}

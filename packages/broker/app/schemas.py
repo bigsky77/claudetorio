@@ -56,6 +56,9 @@ class SystemStatus(BaseModel):
     active_sessions: List[dict]
     total_users: int
     total_sessions_all_time: int
+    vtuber_stream_url: Optional[str] = None   # HLS URL of the composed vtuber scene
+    vtuber_channel: Optional[str] = None       # Twitch/Kick channel (only if rtmp_url was provided)
+    vtuber_platform: Optional[str] = None      # "twitch" | "kick"
 
 
 # --- Run-related schemas ---
@@ -94,6 +97,9 @@ class RunInfo(BaseModel):
     stream_host: Optional[str] = None
     stream_port: Optional[int] = None
     stream_scheme: Optional[str] = None
+    vtuber_stream_url: Optional[str] = None   # HLS URL of the composed vtuber scene
+    vtuber_channel: Optional[str] = None       # Twitch/Kick channel (only if rtmp_url was provided)
+    vtuber_platform: Optional[str] = None      # "twitch" | "kick"
 
 class RunStepInfo(BaseModel):
     id: int
@@ -126,3 +132,10 @@ class CompleteRunRequest(BaseModel):
     final_score: Optional[float] = None
     status: str = "completed"
     error: Optional[str] = None
+
+class StartVtuberRequest(BaseModel):
+    anthropic_api_key: str
+    elevenlabs_api_key: str
+    rtmp_url: Optional[str] = None    # If set, also stream to Twitch/Kick
+    channel: Optional[str] = None     # Channel name for frontend embed (only with rtmp_url)
+    platform: Optional[str] = None    # "twitch" | "kick" (only with rtmp_url)

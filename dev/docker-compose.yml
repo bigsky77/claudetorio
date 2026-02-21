@@ -94,6 +94,8 @@ services:
       - FACTORIO_CLIENT_VOLUME=claudetorio_factorio_client
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
       - STREAM_WORKER_IMAGE=claudetorio-stream-worker
+      - VTUBER_STREAMER_IMAGE=claudetorio-vtuber-streamer
+      - VTUBER_STREAM_BASE_PORT=5002
       - REPLAY_STREAM_BASE_PORT=4002
       - REPLAY_UDP_BASE_PORT=35100
       - REPLAY_RCON_BASE_PORT=28000
@@ -144,6 +146,14 @@ services:
       dockerfile: stream-worker/Dockerfile
     image: claudetorio-stream-worker
     entrypoint: ["sh", "-c", "echo 'stream-worker image ready'"]
+    restart: "no"
+  # Build-only target — image used by broker to spawn vtuber-streamer containers
+  vtuber-streamer:
+    build:
+      context: ../packages/vtuber-streamer
+    image: claudetorio-vtuber-streamer
+    platform: linux/amd64
+    entrypoint: ["sh", "-c", "echo 'vtuber-streamer image ready'"]
     restart: "no"
 
 volumes:

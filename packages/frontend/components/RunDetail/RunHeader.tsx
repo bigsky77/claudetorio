@@ -26,6 +26,129 @@ function formatDuration(start: string | null, end: string | null): string {
   return `${sec}s`;
 }
 
+interface VtuberFormBody {
+  anthropic_api_key: string;
+  elevenlabs_api_key: string;
+  rtmp_url?: string;
+  channel?: string;
+  platform?: string;
+}
+
+function VtuberForm({ onSubmit, onCancel }: {
+  onSubmit: (body: VtuberFormBody) => Promise<void>;
+  onCancel: () => void;
+}) {
+  const [anthropicKey, setAnthropicKey] = useState('');
+  const [elevenLabsKey, setElevenLabsKey] = useState('');
+  const [rtmpUrl, setRtmpUrl] = useState('');
+  const [channel, setChannel] = useState('');
+  const [platform, setPlatform] = useState<'twitch' | 'kick'>('twitch');
+  const [submitting, setSubmitting] = useState(false);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setSubmitting(true);
+    await onSubmit({
+      anthropic_api_key: anthropicKey,
+      elevenlabs_api_key: elevenLabsKey,
+      rtmp_url: rtmpUrl || undefined,
+      channel: channel || undefined,
+      platform: rtmpUrl ? platform : undefined,
+    });
+    setSubmitting(false);
+  }
+
+  return (
+    <form
+      onSubmit={handleSubmit}
+      className="mt-3 rounded-lg border border-white/10 bg-black/60 p-3 space-y-2 text-xs"
+    >
+      <div className="text-gray-300 font-semibold mb-1">Start VTuber Stream</div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        <div className="space-y-1">
+          <label className="text-gray-400">Anthropic API Key *</label>
+          <input
+            type="password"
+            required
+            value={anthropicKey}
+            onChange={e => setAnthropicKey(e.target.value)}
+            placeholder="sk-ant-..."
+            className="w-full rounded bg-zinc-900 border border-white/10 px-2 py-1 text-white placeholder-gray-600 focus:outline-none focus:border-white/30"
+          />
+        </div>
+        <div className="space-y-1">
+          <label className="text-gray-400">ElevenLabs API Key *</label>
+          <input
+            type="password"
+            required
+            value={elevenLabsKey}
+            onChange={e => setElevenLabsKey(e.target.value)}
+            placeholder="sk_..."
+            className="w-full rounded bg-zinc-900 border border-white/10 px-2 py-1 text-white placeholder-gray-600 focus:outline-none focus:border-white/30"
+          />
+        </div>
+      </div>
+
+      <div className="text-gray-500 text-[10px] pt-1">Optional: also stream to Twitch / Kick</div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+        <div className="space-y-1 sm:col-span-2">
+          <label className="text-gray-400">RTMP URL (optional)</label>
+          <input
+            type="text"
+            value={rtmpUrl}
+            onChange={e => setRtmpUrl(e.target.value)}
+            placeholder="rtmps://live.twitch.tv/app/live_..."
+            className="w-full rounded bg-zinc-900 border border-white/10 px-2 py-1 text-white placeholder-gray-600 focus:outline-none focus:border-white/30"
+          />
+        </div>
+        <div className="space-y-1">
+          <label className="text-gray-400">Platform</label>
+          <select
+            value={platform}
+            onChange={e => setPlatform(e.target.value as 'twitch' | 'kick')}
+            className="w-full rounded bg-zinc-900 border border-white/10 px-2 py-1 text-white focus:outline-none focus:border-white/30"
+          >
+            <option value="twitch">Twitch</option>
+            <option value="kick">Kick</option>
+          </select>
+        </div>
+      </div>
+
+      {rtmpUrl && (
+        <div className="space-y-1">
+          <label className="text-gray-400">Channel name (for embed)</label>
+          <input
+            type="text"
+            value={channel}
+            onChange={e => setChannel(e.target.value)}
+            placeholder="claudetorio"
+            className="w-full rounded bg-zinc-900 border border-white/10 px-2 py-1 text-white placeholder-gray-600 focus:outline-none focus:border-white/30"
+          />
+        </div>
+      )}
+
+      <div className="flex gap-2 pt-1">
+        <button
+          type="submit"
+          disabled={submitting}
+          className="px-3 py-1.5 bg-purple-700/90 hover:bg-purple-600 disabled:opacity-50 disabled:cursor-not-allowed rounded font-medium transition-colors"
+        >
+          {submitting ? 'Starting...' : 'Start'}
+        </button>
+        <button
+          type="button"
+          onClick={onCancel}
+          className="px-3 py-1.5 bg-zinc-700 hover:bg-zinc-600 rounded font-medium transition-colors"
+        >
+          Cancel
+        </button>
+      </div>
+    </form>
+  );
+}
+
 export default function RunHeader({
   run,
   isActive,
@@ -34,6 +157,8 @@ export default function RunHeader({
   onStartReplay,
   onStartReplayWorker,
   onStopReplay,
+  onStartVtuber,
+  onStopVtuber,
 }: {
   run: RunInfo;
   isActive?: boolean;
@@ -42,6 +167,8 @@ export default function RunHeader({
   onStartReplay?: () => Promise<void>;
   onStartReplayWorker?: () => Promise<void>;
   onStopReplay?: () => Promise<void>;
+  onStartVtuber?: (body: VtuberFormBody) => Promise<void>;
+  onStopVtuber?: () => Promise<void>;
 }) {
   const badgeClass = STATUS_COLORS[run.status] ?? 'bg-gray-700 text-gray-300';
   const [stopping, setStopping] = useState(false);
@@ -49,6 +176,8 @@ export default function RunHeader({
   const [startingReplay, setStartingReplay] = useState(false);
   const [startingReplayWorker, setStartingReplayWorker] = useState(false);
   const [stoppingReplay, setStoppingReplay] = useState(false);
+  const [stoppingVtuber, setStoppingVtuber] = useState(false);
+  const [showVtuberForm, setShowVtuberForm] = useState(false);
 
   async function handleStop() {
     if (!onStop) return;
@@ -83,6 +212,19 @@ export default function RunHeader({
     setStartingReplayWorker(true);
     await onStartReplayWorker();
     setStartingReplayWorker(false);
+  }
+
+  async function handleStartVtuber(body: VtuberFormBody) {
+    if (!onStartVtuber) return;
+    await onStartVtuber(body);
+    setShowVtuberForm(false);
+  }
+
+  async function handleStopVtuber() {
+    if (!onStopVtuber) return;
+    setStoppingVtuber(true);
+    await onStopVtuber();
+    setStoppingVtuber(false);
   }
 
   return (
@@ -147,6 +289,23 @@ export default function RunHeader({
               {startingReplayWorker ? 'Starting...' : 'Start Replay Worker'}
             </button>
           )}
+          {onStartVtuber && !showVtuberForm && (
+            <button
+              onClick={() => setShowVtuberForm(true)}
+              className="px-3 py-1.5 bg-purple-700/90 hover:bg-purple-600 rounded text-xs sm:text-sm font-medium transition-colors"
+            >
+              Go Live
+            </button>
+          )}
+          {onStopVtuber && (
+            <button
+              onClick={handleStopVtuber}
+              disabled={stoppingVtuber}
+              className="px-3 py-1.5 bg-pink-700/90 hover:bg-pink-600 disabled:opacity-50 disabled:cursor-not-allowed rounded text-xs sm:text-sm font-medium transition-colors"
+            >
+              {stoppingVtuber ? 'Stopping...' : 'Stop VTuber'}
+            </button>
+          )}
         </div>
       </div>
 
@@ -175,6 +334,14 @@ export default function RunHeader({
           <span className="font-semibold">Error: </span>
           {run.error}
         </div>
+      )}
+
+      {/* VTuber credential form */}
+      {showVtuberForm && onStartVtuber && (
+        <VtuberForm
+          onSubmit={handleStartVtuber}
+          onCancel={() => setShowVtuberForm(false)}
+        />
       )}
     </div>
   );

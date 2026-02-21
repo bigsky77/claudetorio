@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>VTuber Stream</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #000; overflow: hidden; width: 100vw; height: 100vh; }
+    #game {
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      width: 100%;
+      height: 100%;
+      border: 0;
+    }
+    #avatar {
+      position: absolute;
+      bottom: 20px;
+      right: 20px;
+      z-index: 10;
+      width: 420px;
+      height: 420px;
+      border: 0;
+      pointer-events: none;
+      background: transparent;
+    }
+  </style>
+</head>
+<body>
+  <iframe id="game"
+    src="${GAME_STREAM_URL}"
+    allow="autoplay; fullscreen"
+    allowfullscreen>
+  </iframe>
+  <iframe id="avatar"
+    src="http://localhost:12393/embed.html"
+    allow="autoplay"
+    allowtransparency="true">
+  </iframe>
+</body>
+</html>

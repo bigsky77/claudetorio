@@ -3,7 +3,7 @@
 import { useCallback, useState } from 'react';
 import type { RunInfo, RunStepInfo } from '@/interfaces';
 import { useRunPolling } from '@/hooks/use-run-polling';
-import { stopRun, startReplay, startReplayWorker, stopReplay, stopReplayWorker } from '@/services/api';
+import { stopRun, startReplay, startReplayWorker, stopReplay, stopReplayWorker, startVtuber, stopVtuber } from '@/services/api';
 import RunHeader from './RunHeader';
 import StreamPanel from './StreamPanel';
 import MatrixLogPanel, { RuntimeDisplayPayload } from './MatrixLogPanel';
@@ -20,6 +20,7 @@ export default function RunDetailClient({
   const { run, steps, isActive, refetch } = useRunPolling(initialRun, initialSteps);
   const [replayUrl, setReplayUrl] = useState<string | null>(run.stream_url ?? initialStreamUrl ?? null);
   const [replayWorkerStarted, setReplayWorkerStarted] = useState(false);
+  const [vtuberStreamUrl, setVtuberStreamUrl] = useState<string | null>(run.vtuber_stream_url ?? null);
   const [runtimeDisplay, setRuntimeDisplay] = useState<{
     text: string;
     tone: RuntimeDisplayPayload['tone'];
@@ -53,6 +54,25 @@ export default function RunDetailClient({
     await stopReplay(run.run_id);
     setReplayUrl(null);
     setReplayWorkerStarted(false);
+    setVtuberStreamUrl(null);
+  }
+
+  async function handleStartVtuber(body: {
+    anthropic_api_key: string;
+    elevenlabs_api_key: string;
+    rtmp_url?: string;
+    channel?: string;
+    platform?: string;
+  }) {
+    const result = await startVtuber(run.run_id, body);
+    if (result?.vtuber_stream_url) {
+      setVtuberStreamUrl(result.vtuber_stream_url);
+    }
+  }
+
+  async function handleStopVtuber() {
+    await stopVtuber(run.run_id);
+    setVtuberStreamUrl(null);
   }
 
   const handleDisplayChange = useCallback((payload: RuntimeDisplayPayload) => {
@@ -64,10 +84,13 @@ export default function RunDetailClient({
     }));
   }, []);
 
+  // Show vtuber stream as background when active, otherwise fall back to replay HLS
+  const backgroundUrl = vtuberStreamUrl ?? replayUrl;
+
   return (
     <main className="relative h-screen w-full overflow-hidden text-white">
-      {replayUrl ? (
-        <StreamPanel streamUrl={replayUrl} mode="background" />
+      {backgroundUrl ? (
+        <StreamPanel streamUrl={backgroundUrl} mode="background" />
       ) : (
         <div className="absolute inset-0 bg-gradient-to-br from-black via-zinc-950 to-black" />
       )}
@@ -82,6 +105,8 @@ export default function RunDetailClient({
               onStartReplay={!replayUrl && run.step_count > 0 ? handleStartReplay : undefined}
               onStartReplayWorker={replayUrl && !replayWorkerStarted ? handleStartReplayWorker : undefined}
               onStopReplay={replayUrl ? handleStopReplay : undefined}
+              onStartVtuber={replayUrl && !vtuberStreamUrl ? handleStartVtuber : undefined}
+              onStopVtuber={vtuberStreamUrl ? handleStopVtuber : undefined}
             />
           </div>
 

@@ -14,6 +14,7 @@ router = APIRouter()
 @router.get("/api/status", response_model=SystemStatus)
 async def get_status(
     db: AsyncSession = Depends(get_db),
+    app_state: AppState = Depends(get_app_state),
 ):
     """Get overall system status - useful for monitoring and the frontend."""
     result = await db.execute(
@@ -23,6 +24,17 @@ async def get_status(
 
     total_users = await db.scalar(select(func.count()).select_from(User))
     total_sessions = await db.scalar(select(func.count()).select_from(Session))
+
+    # Expose the first active VTuber stream (typically only one at a time)
+    vtuber_stream_url = None
+    vtuber_channel = None
+    vtuber_platform = None
+    for replay in app_state.active_replays.values():
+        if replay.get("vtuber_stream_url"):
+            vtuber_stream_url = replay["vtuber_stream_url"]
+            vtuber_channel = replay.get("vtuber_channel")
+            vtuber_platform = replay.get("vtuber_platform")
+            break
 
     return SystemStatus(
         total_slots=config.TOTAL_SLOTS,
@@ -43,6 +55,9 @@ async def get_status(
         ],
         total_users=total_users,
         total_sessions_all_time=total_sessions,
+        vtuber_stream_url=vtuber_stream_url,
+        vtuber_channel=vtuber_channel,
+        vtuber_platform=vtuber_platform,
     )
 
 

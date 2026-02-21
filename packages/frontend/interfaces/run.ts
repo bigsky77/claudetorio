@@ -38,4 +38,7 @@ export interface RunInfo {
   stream_host?: string | null;
   stream_port?: number | null;
   stream_scheme?: string | null;
+  vtuber_stream_url?: string | null;
+  vtuber_channel?: string | null;
+  vtuber_platform?: string | null;
 }

@@ -303,8 +303,8 @@ async def spawn_stream_worker_container(
 
 async def stop_replay_containers(run_id: str, slot: int | None = None) -> None:
     """Stop all containers for a replay (best-effort)."""
-    # stream-worker and factorio-replay always run on game-server
-    for name in [f"stream-worker-{run_id}", f"factorio-replay-{run_id}"]:
+    # vtuber-streamer, stream-worker, and factorio-replay always run on game-server
+    for name in [f"vtuber-streamer-{run_id}", f"stream-worker-{run_id}", f"factorio-replay-{run_id}"]:
         await _stop_container(name)
 
     # stream-client-replay is named by slot so Caddy can route to it

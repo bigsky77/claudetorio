@@ -46,6 +46,8 @@ class Config:
     STREAM_PUBLIC_HOST = os.getenv("STREAM_PUBLIC_HOST", "")  # Optional explicit public host/IP for frontend metadata
     # Replay containers
     STREAM_WORKER_IMAGE = os.getenv("STREAM_WORKER_IMAGE", "claudetorio-stream-worker")
+    VTUBER_STREAMER_IMAGE = os.getenv("VTUBER_STREAMER_IMAGE", "claudetorio-vtuber-streamer")
+    VTUBER_STREAM_BASE_PORT = int(os.getenv("VTUBER_STREAM_BASE_PORT", "5002"))
     REPLAY_STREAM_BASE_PORT = int(os.getenv("REPLAY_STREAM_BASE_PORT", "4002"))
     REPLAY_UDP_BASE_PORT = int(os.getenv("REPLAY_UDP_BASE_PORT", "35100"))
     REPLAY_RCON_BASE_PORT = int(os.getenv("REPLAY_RCON_BASE_PORT", "28000"))
