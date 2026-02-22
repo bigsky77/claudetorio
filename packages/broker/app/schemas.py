@@ -90,10 +90,23 @@ class RunInfo(BaseModel):
     final_score: Optional[float] = None
     step_count: int = 0
     stream_url: Optional[str] = None
+    vtuber_stream_url: Optional[str] = None
     replay_worker_running: Optional[bool] = None
     stream_host: Optional[str] = None
     stream_port: Optional[int] = None
     stream_scheme: Optional[str] = None
+
+
+class StreamInfo(BaseModel):
+    run_id: str
+    type: str                        # "replay" | "live"
+    label: str
+    stream_url: Optional[str] = None
+    vtuber_stream_url: Optional[str] = None
+    status: str
+    model: str
+    step_count: int = 0
+    final_score: Optional[float] = None
 
 class RunStepInfo(BaseModel):
     id: int
@@ -126,3 +139,7 @@ class CompleteRunRequest(BaseModel):
     final_score: Optional[float] = None
     status: str = "completed"
     error: Optional[str] = None
+
+class ReplayStartBody(BaseModel):
+    anthropic_api_key: Optional[str] = None
+    elevenlabs_api_key: Optional[str] = None

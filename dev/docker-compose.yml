@@ -97,6 +97,11 @@ services:
       - REPLAY_STREAM_BASE_PORT=4002
       - REPLAY_UDP_BASE_PORT=35100
       - REPLAY_RCON_BASE_PORT=28000
+      - VTUBER_STREAM_CLIENT_IMAGE=claudetorio-vtuber-stream-client
+      - VTUBER_STREAM_BASE_PORT=5002
+      - VTUBER_REPLAY_STREAM_BASE_PORT=6002
+      - ELEVENLABS_API_KEY=${ELEVENLABS_API_KEY:-}
+      - ELEVENLABS_VOICE_ID=${ELEVENLABS_VOICE_ID:-jqcCZkN6Knx8BJ5TBdYR}
     depends_on:
       postgres:
         condition: service_healthy
@@ -146,6 +151,14 @@ services:
     image: claudetorio-stream-worker
     platform: linux/amd64
     entrypoint: ["sh", "-c", "echo 'stream-worker image ready'"]
+    restart: "no"
+  # Build-only target — image used by broker to spawn vtuber-stream-client containers
+  vtuber-stream-client:
+    build:
+      context: ../packages/vtuber-stream-client
+    image: claudetorio-vtuber-stream-client
+    platform: linux/amd64
+    entrypoint: ["sh", "-c", "echo 'vtuber-stream-client image ready'"]
     restart: "no"
 
 volumes:

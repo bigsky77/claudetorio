@@ -10,6 +10,7 @@ import type {
   EntitiesData,
   RunInfo,
   RunStepInfo,
+  StreamInfo,
 } from '@/interfaces';
 
 export async function fetchLeaderboard(): Promise<LeaderboardEntry[]> {
@@ -179,9 +180,32 @@ export async function stopRun(runId: string): Promise<{ run_id: string; status: 
   }
 }
 
-export async function startReplay(runId: string): Promise<{ stream_url: string } | null> {
+export async function startReplay(
+  runId: string,
+  options?: {
+    vtuber?: boolean;
+    anthropicApiKey?: string;
+    elevenLabsApiKey?: string;
+    rtmpUrl?: string;
+    streamKey?: string;
+  },
+): Promise<{ run_id: string; stream_url: string; vtuber_stream_url?: string | null } | null> {
   try {
-    const res = await fetch(`/api/runs/${runId}/replay`, { method: 'POST' });
+    const params = new URLSearchParams();
+    if (options?.vtuber != null) params.set('vtuber', String(options.vtuber));
+    if (options?.rtmpUrl) params.set('rtmp_url', options.rtmpUrl);
+    if (options?.streamKey) params.set('stream_key', options.streamKey);
+    const qs = params.toString();
+
+    const body: Record<string, string> = {};
+    if (options?.anthropicApiKey) body.anthropic_api_key = options.anthropicApiKey;
+    if (options?.elevenLabsApiKey) body.elevenlabs_api_key = options.elevenLabsApiKey;
+
+    const res = await fetch(`/api/runs/${runId}/replay${qs ? `?${qs}` : ''}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
     if (res.ok) return res.json();
     return null;
   } catch {
@@ -214,5 +238,15 @@ export async function stopReplay(runId: string): Promise<void> {
     await fetch(`/api/runs/${runId}/replay`, { method: 'DELETE' });
   } catch {
     // best-effort
+  }
+}
+
+export async function fetchStreams(): Promise<StreamInfo[]> {
+  try {
+    const res = await fetch('/api/streams', { cache: 'no-store' });
+    if (res.ok) return res.json();
+    return [];
+  } catch {
+    return [];
   }
 }

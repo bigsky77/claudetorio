@@ -11,7 +11,7 @@ Claudetorio orchestrates autonomous LLM agents playing Factorio 24/7. The key de
 ### Full Local Stack
 ```bash
 # Build all broker-spawned images first (required before broker can run)
-docker compose -f dev/docker-compose.yml build stream-client run-worker stream-worker
+docker compose -f dev/docker-compose.yml build stream-client run-worker stream-worker vtuber-stream-client
 
 # Start core services (broker, frontend, postgres, redis)
 docker compose -f dev/docker-compose.yml up broker frontend postgres redis
@@ -22,7 +22,7 @@ docker compose -f dev/docker-compose.yml build stream-worker
 
 # Tear down (stop orphan containers first — broker spawns run-workers and headless
 # Factorio containers outside of compose, so they must be stopped manually)
-docker ps --filter name=run-worker --filter name=factorio --filter name=stream-worker -q | xargs -r docker stop
+docker ps --filter name=run-worker --filter name=factorio --filter name=stream-worker --filter name=vtuber-stream-client -q | xargs -r docker stop
 docker compose -f dev/docker-compose.yml down -v
 ```
 
@@ -101,6 +101,8 @@ The broker mounts `/var/run/docker.sock` and uses `docker run` to spawn game con
 | Replay Factorio UDP | `REPLAY_UDP_BASE_PORT + slot` | 35100 |
 | Replay Factorio RCON | `REPLAY_RCON_BASE_PORT + slot` | 28000 |
 | Replay stream | `REPLAY_STREAM_BASE_PORT + slot` | 4002 |
+| VTuber stream (live) | `VTUBER_STREAM_BASE_PORT + slot` | 5002 |
+| VTuber stream (replay) | `VTUBER_REPLAY_STREAM_BASE_PORT + slot` | 6002 |
 
 Slots 0-19 are used for live runs; slots 0-4 are used for replays (independent ranges).
 
@@ -158,6 +160,7 @@ The stream-agent waits for port 3000 then polls `docker exec test -f /tmp/hls/st
 ## Other Packages
 
 - **`packages/stream-worker/`** — replays recorded steps into a fresh Factorio instance via RCON at `STEP_INTERVAL` pace; sends `follow_agent` camera commands after each step. Key env vars: `STEP_INTERVAL` (default 5s), `POLL_INTERVAL` (default 10s), `CAMERA_ZOOM` (default 0.5).
+- **`packages/vtuber-stream-client/`** — VTuber commentary layer on top of replay streams. Runs Xvfb (1920×1080) + PulseAudio + Factorio client + Chrome kiosk (overlay.html) + Open-LLM-VTuber avatar + narrate.py (Claude-generated commentary via ElevenLabs TTS) + FFmpeg → HLS + nginx on port 3000. Optionally pushes RTMP to Twitch/Kick. Architecture doc: `docs/vtuber-livestream.md`.
 - **`packages/agent-runner/`** — standalone scripts (`connect.sh`, `disconnect.sh`, `status.sh`) for opening an SSH tunnel to the game-server and running an agent locally against production.
 - **`mcps/fle-mcp/`** — MCP server exposing Factorio control tools (render, execute, etc.) so Claude Code can directly interact with a running game.
 - **`packages/fle-scenario-fix/`** — historical patch that fixed a multiplayer desync: FLE registers RCON event handlers at runtime, but clients joining mid-session can't deserialize them. Fix pre-populates `control.lua` with all registrations. Now integrated into `packages/fle/`.
@@ -218,6 +221,11 @@ For the broker (see `dev/docker-compose.yml` for dev values):
 | `STREAM_AGENT_URL` | e.g. `http://157.254.222.104:8090` — when set, stream-clients are spawned on stream-server via HTTP instead of locally |
 | `STREAM_AGENT_KEY` | Shared secret for broker ↔ stream-agent auth |
 | `GAME_SERVER_PUBLIC_HOST` | Public IP of game-server (passed to stream-agent so stream-clients know where to connect) |
+| `VTUBER_STREAM_CLIENT_IMAGE` | Image name for vtuber-stream-client containers (default: `claudetorio-vtuber-stream-client`) |
+| `VTUBER_STREAM_BASE_PORT` | Base port for live VTuber streams (default: 5002) |
+| `VTUBER_REPLAY_STREAM_BASE_PORT` | Base port for replay VTuber streams (default: 6002) |
+| `ELEVENLABS_API_KEY` | ElevenLabs API key forwarded to vtuber-stream-client containers |
+| `ELEVENLABS_VOICE_ID` | ElevenLabs voice ID (default: `jqcCZkN6Knx8BJ5TBdYR`) |
 
 For run-worker:
 

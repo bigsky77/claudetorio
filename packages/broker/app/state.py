@@ -13,7 +13,12 @@ class AppState:
         self.active_websockets: Dict[str, List[WebSocket]] = {}
         self.run_processes: Dict[str, asyncio.subprocess.Process] = {}
         self.pending_run_envs: Dict[str, dict] = {}
-        # key = run_id, value = {"slot": int, "stream_url": str, "proc": asyncio.subprocess.Process | None}
+        # key = run_id, value = {
+        #   "slot": int,
+        #   "stream_url": str,
+        #   "vtuber_stream_url": str | None,
+        #   "proc": asyncio.subprocess.Process | None,
+        # }
         self.active_replays: Dict[str, dict] = {}
 
     async def init_redis(self):

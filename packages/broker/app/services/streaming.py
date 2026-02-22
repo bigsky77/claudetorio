@@ -123,6 +123,133 @@ async def spawn_stream_client(
     return container_id
 
 
+async def spawn_vtuber_stream_client(
+    slot: int,
+    factorio_host: str | None = None,
+    run_id: str = "",
+    rtmp_url: str | None = None,
+    stream_key: str | None = None,
+) -> str | None:
+    """Spawn a vtuber-stream-client Docker container for the given slot.
+
+    Returns the short container ID (or "remote"), or None on failure.
+    """
+    container_name = f"vtuber-stream-client-{slot}"
+
+    if config.STREAM_AGENT_URL:
+        server_host = config.GAME_SERVER_PUBLIC_HOST or f"factorio-{slot}"
+        udp_port = config.get_udp_port(slot)
+        host_port = config.VTUBER_STREAM_BASE_PORT + slot
+        print(
+            f"[streaming] calling stream-agent to spawn {container_name} "
+            f"({server_host}:{udp_port} -> :{host_port})",
+            flush=True,
+        )
+        try:
+            extra_env = {
+                "BROKER_URL": "http://broker:8080",
+                "RUN_ID": run_id,
+                "ANTHROPIC_API_KEY": config.ANTHROPIC_API_KEY,
+                "ELEVENLABS_API_KEY": config.ELEVENLABS_API_KEY,
+                "ELEVENLABS_VOICE_ID": config.ELEVENLABS_VOICE_ID,
+            }
+            if rtmp_url:
+                extra_env["RTMP_URL"] = rtmp_url
+            if stream_key:
+                extra_env["STREAM_KEY"] = stream_key
+            async with httpx.AsyncClient() as client:
+                r = await client.post(
+                    f"{config.STREAM_AGENT_URL}/spawn/stream-client",
+                    json={
+                        "container_name": container_name,
+                        "factorio_host": server_host,
+                        "factorio_port": udp_port,
+                        "host_port": host_port,
+                        "title": f"ClaudeTorio VTuber Slot {slot}",
+                        "image": config.VTUBER_STREAM_CLIENT_IMAGE,
+                        "client_volume": config.FACTORIO_CLIENT_VOLUME,
+                        "extra_env": extra_env,
+                    },
+                    headers={"X-Stream-Agent-Key": config.STREAM_AGENT_KEY},
+                    timeout=130.0,
+                )
+            if r.status_code == 200:
+                print(f"[streaming] stream-agent spawned {container_name}", flush=True)
+                return "remote"
+            else:
+                print(
+                    f"[streaming] stream-agent returned {r.status_code} for {container_name}: {r.text}",
+                    flush=True,
+                )
+                return None
+        except Exception as e:
+            print(f"[streaming] ERROR calling stream-agent for {container_name}: {e}", flush=True)
+            return None
+
+    # Local path (dev / no stream-agent configured)
+    if not config.FACTORIO_CLIENT_PATH and not config.FACTORIO_CLIENT_VOLUME:
+        print("[streaming] WARNING: vtuber streaming disabled — FACTORIO_CLIENT_PATH/VOLUME not set", flush=True)
+        return None
+
+    await _stop_container(container_name)
+
+    network = config.STREAM_CLIENT_NETWORK or config.DOCKER_NETWORK
+    server_host = factorio_host or f"factorio-{slot}"
+    udp_port = config.get_udp_port(slot)
+
+    env_vars = {
+        "SERVER_HOST": server_host,
+        "SERVER_PORT": str(udp_port),
+        "BROKER_URL": "http://broker:8080",
+        "RUN_ID": run_id,
+        "ANTHROPIC_API_KEY": config.ANTHROPIC_API_KEY,
+        "ELEVENLABS_API_KEY": config.ELEVENLABS_API_KEY,
+        "ELEVENLABS_VOICE_ID": config.ELEVENLABS_VOICE_ID,
+        "DISPLAY_WIDTH": "1920",
+        "DISPLAY_HEIGHT": "1080",
+        "PUID": "1000",
+        "PGID": "1000",
+        "TZ": "UTC",
+    }
+    if rtmp_url:
+        env_vars["RTMP_URL"] = rtmp_url
+    if stream_key:
+        env_vars["STREAM_KEY"] = stream_key
+
+    cmd = ["docker", "run", "--shm-size", "2g", "--platform", "linux/amd64", "-d", "--rm", "--name", container_name]
+    if network:
+        cmd += ["--network", network]
+    for k, v in env_vars.items():
+        cmd += ["-e", f"{k}={v}"]
+
+    if config.FACTORIO_CLIENT_VOLUME:
+        cmd += ["-v", f"{config.FACTORIO_CLIENT_VOLUME}:/opt/factorio"]
+    elif config.FACTORIO_CLIENT_PATH:
+        cmd += ["-v", f"{config.FACTORIO_CLIENT_PATH}:/opt/factorio"]
+
+    host_port = config.VTUBER_STREAM_BASE_PORT + slot
+    cmd += ["-p", f"{host_port}:3000"]
+    cmd += [config.VTUBER_STREAM_CLIENT_IMAGE]
+
+    print(f"[streaming] Spawning {container_name}: SERVER_HOST={server_host} SERVER_PORT={udp_port}", flush=True)
+
+    proc = await asyncio.create_subprocess_exec(
+        *cmd,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    stdout, stderr = await proc.communicate()
+
+    if proc.returncode != 0:
+        err = (stderr or stdout or b"").decode().strip()
+        print(f"[streaming] ERROR spawning {container_name}: {err}", flush=True)
+        return None
+
+    container_id = stdout.decode().strip()[:12]
+    print(f"[streaming] Started {container_name} (container {container_id})", flush=True)
+    return container_id
+
+
 async def wait_for_stream_client(slot: int, timeout: int = 120) -> bool:
     """Poll until the stream-client KasmVNC port is accepting connections."""
     if config.STREAM_AGENT_URL:

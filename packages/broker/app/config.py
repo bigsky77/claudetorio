@@ -57,6 +57,15 @@ class Config:
     GAME_SERVER_PUBLIC_HOST = os.getenv("GAME_SERVER_PUBLIC_HOST", "")    # 157.254.222.103
     STREAM_SERVER_PUBLIC_HOST = os.getenv("STREAM_SERVER_PUBLIC_HOST", "")  # 157.254.222.104
     STREAM_DOMAIN = os.getenv("STREAM_DOMAIN", "")  # e.g. "stream.claudetorio.ai"; empty = port-based (dev)
+    # API keys (forwarded to worker/vtuber containers)
+    ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+    # VTuber stream-client containers
+    VTUBER_STREAM_CLIENT_IMAGE = os.getenv("VTUBER_STREAM_CLIENT_IMAGE", "claudetorio-vtuber-stream-client")
+    VTUBER_STREAM_BASE_PORT = int(os.getenv("VTUBER_STREAM_BASE_PORT", "5002"))
+    VTUBER_REPLAY_STREAM_BASE_PORT = int(os.getenv("VTUBER_REPLAY_STREAM_BASE_PORT", "6002"))
+    # Keys forwarded to vtuber containers
+    ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY", "")
+    ELEVENLABS_VOICE_ID = os.getenv("ELEVENLABS_VOICE_ID", "jqcCZkN6Knx8BJ5TBdYR")
 
     @classmethod
     def get_udp_port(cls, slot: int) -> int:
@@ -113,6 +122,17 @@ class Config:
             "stream_port": port,
             "stream_scheme": scheme,
         }
+
+    @classmethod
+    def get_vtuber_stream_url(cls, slot: int) -> str:
+        """Public URL for the vtuber-stream-client for a replay slot."""
+        parsed = urlparse(cls.STREAM_URL)
+        scheme = parsed.scheme or "http"
+        if cls.STREAM_DOMAIN:
+            return f"{scheme}://cvr{slot}.{cls.STREAM_DOMAIN}/"
+        parsed_host = parsed.hostname or parsed.path
+        host = cls.STREAM_PUBLIC_HOST or parsed_host or "localhost"
+        return f"{scheme}://{host}:{cls.VTUBER_REPLAY_STREAM_BASE_PORT + slot}/"
 
 
 config = Config()

@@ -15,12 +15,31 @@ async function proxyTobroker(
 
   try {
     const { runId } = await params;
-    const target = `${brokerUrl}/api/runs/${runId}/replay`;
+
+    // Forward query params (vtuber, rtmp_url, stream_key) to the broker
+    const incomingParams = request.nextUrl.searchParams;
+    const qs = incomingParams.toString();
+    const target = `${brokerUrl}/api/runs/${runId}/replay${qs ? `?${qs}` : ''}`;
     console.log(`[api/runs/replay] ${method} ${target}`);
+
+    // Forward JSON body if present (contains API key overrides)
+    let body: string | undefined;
+    let contentType: string | undefined;
+    if (method === 'POST') {
+      const text = await request.text();
+      if (text) {
+        body = text;
+        contentType = 'application/json';
+      }
+    }
 
     const res = await fetch(target, {
       method,
-      headers: { 'Authorization': `Bearer ${adminKey}` },
+      headers: {
+        'Authorization': `Bearer ${adminKey}`,
+        ...(contentType ? { 'Content-Type': contentType } : {}),
+      },
+      ...(body ? { body } : {}),
     });
 
     const text = await res.text();

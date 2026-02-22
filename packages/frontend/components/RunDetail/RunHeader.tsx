@@ -30,24 +30,18 @@ export default function RunHeader({
   run,
   isActive,
   onStop,
-  onStartWorker,
   onStartReplay,
-  onStartReplayWorker,
   onStopReplay,
 }: {
   run: RunInfo;
   isActive?: boolean;
   onStop?: () => Promise<void>;
-  onStartWorker?: () => Promise<void>;
   onStartReplay?: () => Promise<void>;
-  onStartReplayWorker?: () => Promise<void>;
   onStopReplay?: () => Promise<void>;
 }) {
   const badgeClass = STATUS_COLORS[run.status] ?? 'bg-gray-700 text-gray-300';
   const [stopping, setStopping] = useState(false);
-  const [starting, setStarting] = useState(false);
   const [startingReplay, setStartingReplay] = useState(false);
-  const [startingReplayWorker, setStartingReplayWorker] = useState(false);
   const [stoppingReplay, setStoppingReplay] = useState(false);
 
   async function handleStop() {
@@ -55,13 +49,6 @@ export default function RunHeader({
     setStopping(true);
     await onStop();
     setStopping(false);
-  }
-
-  async function handleStartWorker() {
-    if (!onStartWorker) return;
-    setStarting(true);
-    await onStartWorker();
-    setStarting(false);
   }
 
   async function handleStartReplay() {
@@ -76,13 +63,6 @@ export default function RunHeader({
     setStoppingReplay(true);
     await onStopReplay();
     setStoppingReplay(false);
-  }
-
-  async function handleStartReplayWorker() {
-    if (!onStartReplayWorker) return;
-    setStartingReplayWorker(true);
-    await onStartReplayWorker();
-    setStartingReplayWorker(false);
   }
 
   return (
@@ -102,22 +82,13 @@ export default function RunHeader({
           {run.status}
         </span>
         <div className="ml-auto flex flex-wrap justify-end gap-2">
-          {onStartWorker && (
-            <button
-              onClick={handleStartWorker}
-              disabled={starting}
-              className="px-3 py-1.5 bg-green-700/90 hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed rounded text-xs sm:text-sm font-medium transition-colors"
-            >
-              {starting ? 'Starting...' : 'Start Worker'}
-            </button>
-          )}
-          {isActive && onStop && !onStartWorker && (
+          {isActive && onStop && (
             <button
               onClick={handleStop}
               disabled={stopping}
               className="px-3 py-1.5 bg-red-700/90 hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed rounded text-xs sm:text-sm font-medium transition-colors"
             >
-              {stopping ? 'Stopping...' : 'Stop Run'}
+              {stopping ? 'Stopping...' : '⏹ Stop Run'}
             </button>
           )}
           {onStopReplay && (
@@ -126,7 +97,7 @@ export default function RunHeader({
               disabled={stoppingReplay}
               className="px-3 py-1.5 bg-orange-700/90 hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed rounded text-xs sm:text-sm font-medium transition-colors"
             >
-              {stoppingReplay ? 'Stopping...' : 'Stop Stream'}
+              {stoppingReplay ? 'Stopping...' : '⏹ Stop Replay'}
             </button>
           )}
           {onStartReplay && !onStopReplay && (
@@ -135,16 +106,7 @@ export default function RunHeader({
               disabled={startingReplay}
               className="px-3 py-1.5 bg-blue-700/90 hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed rounded text-xs sm:text-sm font-medium transition-colors"
             >
-              {startingReplay ? 'Starting...' : 'Watch Replay'}
-            </button>
-          )}
-          {onStartReplayWorker && (
-            <button
-              onClick={handleStartReplayWorker}
-              disabled={startingReplayWorker}
-              className="px-3 py-1.5 bg-indigo-700/90 hover:bg-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed rounded text-xs sm:text-sm font-medium transition-colors"
-            >
-              {startingReplayWorker ? 'Starting...' : 'Start Replay Worker'}
+              {startingReplay ? 'Starting...' : '▶ Watch Replay'}
             </button>
           )}
         </div>

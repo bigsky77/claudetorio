@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>VTuber Overlay</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    html, body {
+      width: 1920px;
+      height: 1080px;
+      overflow: hidden;
+      background: transparent;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+
+    /* Full-screen overlay — sits on top of Xvfb desktop, pointer events disabled */
+    #overlay {
+      position: fixed;
+      inset: 0;
+      width: 1920px;
+      height: 1080px;
+      pointer-events: none;
+      display: flex;
+    }
+
+    /* Left: transparent game area (Factorio window shows through) */
+    #game-area {
+      width: 1430px;
+      height: 1080px;
+      flex-shrink: 0;
+      background: transparent;
+      position: relative;
+    }
+
+    /* Avatar iframe anchored to bottom-right of game area */
+    #avatar-container {
+      position: absolute;
+      bottom: 0;
+      right: 0;
+      width: 480px;
+      height: 360px;
+      pointer-events: none;
+    }
+
+    #avatar-iframe {
+      width: 100%;
+      height: 100%;
+      border: none;
+      background: transparent;
+    }
+
+    /* Right: chat panel */
+    #chat-panel {
+      width: 490px;
+      height: 1080px;
+      background: rgba(10, 8, 20, 0.82);
+      border-left: 1px solid rgba(140, 100, 220, 0.4);
+      display: flex;
+      flex-direction: column;
+      pointer-events: none;
+    }
+
+    #chat-header {
+      padding: 14px 16px;
+      background: rgba(80, 40, 140, 0.6);
+      border-bottom: 1px solid rgba(140, 100, 220, 0.4);
+      font-size: 14px;
+      font-weight: 600;
+      color: #c8a8f0;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    #chat-body {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: rgba(180, 160, 220, 0.5);
+      font-size: 13px;
+      text-align: center;
+      padding: 20px;
+    }
+
+    #chat-iframe-container {
+      width: 100%;
+      flex: 1;
+    }
+
+    #chat-iframe {
+      width: 100%;
+      height: 100%;
+      border: none;
+    }
+
+    /* Subtle top bar branding */
+    #top-bar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 1430px;
+      height: 36px;
+      background: linear-gradient(180deg, rgba(10, 8, 25, 0.7) 0%, transparent 100%);
+      pointer-events: none;
+      display: flex;
+      align-items: center;
+      padding: 0 14px;
+      gap: 10px;
+    }
+
+    #brand {
+      font-size: 13px;
+      font-weight: 700;
+      color: rgba(180, 140, 255, 0.9);
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+
+    #live-badge {
+      font-size: 10px;
+      font-weight: 700;
+      background: #e74c3c;
+      color: #fff;
+      padding: 2px 7px;
+      border-radius: 3px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+  </style>
+</head>
+<body>
+  <div id="overlay">
+    <!-- Left: transparent game area -->
+    <div id="game-area">
+      <!-- Avatar iframe (bottom-right of game area) -->
+      <div id="avatar-container">
+        <iframe
+          id="avatar-iframe"
+          src="http://localhost:12393/embed.html"
+          allow="autoplay"
+          sandbox="allow-scripts allow-same-origin"
+        ></iframe>
+      </div>
+    </div>
+
+    <!-- Right: chat panel -->
+    <div id="chat-panel">
+      <div id="chat-header">Chat</div>
+      <div id="chat-body" id="chat-placeholder">
+        <span>Chat coming soon</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Top-left branding bar -->
+  <div id="top-bar">
+    <span id="brand">Claudetorio</span>
+    <span id="live-badge">Replay</span>
+  </div>
+
+  <script>
+    // Replace avatar port if AVATAR_PORT was injected at container startup
+    // (entrypoint.sh can sed-replace the port before Chrome loads this file)
+
+    // Load chat embed if CHAT_EMBED_URL is set (replaced by entrypoint.sh)
+    const CHAT_EMBED_URL = '__CHAT_EMBED_URL__';
+    if (CHAT_EMBED_URL && CHAT_EMBED_URL !== '__CHAT_EMBED_URL__') {
+      const chatBody = document.getElementById('chat-body');
+      chatBody.innerHTML = '<iframe id="chat-iframe" src="' + CHAT_EMBED_URL + '" allow="autoplay"></iframe>';
+    }
+
+    // Update avatar port
+    const AVATAR_PORT = '__AVATAR_PORT__';
+    if (AVATAR_PORT && AVATAR_PORT !== '__AVATAR_PORT__') {
+      const iframe = document.getElementById('avatar-iframe');
+      iframe.src = 'http://localhost:' + AVATAR_PORT + '/embed.html';
+    }
+
+    // Poll for avatar server readiness and reload iframe if it fails to load
+    const avatarIframe = document.getElementById('avatar-iframe');
+    avatarIframe.addEventListener('error', () => {
+      setTimeout(() => {
+        avatarIframe.src = avatarIframe.src;
+      }, 5000);
+    });
+  </script>
+</body>
+</html>

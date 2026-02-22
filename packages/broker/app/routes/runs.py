@@ -1,6 +1,7 @@
 import asyncio
 import uuid
 from datetime import datetime
+from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,7 +10,7 @@ from ..config import config
 from ..db import async_session_factory
 from ..dependencies import get_db, get_app_state, require_admin_key
 from ..models import Run, RunStep
-from ..schemas import CreateRunRequest, CreateRunResponse, RunInfo, RunStepInfo
+from ..schemas import CreateRunRequest, CreateRunResponse, RunInfo, RunStepInfo, ReplayStartBody
 from ..services.factorio import spawn_factorio, stop_factorio, wait_for_factorio, get_map_seed
 from ..services.replay import (
     allocate_replay_slot,
@@ -17,6 +18,7 @@ from ..services.replay import (
     wait_for_replay_factorio,
     spawn_replay_stream_client,
     wait_for_replay_stream_client,
+    spawn_vtuber_replay_stream_client,
     spawn_stream_worker_container,
     stop_replay_containers,
 )
@@ -135,6 +137,7 @@ async def list_runs(
             final_score=r.final_score,
             step_count=step_counts.get(r.run_id, 0),
             stream_url=app_state.active_replays[r.run_id]["stream_url"] if r.run_id in app_state.active_replays else None,
+            vtuber_stream_url=app_state.active_replays[r.run_id].get("vtuber_stream_url") if r.run_id in app_state.active_replays else None,
             replay_worker_running=(
                 bool(app_state.active_replays[r.run_id].get("proc"))
                 and app_state.active_replays[r.run_id]["proc"].returncode is None
@@ -175,6 +178,7 @@ async def get_run(run_id: str, db: AsyncSession = Depends(get_db), app_state: Ap
         final_score=run.final_score,
         step_count=step_count,
         stream_url=replay["stream_url"] if replay else None,
+        vtuber_stream_url=replay.get("vtuber_stream_url") if replay else None,
         replay_worker_running=(bool(replay.get("proc")) and replay["proc"].returncode is None) if replay else None,
         stream_host=None,
         stream_port=None,
@@ -375,6 +379,10 @@ async def stop_run(
 @router.post("/api/runs/{run_id}/replay", dependencies=[Depends(require_admin_key)])
 async def start_replay(
     run_id: str,
+    vtuber: bool = Query(True),
+    rtmp_url: Optional[str] = Query(None),
+    stream_key: Optional[str] = Query(None),
+    body: Optional[ReplayStartBody] = None,
     db: AsyncSession = Depends(get_db),
     app_state: AppState = Depends(get_app_state),
 ):
@@ -408,7 +416,7 @@ async def start_replay(
         await stop_replay_containers(run_id, slot)
         raise HTTPException(503, "Replay Factorio server failed to become ready")
 
-    # Spawn replay stream client
+    # Spawn plain replay stream client
     stream_ok = await spawn_replay_stream_client(run_id, slot)
     if stream_ok:
         stream_ready = await wait_for_replay_stream_client(run_id, slot)
@@ -418,9 +426,32 @@ async def start_replay(
     endpoint = config.get_replay_stream_public_endpoint(slot)
     stream_url = str(endpoint["stream_url"])
 
-    app_state.active_replays[run_id] = {"slot": slot, "stream_url": stream_url, "proc": None}
+    # Optionally spawn vtuber-stream-client for avatar narration
+    # Per-request API keys override broker env vars (allows frontend to pass user-supplied keys)
+    anthropic_key = (body.anthropic_api_key if body else None) or None
+    elevenlabs_key = (body.elevenlabs_api_key if body else None) or None
 
-    return {"run_id": run_id, "stream_url": stream_url}
+    vtuber_stream_url = None
+    if vtuber:
+        vtuber_ok = await spawn_vtuber_replay_stream_client(
+            run_id, slot, rtmp_url, stream_key,
+            anthropic_api_key=anthropic_key,
+            elevenlabs_api_key=elevenlabs_key,
+        )
+        if vtuber_ok:
+            vtuber_stream_url = config.get_vtuber_stream_url(slot)
+            print(f"[replay {run_id}] VTuber stream: {vtuber_stream_url}", flush=True)
+        else:
+            print(f"[replay {run_id}] WARNING: vtuber-stream-client failed to spawn", flush=True)
+
+    app_state.active_replays[run_id] = {
+        "slot": slot,
+        "stream_url": stream_url,
+        "vtuber_stream_url": vtuber_stream_url,
+        "proc": None,
+    }
+
+    return {"run_id": run_id, "stream_url": stream_url, "vtuber_stream_url": vtuber_stream_url}
 
 
 @router.post("/api/runs/{run_id}/replay/start-worker", dependencies=[Depends(require_admin_key)])

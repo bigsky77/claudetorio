@@ -4,7 +4,7 @@ import httpx
 from mcrcon import MCRcon
 
 from ..config import config
-from .streaming import _stop_container, _stop_remote_container
+from .streaming import _stop_container, _stop_remote_container, spawn_vtuber_stream_client
 
 
 def allocate_replay_slot(active_replays: dict) -> int | None:
@@ -257,6 +257,134 @@ async def wait_for_replay_stream_client(run_id: str, slot: int, timeout: int = 9
     return False
 
 
+async def spawn_vtuber_replay_stream_client(
+    run_id: str,
+    slot: int,
+    rtmp_url: str | None = None,
+    stream_key: str | None = None,
+    anthropic_api_key: str | None = None,
+    elevenlabs_api_key: str | None = None,
+) -> bool:
+    """Spawn a vtuber-stream-client container for the replay.
+
+    Returns True if the container started successfully.
+    """
+    if config.STREAM_AGENT_URL:
+        factorio_host = config.GAME_SERVER_PUBLIC_HOST
+        udp_port = config.REPLAY_UDP_BASE_PORT + slot
+        host_port = config.VTUBER_REPLAY_STREAM_BASE_PORT + slot
+        container_name = f"vtuber-stream-client-replay-{slot}"
+        print(
+            f"[replay] calling stream-agent to spawn {container_name} "
+            f"({factorio_host}:{udp_port} -> :{host_port})",
+            flush=True,
+        )
+        try:
+            extra_env = {
+                "BROKER_URL": "http://broker:8080",
+                "RUN_ID": run_id,
+                "ANTHROPIC_API_KEY": anthropic_api_key or config.ANTHROPIC_API_KEY,
+                "ELEVENLABS_API_KEY": elevenlabs_api_key or config.ELEVENLABS_API_KEY,
+                "ELEVENLABS_VOICE_ID": config.ELEVENLABS_VOICE_ID,
+                "STEP_INTERVAL": str(config.STEP_INTERVAL),
+            }
+            if rtmp_url:
+                extra_env["RTMP_URL"] = rtmp_url
+            if stream_key:
+                extra_env["STREAM_KEY"] = stream_key
+            async with httpx.AsyncClient() as client:
+                r = await client.post(
+                    f"{config.STREAM_AGENT_URL}/spawn/stream-client",
+                    json={
+                        "container_name": container_name,
+                        "factorio_host": factorio_host,
+                        "factorio_port": udp_port,
+                        "host_port": host_port,
+                        "title": f"ClaudeTorio VTuber Replay {run_id}",
+                        "image": config.VTUBER_STREAM_CLIENT_IMAGE,
+                        "client_volume": config.FACTORIO_CLIENT_VOLUME,
+                        "extra_env": extra_env,
+                    },
+                    headers={"X-Stream-Agent-Key": config.STREAM_AGENT_KEY},
+                    timeout=130.0,
+                )
+            if r.status_code == 200:
+                print(f"[replay] stream-agent spawned {container_name}", flush=True)
+                return True
+            else:
+                print(
+                    f"[replay] stream-agent returned {r.status_code} for {container_name}: {r.text}",
+                    flush=True,
+                )
+                return False
+        except Exception as e:
+            print(f"[replay] ERROR calling stream-agent for {container_name}: {e}", flush=True)
+            return False
+
+    # Local path
+    if not config.FACTORIO_CLIENT_PATH and not config.FACTORIO_CLIENT_VOLUME:
+        print("[replay] WARNING: vtuber streaming disabled — FACTORIO_CLIENT_PATH/VOLUME not set", flush=True)
+        return False
+
+    container_name = f"vtuber-stream-client-replay-{slot}"
+    await _stop_container(container_name)
+
+    network = config.STREAM_CLIENT_NETWORK or config.DOCKER_NETWORK
+    factorio_host = f"factorio-replay-{run_id}"
+    udp_port = config.REPLAY_UDP_BASE_PORT + slot
+    host_port = config.VTUBER_REPLAY_STREAM_BASE_PORT + slot
+
+    env_vars = {
+        "SERVER_HOST": factorio_host,
+        "SERVER_PORT": str(udp_port),
+        "BROKER_URL": "http://broker:8080",
+        "RUN_ID": run_id,
+        "ANTHROPIC_API_KEY": anthropic_api_key or config.ANTHROPIC_API_KEY,
+        "ELEVENLABS_API_KEY": elevenlabs_api_key or config.ELEVENLABS_API_KEY,
+        "ELEVENLABS_VOICE_ID": config.ELEVENLABS_VOICE_ID,
+        "STEP_INTERVAL": str(config.STEP_INTERVAL),
+        "DISPLAY_WIDTH": "1920",
+        "DISPLAY_HEIGHT": "1080",
+        "PUID": "1000",
+        "PGID": "1000",
+        "TZ": "UTC",
+    }
+    if rtmp_url:
+        env_vars["RTMP_URL"] = rtmp_url
+    if stream_key:
+        env_vars["STREAM_KEY"] = stream_key
+
+    cmd = ["docker", "run", "--shm-size", "2g", "--platform", "linux/amd64", "-d", "--rm", "--name", container_name]
+    if network:
+        cmd += ["--network", network]
+    for k, v in env_vars.items():
+        cmd += ["-e", f"{k}={v}"]
+
+    if config.FACTORIO_CLIENT_VOLUME:
+        cmd += ["-v", f"{config.FACTORIO_CLIENT_VOLUME}:/opt/factorio"]
+    elif config.FACTORIO_CLIENT_PATH:
+        cmd += ["-v", f"{config.FACTORIO_CLIENT_PATH}:/opt/factorio"]
+
+    cmd += ["-p", f"{host_port}:3000"]
+    cmd += [config.VTUBER_STREAM_CLIENT_IMAGE]
+
+    print(f"[replay] Spawning {container_name}: SERVER_HOST={factorio_host} port={host_port}", flush=True)
+
+    proc = await asyncio.create_subprocess_exec(
+        *cmd,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    stdout, stderr = await proc.communicate()
+    if proc.returncode != 0:
+        err = (stderr or stdout or b"").decode().strip()
+        print(f"[replay] ERROR spawning {container_name}: {err}", flush=True)
+        return False
+
+    print(f"[replay] Started {container_name}", flush=True)
+    return True
+
+
 async def spawn_stream_worker_container(
     run_id: str,
     slot: int,
@@ -307,13 +435,20 @@ async def stop_replay_containers(run_id: str, slot: int | None = None) -> None:
     for name in [f"stream-worker-{run_id}", f"factorio-replay-{run_id}"]:
         await _stop_container(name)
 
-    # stream-client-replay is named by slot so Caddy can route to it
     if slot is not None:
+        # stream-client-replay is named by slot so Caddy can route to it
         stream_client_name = f"stream-client-replay-{slot}"
         if config.STREAM_AGENT_URL:
             await _stop_remote_container(stream_client_name)
         else:
             await _stop_container(stream_client_name)
+
+        # vtuber-stream-client-replay (may or may not have been spawned)
+        vtuber_client_name = f"vtuber-stream-client-replay-{slot}"
+        if config.STREAM_AGENT_URL:
+            await _stop_remote_container(vtuber_client_name)
+        else:
+            await _stop_container(vtuber_client_name)
 
     # Remove the factorio replay container (it has no --rm)
     await _remove_container(f"factorio-replay-{run_id}")

@@ -19,7 +19,6 @@ export default function RunDetailClient({
 }) {
   const { run, steps, isActive, refetch } = useRunPolling(initialRun, initialSteps);
   const [replayUrl, setReplayUrl] = useState<string | null>(run.stream_url ?? initialStreamUrl ?? null);
-  const [replayWorkerStarted, setReplayWorkerStarted] = useState(false);
   const [runtimeDisplay, setRuntimeDisplay] = useState<{
     text: string;
     tone: RuntimeDisplayPayload['tone'];
@@ -32,18 +31,13 @@ export default function RunDetailClient({
     await refetch();
   }
 
-  async function handleStartReplay() {
+  async function handleWatchReplay() {
     const result = await startReplay(run.run_id);
-    if (result?.stream_url) {
-      setReplayUrl(result.stream_url);
-      setReplayWorkerStarted(false);
-    }
-  }
-
-  async function handleStartReplayWorker() {
-    const result = await startReplayWorker(run.run_id);
-    if (result?.status === 'running') {
-      setReplayWorkerStarted(true);
+    if (result) {
+      // Prefer vtuber stream when available
+      setReplayUrl(result.vtuber_stream_url || result.stream_url);
+      // Automatically start the replay worker
+      await startReplayWorker(run.run_id);
       await refetch();
     }
   }
@@ -52,7 +46,6 @@ export default function RunDetailClient({
     await stopReplayWorker(run.run_id);
     await stopReplay(run.run_id);
     setReplayUrl(null);
-    setReplayWorkerStarted(false);
   }
 
   const handleDisplayChange = useCallback((payload: RuntimeDisplayPayload) => {
@@ -79,8 +72,7 @@ export default function RunDetailClient({
               run={run}
               isActive={isActive}
               onStop={handleStop}
-              onStartReplay={!replayUrl && run.step_count > 0 ? handleStartReplay : undefined}
-              onStartReplayWorker={replayUrl && !replayWorkerStarted ? handleStartReplayWorker : undefined}
+              onStartReplay={!replayUrl && run.step_count > 0 ? handleWatchReplay : undefined}
               onStopReplay={replayUrl ? handleStopReplay : undefined}
             />
           </div>
@@ -88,11 +80,9 @@ export default function RunDetailClient({
           {runtimeDisplay && (
             <pre
               key={runtimeDisplay.displayKey}
-              className={`runtime-overlay-text ${
-                runtimeDisplay.fadeMode === 'slow' ? 'runtime-fade-slow' : 'runtime-fade-normal'
-              } ${
-                runtimeDisplay.tone === 'error' ? 'text-red-300' : 'text-emerald-300'
-              }`}
+              className={`runtime-overlay-text ${runtimeDisplay.fadeMode === 'slow' ? 'runtime-fade-slow' : 'runtime-fade-normal'
+                } ${runtimeDisplay.tone === 'error' ? 'text-red-300' : 'text-emerald-300'
+                }`}
             >
               {runtimeDisplay.text}
             </pre>
