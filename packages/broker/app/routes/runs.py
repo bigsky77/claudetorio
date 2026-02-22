@@ -74,7 +74,7 @@ async def _start_run_worker(run: Run, env_vars: dict, app_state: AppState):
     safe_keys = {k: (v[:4] + "..." if "KEY" in k or "PASSWORD" in k else v) for k, v in env_vars.items()}
     print(f"[run {run.run_id}] start-worker env_vars: {safe_keys}", flush=True)
 
-    cmd = ["docker", "run", "--rm", "--name", f"run-worker-{run.run_id}"]
+    cmd = ["docker", "run", "--platform", "linux/amd64", "--rm", "--name", f"run-worker-{run.run_id}"]
     if config.DOCKER_NETWORK:
         cmd += ["--network", config.DOCKER_NETWORK]
     for k, v in env_vars.items():

@@ -80,7 +80,7 @@ async def spawn_stream_client(
         "TZ": "UTC",
     }
 
-    cmd = ["docker", "run", "-d", "--rm", "--name", container_name]
+    cmd = ["docker", "run", "--platform", "linux/amd64", "-d", "--rm", "--name", container_name]
 
     if network:
         cmd += ["--network", network]

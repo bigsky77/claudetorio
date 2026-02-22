@@ -24,7 +24,12 @@ async def init_db():
         )
         await conn.execute(
             __import__("sqlalchemy").text(
-                "ALTER TABLE runs ADD COLUMN IF NOT EXISTS map_seed INTEGER"
+                "ALTER TABLE runs ADD COLUMN IF NOT EXISTS map_seed BIGINT"
+            )
+        )
+        await conn.execute(
+            __import__("sqlalchemy").text(
+                "ALTER TABLE runs ALTER COLUMN map_seed TYPE BIGINT"
             )
         )
 

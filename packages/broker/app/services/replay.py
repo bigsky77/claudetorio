@@ -34,7 +34,7 @@ async def spawn_replay_factorio(run_id: str, slot: int, map_seed: int | None = N
     udp_port = config.REPLAY_UDP_BASE_PORT + slot
     rcon_port = config.REPLAY_RCON_BASE_PORT + slot
 
-    cmd = ["docker", "run", "-d", "--name", container_name, "--entrypoint", ""]
+    cmd = ["docker", "run", "--platform", "linux/amd64", "-d", "--name", container_name, "--entrypoint", ""]
 
     if config.DOCKER_NETWORK:
         cmd += ["--network", config.DOCKER_NETWORK]
@@ -205,7 +205,7 @@ async def spawn_replay_stream_client(run_id: str, slot: int) -> bool:
         "TZ": "UTC",
     }
 
-    cmd = ["docker", "run", "-d", "--rm", "--name", container_name]
+    cmd = ["docker", "run", "--platform", "linux/amd64", "-d", "--rm", "--name", container_name]
     if network:
         cmd += ["--network", network]
     for k, v in env_vars.items():
@@ -270,7 +270,7 @@ async def spawn_stream_worker_container(
     rcon_port = config.REPLAY_RCON_BASE_PORT + slot
     server_host = f"factorio-replay-{run_id}"
 
-    cmd = ["docker", "run", "--rm", "--name", container_name]
+    cmd = ["docker", "run", "--platform", "linux/amd64", "--rm", "--name", container_name]
     if config.DOCKER_NETWORK:
         cmd += ["--network", config.DOCKER_NETWORK]
 

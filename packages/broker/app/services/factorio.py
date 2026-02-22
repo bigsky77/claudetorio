@@ -31,7 +31,7 @@ async def spawn_factorio(slot: int) -> str | None:
     # Stop and remove any existing container for this slot (best-effort)
     await stop_factorio(slot)
 
-    cmd = ["docker", "run", "-d", "--name", container_name, "--entrypoint", ""]
+    cmd = ["docker", "run", "--platform", "linux/amd64", "-d", "--name", container_name, "--entrypoint", ""]
 
     if config.DOCKER_NETWORK:
         cmd += ["--network", config.DOCKER_NETWORK]
