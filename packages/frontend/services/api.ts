@@ -110,6 +110,28 @@ export function getDownloadUrl(sessionId: string): string {
   return `${API_BASE}/api/session/${sessionId}/download`;
 }
 
+export async function fetchRuns(options?: {
+  status?: string;
+  limit?: number;
+  baseUrl?: string;
+}): Promise<RunInfo[]> {
+  try {
+    const base = options?.baseUrl || API_BASE;
+    const params = new URLSearchParams();
+    if (options?.status) params.set('status', options.status);
+    if (options?.limit != null) params.set('limit', String(options.limit));
+    const qs = params.toString();
+
+    const res = await fetch(`${base}/api/runs${qs ? `?${qs}` : ''}`, {
+      cache: 'no-store',
+    });
+    if (res.ok) return res.json();
+    return [];
+  } catch {
+    return [];
+  }
+}
+
 export async function fetchRunInfo(runId: string, baseUrl?: string): Promise<RunInfo | null> {
   try {
     const base = baseUrl || API_BASE;
