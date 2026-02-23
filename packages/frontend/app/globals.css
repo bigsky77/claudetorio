@@ -1,28 +1,37 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
+  --color-background: #181818;
+  --color-foreground: #ededed;
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+
+  /* Gray depth tiers */
+  --color-surface-0: #181818;
+  --color-surface-1: #222222;
+  --color-surface-2: #2A2A2A;
+  --color-surface-3: #333333;
+
+  /* Accent colors */
+  --color-accent-green: #00E87B;
+  --color-accent-blue: #4D9EFF;
+  --color-accent-amber: #FFB020;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+:root {
+  --surface-0: #181818;
+  --surface-1: #222222;
+  --surface-2: #2A2A2A;
+  --surface-3: #333333;
+  --accent-green: #00E87B;
+  --accent-blue: #4D9EFF;
+  --accent-amber: #FFB020;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-body), monospace;
 }
 
 .matrix-panel {
@@ -84,4 +93,16 @@ body {
     bottom: 10.5rem;
     font-size: 0.95rem;
   }
+}
+
+/* Prototype-only background for /stream pages */
+.space-bg {
+  background-color: #7a3bbd;
+  background-image:
+    radial-gradient(circle at 15% 25%, rgba(255,255,255,0.55) 0 1px, transparent 2px),
+    radial-gradient(circle at 75% 35%, rgba(255,255,255,0.35) 0 1px, transparent 2px),
+    radial-gradient(circle at 45% 70%, rgba(255,255,255,0.45) 0 1px, transparent 2px),
+    radial-gradient(circle at 85% 80%, rgba(255,255,255,0.25) 0 1px, transparent 2px),
+    linear-gradient(#7a3bbd, #5f2a96);
+  background-size: 220px 220px, 260px 260px, 240px 240px, 300px 300px, auto;
 }

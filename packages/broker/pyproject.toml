@@ -14,4 +14,5 @@ dependencies = [
     "mcrcon>=0.7.0",
     "websockets>=12.0",
     "httpx>=0.27.0",
+    "anthropic>=0.40.0",
 ]

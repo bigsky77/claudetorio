@@ -126,3 +126,18 @@ class CompleteRunRequest(BaseModel):
     final_score: Optional[float] = None
     status: str = "completed"
     error: Optional[str] = None
+
+
+# --- Chat schemas ---
+
+class ChatMessageCreate(BaseModel):
+    content: str = Field(..., min_length=1, max_length=500)
+    username: str = Field(..., min_length=1, max_length=30)
+
+class ChatMessageResponse(BaseModel):
+    id: int
+    stream_id: str
+    username: str
+    content: str
+    is_ai: bool
+    created_at: datetime
