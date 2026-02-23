@@ -238,18 +238,22 @@ sorted_furnaces = sorted(
     key=lambda e: (e.position.x, e.position.y)
 )
 ```
-## Important Notes
-- Use transport belts to keep burners fed with coal
-- Always inspect game state before making changes
-- Consider long-term implications of actions
-- Maintain working systems, and clear entities that aren't working or don't have a clear purpose
-- Build incrementally and verify each step
-- DON'T REPEAT YOUR PREVIOUS STEPS - just continue from where you left off. Take into account what was the last action that was executed and continue from there. If there was a error previously, do not repeat your last lines - as this will alter the game state unnecessarily.
-- Do not encapsulate your code in a function _unless_ you are writing a utility for future use - just write it as if you were typing directly into the Python interpreter.
-- Your inventory has space for ~2000 items. If it fills up, insert the items into a chest.
-- Ensure that your factory is arranged in a grid, as this will make things easier.
-- Its a lot easier to manually add coil to boilers rather than make a automated system for it. Prefer manual fueling
 """
+
+## extra prompt 
+## Important Notes
+# - Use transport belts to keep burners fed with coal
+# - Always inspect game state before making changes
+# - Consider long-term implications of actions
+# - Maintain working systems, and clear entities that aren't working or don't have a clear purpose
+# - Build incrementally and verify each step
+# - DON'T REPEAT YOUR PREVIOUS STEPS - just continue from where you left off. Take into account what was the last action that was executed and continue from there. If there was a error previously, do not repeat your last lines - as this will alter the game state unnecessarily.
+# - Do not encapsulate your code in a function _unless_ you are writing a utility for future use - just write it as if you were typing directly into the Python interpreter.
+# - Your inventory has space for ~2000 items. If it fills up, insert the items into a chest.
+# - Ensure that your factory is arranged in a grid, as this will make things easier.
+# - Its a lot easier to manually add coil to boilers rather than make a automated system for it. Prefer manual fueling
+
+
 FINAL_INSTRUCTION = "\n\nALWAYS WRITE VALID PYTHON AND REMEMBER MAXIMUM 30 LINES OF CODE PER POLICY. YOUR WEIGHTS WILL BE ERASED IF YOU DON'T USE PYTHON."
 
 VISUAL_INSTRUCTIONS = """
@@ -318,15 +322,42 @@ def parse_vcs_directives(code):
     return directives, '\n'.join(remaining)
 
 
+def _coerce_messages_to_text_only(messages):
+    """Convert multimodal/OpenAI content blocks into plain strings for strict providers."""
+    coerced = []
+    for msg in messages:
+        content = msg.get("content")
+        if isinstance(content, list):
+            text_parts = []
+            for part in content:
+                if not isinstance(part, dict):
+                    text_parts.append(str(part))
+                    continue
+                part_type = part.get("type")
+                if part_type == "text":
+                    text_parts.append(str(part.get("text", "")))
+                elif part_type == "image_url":
+                    text_parts.append("[Image attached]")
+                else:
+                    text_parts.append(str(part))
+            coerced.append({**msg, "content": "\n".join(p for p in text_parts if p)})
+        elif content is None:
+            coerced.append({**msg, "content": ""})
+        else:
+            coerced.append({**msg, "content": str(content)})
+    return coerced
+
+
 async def run(steps: int, broker_url: str, username: str):
     """Main agent loop: claim session, observe-think-act, release."""
     model = os.getenv("MODEL", DEFAULT_MODEL)
     server_host = os.getenv("SERVER_HOST", "localhost")
+    custom_api_enabled = os.getenv("CUSTOM_API", "").lower() in ("true", "1", "yes")
 
     # If CUSTOM_API=true, register a "custom" provider using CUSTOM_API_URL and CUSTOM_API_KEY.
     # This lets you point at any OpenAI-compatible API (Groq, Ollama, vLLM, etc.)
     # without the model name needing to match a built-in provider.
-    if os.getenv("CUSTOM_API", "").lower() in ("true", "1", "yes"):
+    if custom_api_enabled:
         custom_url = os.getenv("CUSTOM_API_URL")
         custom_key = os.getenv("CUSTOM_API_KEY")
         if not custom_url or not custom_key:
@@ -557,7 +588,7 @@ async def run(steps: int, broker_url: str, username: str):
             # Inject map rendering into the last user message (OpenAI image_url format
             # because acall uses AsyncOpenAI / chat.completions.create)
             map_b64 = render_map(instance)
-            if map_b64:
+            if map_b64 and not custom_api_enabled:
                 for i in range(len(messages) - 1, -1, -1):
                     if messages[i]["role"] == "user":
                         text = messages[i]["content"]
@@ -567,6 +598,8 @@ async def run(steps: int, broker_url: str, username: str):
                             {"type": "text", "text": "[Map view around player. Use legend to identify entities.]"},
                         ]
                         break
+            elif custom_api_enabled:
+                messages = _coerce_messages_to_text_only(messages)
 
             total_chars = sum(len(m.get("content", "")) if isinstance(m.get("content"), str) else sum(len(b.get("text", "")) for b in m["content"] if b.get("type") == "text") for m in messages)
             print(f"Context: {len(messages)} messages, ~{total_chars} chars")
