@@ -1,7 +1,7 @@
 import type { StreamDefinition } from '@/lib/streams';
 import StreamPlayer from './StreamPlayer';
 import StreamInfoBar from './StreamInfoBar';
-import ChatPlaceholder from '@/components/Chat/ChatPlaceholder';
+import ChatPanel from '@/components/Chat/ChatPanel';
 
 export default function StreamPage({ stream }: { stream: StreamDefinition }) {
   return (
@@ -25,9 +25,9 @@ export default function StreamPage({ stream }: { stream: StreamDefinition }) {
             <StreamInfoBar stream={stream} />
           </div>
 
-          {/* Right column: chat — stretches to match left column height */}
-          <aside className="w-[340px] shrink-0">
-            <ChatPlaceholder />
+          {/* Right column: chat — fixed height, scrolls internally like YouTube */}
+          <aside className="w-[340px] shrink-0 max-h-[calc(100vh-6rem)] sticky top-6">
+            <ChatPanel streamId={stream.id} />
           </aside>
         </div>
       </div>

@@ -70,6 +70,9 @@ services:
       - "8080:8080"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+      - ../packages/broker/app:/app/app
+      - ../packages/broker/main.py:/app/main.py
+    command: ["uv", "run", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080", "--reload"]
     environment:
       - POSTGRES_HOST=postgres
       - POSTGRES_DB=claudetorio

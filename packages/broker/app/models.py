@@ -161,3 +161,18 @@ class RunStep(Base):
         UniqueConstraint("run_id", "step_idx"),
         Index("idx_run_steps_run", "run_id"),
     )
+
+
+class ChatMessage(Base):
+    __tablename__ = "chat_messages"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    stream_id: Mapped[str] = mapped_column(String, nullable=False)
+    username: Mapped[str] = mapped_column(String, nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    is_ai: Mapped[bool] = mapped_column(Boolean, server_default=text("FALSE"))
+    created_at: Mapped[Optional[datetime]] = mapped_column(server_default=text("NOW()"))
+
+    __table_args__ = (
+        Index("idx_chat_messages_stream_id", "stream_id", "id"),
+    )
