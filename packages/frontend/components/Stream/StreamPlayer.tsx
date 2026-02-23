@@ -7,10 +7,10 @@ export default function StreamPlayer({ stream }: { stream: StreamDefinition }) {
   const source = resolveStreamSource(stream);
 
   return (
-    <div className="border-[10px] border-[#2aa6a6] bg-black/20 overflow-hidden">
+    <div className="bg-surface-2 border border-surface-3 overflow-hidden">
       <div className="aspect-video w-full">
         {!source ? (
-          <div className="w-full h-full flex items-center justify-center text-white/70">
+          <div className="w-full h-full flex items-center justify-center text-white/40 font-[family-name:var(--font-body)] text-sm">
             Stream source not configured. Check NEXT_PUBLIC_STREAM_URL.
           </div>
         ) : source.kind === 'iframe' ? (
