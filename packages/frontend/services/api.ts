@@ -10,6 +10,7 @@ import type {
   EntitiesData,
   RunInfo,
   RunStepInfo,
+  ChatMessage,
 } from '@/interfaces';
 
 export async function fetchLeaderboard(): Promise<LeaderboardEntry[]> {
@@ -237,4 +238,39 @@ export async function stopReplay(runId: string): Promise<void> {
   } catch {
     // best-effort
   }
+}
+
+// --- Chat ---
+
+export async function fetchChatMessages(
+  streamId: string,
+  afterId?: number,
+): Promise<ChatMessage[]> {
+  try {
+    const params = new URLSearchParams();
+    if (afterId != null) params.set('after_id', String(afterId));
+    const qs = params.toString();
+    const res = await fetch(
+      `/api/chat/${streamId}/messages${qs ? `?${qs}` : ''}`,
+      { cache: 'no-store' },
+    );
+    if (res.ok) return res.json();
+    return [];
+  } catch {
+    return [];
+  }
+}
+
+export async function sendChatMessage(
+  streamId: string,
+  content: string,
+  username: string,
+): Promise<ChatMessage[]> {
+  const res = await fetch(`/api/chat/${streamId}/messages`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ content, username }),
+  });
+  if (!res.ok) throw new Error(`Chat send failed: ${res.status}`);
+  return res.json();
 }
