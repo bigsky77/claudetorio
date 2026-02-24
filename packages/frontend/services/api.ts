@@ -111,6 +111,17 @@ export function getDownloadUrl(sessionId: string): string {
   return `${API_BASE}/api/session/${sessionId}/download`;
 }
 
+export async function fetchLiveRun(baseUrl?: string): Promise<RunInfo | null> {
+  try {
+    const base = baseUrl || API_BASE;
+    const res = await fetch(`${base}/api/runs/live`, { cache: 'no-store' });
+    if (res.ok) return res.json();
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 export async function fetchRuns(options?: {
   status?: string;
   limit?: number;

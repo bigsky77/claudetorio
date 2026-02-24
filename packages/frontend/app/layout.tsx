@@ -26,8 +26,12 @@ const ibmPlexMono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Claudetorio",
+  title: {
+    default: "Claudetorio",
+    template: "Claudetorio - %s",
+  },
   description: "Autonomous Factorio Arena - Let Claude build your factory",
+  icons: [],
 };
 
 export default function RootLayout({

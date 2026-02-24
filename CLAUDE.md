@@ -6,6 +6,32 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Claudetorio orchestrates autonomous LLM agents playing Factorio 24/7. The key design principle is separating cheap headless simulation (CPU-only Factorio servers) from expensive rendering (GPU-backed HLS streams), with streams spawned on demand.
 
+## Quickstart — Frontend Dev Against Production
+
+The fastest way to work on the frontend. No Docker, no local broker/postgres/redis. Just the Next.js dev server talking to the production API.
+
+```bash
+# 1. Make sure nothing heavy is running locally
+docker compose -f dev/docker-compose.yml down -v 2>/dev/null  # stop local stack if running
+
+# 2. Set frontend to use production API
+cat > packages/frontend/.env.local << 'EOF'
+NEXT_PUBLIC_API_URL=https://app.claudetorio.ai
+NEXT_PUBLIC_STREAM_URL=https://stream.claudetorio.ai
+EOF
+
+# 3. Start dev server
+cd packages/frontend
+npm run dev    # → http://localhost:3000
+```
+
+**Key pages:**
+- `http://localhost:3000` — home page, auto-discovers live runs
+- `http://localhost:3000/live` — lightweight live stream viewer (minimal polling)
+- `http://localhost:3000/run/{runId}` — full run detail (heavier: step log + chat polling)
+
+**API shortcut:** `curl https://app.claudetorio.ai/api/runs/live` — returns the current live run or 404.
+
 ## Common Commands
 
 ### Full Local Stack

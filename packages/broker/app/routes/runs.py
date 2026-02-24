@@ -164,17 +164,42 @@ async def list_runs(
 
 
 @router.get("/api/runs/live")
-async def get_live_run(db: AsyncSession = Depends(get_db)):
-    """Return the most recent running run, or 404."""
+async def get_live_run(db: AsyncSession = Depends(get_db), app_state: AppState = Depends(get_app_state)):
+    """Return the most recent running run, or 404 if none."""
     run = await db.scalar(
-        select(Run)
-        .where(Run.status == "running")
-        .order_by(Run.created_at.desc())
-        .limit(1)
+        select(Run).where(Run.status == "running").order_by(Run.started_at.desc())
     )
     if not run:
         raise HTTPException(404, "No live run")
-    return {"run_id": run.run_id}
+
+    step_count_result = await db.execute(
+        select(func.count(RunStep.id)).where(RunStep.run_id == run.run_id)
+    )
+    step_count = step_count_result.scalar() or 0
+
+    replay = app_state.active_replays.get(run.run_id)
+
+    return RunInfo(
+        run_id=run.run_id,
+        status=run.status,
+        created_at=run.created_at,
+        started_at=run.started_at,
+        ended_at=run.ended_at,
+        slot=run.slot,
+        task_key=run.task_key,
+        model=run.model,
+        max_steps=run.max_steps,
+        step_timeout_seconds=run.step_timeout_seconds,
+        error=run.error,
+        final_score=run.final_score,
+        step_count=step_count,
+        stream_url=replay["stream_url"] if replay else None,
+        replay_worker_running=(bool(replay.get("proc")) and replay["proc"].returncode is None) if replay else None,
+        rtmp_active=app_state.active_replays[run.run_id].get("rtmp_active") if run.run_id in app_state.active_replays else None,
+        stream_host=None,
+        stream_port=None,
+        stream_scheme=None,
+    )
 
 
 @router.get("/api/runs/{run_id}")
