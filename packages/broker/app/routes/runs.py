@@ -21,9 +21,20 @@ from ..services.replay import (
     stop_replay_containers,
 )
 from ..services.slots import claim_any_free_slot, release_slot_lock
+from ..services.streaming import start_rtmp, stop_rtmp
 from ..state import AppState
 
 router = APIRouter()
+
+
+def _normalize_openai_compatible_base_url(url: str) -> str:
+    """Accept either a base URL or a pasted endpoint URL like /chat/completions."""
+    normalized = url.strip().rstrip("/")
+    for suffix in ("/chat/completions", "/v1/chat/completions", "/responses", "/v1/responses"):
+        if normalized.endswith(suffix):
+            normalized = normalized[: -len(suffix)].rstrip("/")
+            break
+    return normalized
 
 
 async def _monitor_run(run_id: str, proc: asyncio.subprocess.Process, app_state: AppState):
@@ -139,6 +150,7 @@ async def list_runs(
                 bool(app_state.active_replays[r.run_id].get("proc"))
                 and app_state.active_replays[r.run_id]["proc"].returncode is None
             ) if r.run_id in app_state.active_replays else None,
+            rtmp_active=app_state.active_replays[r.run_id].get("rtmp_active") if r.run_id in app_state.active_replays else None,
             stream_host=None,
             stream_port=None,
             stream_scheme=None,
@@ -176,6 +188,7 @@ async def get_run(run_id: str, db: AsyncSession = Depends(get_db), app_state: Ap
         step_count=step_count,
         stream_url=replay["stream_url"] if replay else None,
         replay_worker_running=(bool(replay.get("proc")) and replay["proc"].returncode is None) if replay else None,
+        rtmp_active=replay.get("rtmp_active") if replay else None,
         stream_host=None,
         stream_port=None,
         stream_scheme=None,
@@ -226,6 +239,9 @@ async def create_run(
     db: AsyncSession = Depends(get_db),
     app_state: AppState = Depends(get_app_state),
 ):
+    if req.provider == "custom" and not req.custom_api_url:
+        raise HTTPException(400, "custom_api_url is required when provider=custom")
+
     run_id = uuid.uuid4().hex[:12]
     username = f"run_{run_id}"
 
@@ -290,12 +306,29 @@ async def create_run(
         "FLE_RCON_PORT": str(rcon_port),
         "FLE_RCON_PASSWORD": config.RCON_PASSWORD,
     }
-    if req.custom_api_url:
+    if req.provider == "custom":
+        env_vars["FORCE_LLM_PROVIDER"] = "custom"
         env_vars["CUSTOM_API"] = "true"
-        env_vars["CUSTOM_API_URL"] = req.custom_api_url
+        env_vars["CUSTOM_API_URL"] = _normalize_openai_compatible_base_url(req.custom_api_url)
+        if req.custom_api_key:
+            env_vars["CUSTOM_API_KEY"] = req.custom_api_key
+    elif req.provider == "anthropic":
+        env_vars["FORCE_LLM_PROVIDER"] = "anthropic"
+        if req.api_key:
+            env_vars["ANTHROPIC_API_KEY"] = req.api_key
+    elif req.provider == "openai":
+        env_vars["FORCE_LLM_PROVIDER"] = "openai"
+        if req.api_key:
+            env_vars["OPENAI_API_KEY"] = req.api_key
+    elif req.custom_api_url:
+        # Backward compatibility with older frontend payloads
+        env_vars["FORCE_LLM_PROVIDER"] = "custom"
+        env_vars["CUSTOM_API"] = "true"
+        env_vars["CUSTOM_API_URL"] = _normalize_openai_compatible_base_url(req.custom_api_url)
         if req.custom_api_key:
             env_vars["CUSTOM_API_KEY"] = req.custom_api_key
     elif req.api_key:
+        # Legacy behavior: let model-based detection pick provider, but expose both env vars.
         env_vars["ANTHROPIC_API_KEY"] = req.api_key
         env_vars["OPENAI_API_KEY"] = req.api_key
 
@@ -461,3 +494,33 @@ async def stop_replay(
     await stop_replay_containers(run_id, slot)
 
     return {"run_id": run_id, "status": "stopped"}
+
+
+@router.post("/api/runs/{run_id}/replay/rtmp/start", dependencies=[Depends(require_admin_key)])
+async def start_replay_rtmp(
+    run_id: str,
+    app_state: AppState = Depends(get_app_state),
+):
+    replay = app_state.active_replays.get(run_id)
+    if not replay:
+        raise HTTPException(404, "No active replay for this run")
+    container_name = f"stream-client-replay-{replay['slot']}"
+    ok = await start_rtmp(container_name)
+    if not ok:
+        raise HTTPException(500, "Failed to start RTMP push")
+    app_state.active_replays[run_id]["rtmp_active"] = True
+    return {"ok": True}
+
+
+@router.post("/api/runs/{run_id}/replay/rtmp/stop", dependencies=[Depends(require_admin_key)])
+async def stop_replay_rtmp(
+    run_id: str,
+    app_state: AppState = Depends(get_app_state),
+):
+    replay = app_state.active_replays.get(run_id)
+    if not replay:
+        raise HTTPException(404, "No active replay for this run")
+    container_name = f"stream-client-replay-{replay['slot']}"
+    ok = await stop_rtmp(container_name)
+    app_state.active_replays[run_id].pop("rtmp_active", None)
+    return {"ok": ok}

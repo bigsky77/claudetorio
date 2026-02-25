@@ -150,19 +150,28 @@ async def spawn_replay_stream_client(run_id: str, slot: int) -> bool:
             f"({factorio_host}:{udp_port} -> :{host_port})",
             flush=True,
         )
+        env_vars: dict[str, str] = {}
+        if config.TWITCH_STREAM_KEY:
+            env_vars["TWITCH_STREAM_KEY"] = config.TWITCH_STREAM_KEY
+        if config.KICK_STREAM_KEY:
+            env_vars["KICK_STREAM_KEY"] = config.KICK_STREAM_KEY
+
         try:
             async with httpx.AsyncClient() as client:
+                body: dict = {
+                    "container_name": container_name,
+                    "factorio_host": factorio_host,
+                    "factorio_port": udp_port,
+                    "host_port": host_port,
+                    "title": f"ClaudeTorio Replay {run_id}",
+                    "image": config.STREAM_CLIENT_IMAGE,
+                    "client_volume": config.FACTORIO_CLIENT_VOLUME,
+                }
+                if env_vars:
+                    body["env_vars"] = env_vars
                 r = await client.post(
                     f"{config.STREAM_AGENT_URL}/spawn/stream-client",
-                    json={
-                        "container_name": container_name,
-                        "factorio_host": factorio_host,
-                        "factorio_port": udp_port,
-                        "host_port": host_port,
-                        "title": f"ClaudeTorio Replay {run_id}",
-                        "image": config.STREAM_CLIENT_IMAGE,
-                        "client_volume": config.FACTORIO_CLIENT_VOLUME,
-                    },
+                    json=body,
                     headers={"X-Stream-Agent-Key": config.STREAM_AGENT_KEY},
                     timeout=130.0,
                 )
@@ -204,6 +213,10 @@ async def spawn_replay_stream_client(run_id: str, slot: int) -> bool:
         "PGID": "1000",
         "TZ": "UTC",
     }
+    if config.TWITCH_STREAM_KEY:
+        env_vars["TWITCH_STREAM_KEY"] = config.TWITCH_STREAM_KEY
+    if config.KICK_STREAM_KEY:
+        env_vars["KICK_STREAM_KEY"] = config.KICK_STREAM_KEY
 
     cmd = ["docker", "run", "--platform", "linux/amd64", "-d", "--rm", "--name", container_name]
     if network:

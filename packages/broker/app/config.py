@@ -57,6 +57,13 @@ class Config:
     GAME_SERVER_PUBLIC_HOST = os.getenv("GAME_SERVER_PUBLIC_HOST", "")    # 157.254.222.103
     STREAM_SERVER_PUBLIC_HOST = os.getenv("STREAM_SERVER_PUBLIC_HOST", "")  # 157.254.222.104
     STREAM_DOMAIN = os.getenv("STREAM_DOMAIN", "")  # e.g. "stream.claudetorio.ai"; empty = port-based (dev)
+    # RTMP push keys (passed as env vars to stream-client containers)
+    TWITCH_STREAM_KEY: str = os.getenv("TWITCH_STREAM_KEY", "")
+    KICK_STREAM_KEY: str = os.getenv("KICK_STREAM_KEY", "")
+    # Twitch API (server-side only; used by frontend server components via BROKER_URL or direct)
+    TWITCH_CLIENT_ID: str = os.getenv("TWITCH_CLIENT_ID", "")
+    TWITCH_CLIENT_SECRET: str = os.getenv("TWITCH_CLIENT_SECRET", "")
+    TWITCH_CHANNEL: str = os.getenv("TWITCH_CHANNEL", "")
 
     @classmethod
     def get_udp_port(cls, slot: int) -> int:

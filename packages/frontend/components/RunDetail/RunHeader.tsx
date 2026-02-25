@@ -34,6 +34,8 @@ export default function RunHeader({
   onStartReplay,
   onStartReplayWorker,
   onStopReplay,
+  onGoLive,
+  onStopLive,
 }: {
   run: RunInfo;
   isActive?: boolean;
@@ -42,6 +44,8 @@ export default function RunHeader({
   onStartReplay?: () => Promise<void>;
   onStartReplayWorker?: () => Promise<void>;
   onStopReplay?: () => Promise<void>;
+  onGoLive?: () => Promise<void>;
+  onStopLive?: () => Promise<void>;
 }) {
   const badgeClass = STATUS_COLORS[run.status] ?? 'bg-gray-700 text-gray-300';
   const [stopping, setStopping] = useState(false);
@@ -49,6 +53,8 @@ export default function RunHeader({
   const [startingReplay, setStartingReplay] = useState(false);
   const [startingReplayWorker, setStartingReplayWorker] = useState(false);
   const [stoppingReplay, setStoppingReplay] = useState(false);
+  const [goingLive, setGoingLive] = useState(false);
+  const [stoppingLive, setStoppingLive] = useState(false);
 
   async function handleStop() {
     if (!onStop) return;
@@ -83,6 +89,20 @@ export default function RunHeader({
     setStartingReplayWorker(true);
     await onStartReplayWorker();
     setStartingReplayWorker(false);
+  }
+
+  async function handleGoLive() {
+    if (!onGoLive) return;
+    setGoingLive(true);
+    await onGoLive();
+    setGoingLive(false);
+  }
+
+  async function handleStopLive() {
+    if (!onStopLive) return;
+    setStoppingLive(true);
+    await onStopLive();
+    setStoppingLive(false);
   }
 
   return (
@@ -145,6 +165,24 @@ export default function RunHeader({
               className="px-3 py-1.5 bg-indigo-700/90 hover:bg-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed rounded text-xs sm:text-sm font-medium transition-colors"
             >
               {startingReplayWorker ? 'Starting...' : 'Start Replay Worker'}
+            </button>
+          )}
+          {onGoLive && (
+            <button
+              onClick={handleGoLive}
+              disabled={goingLive}
+              className="px-3 py-1.5 bg-red-600/90 hover:bg-red-500 disabled:opacity-50 disabled:cursor-not-allowed rounded text-xs sm:text-sm font-medium transition-colors"
+            >
+              {goingLive ? 'Going Live...' : '⏺ Go Live'}
+            </button>
+          )}
+          {onStopLive && (
+            <button
+              onClick={handleStopLive}
+              disabled={stoppingLive}
+              className="px-3 py-1.5 bg-gray-700/90 hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed rounded text-xs sm:text-sm font-medium transition-colors"
+            >
+              {stoppingLive ? 'Stopping...' : 'Stop Live'}
             </button>
           )}
         </div>

@@ -84,15 +84,38 @@ class APIFactory:
         Models with '/' in the name (e.g., 'anthropic/claude-sonnet-4')
         are OpenRouter models and should use OpenRouter API.
         """
+        lowered = model.lower()
+
         # Check if this is an OpenRouter model (contains '/')
         if "/" in model:
             return self.PROVIDERS["open-router"]
 
-        # Otherwise, check for provider prefixes
+        # Deterministic prefix checks before loose substring matching.
+        prefix_map = (
+            ("claude", "claude"),
+            ("gpt", "openai"),
+            ("deepseek", "deepseek"),
+            ("gemini", "gemini"),
+        )
+        for prefix, provider in prefix_map:
+            if lowered.startswith(prefix):
+                return self.PROVIDERS[provider]
+
+        # Legacy substring matching fallback.
         for provider, config in self.PROVIDERS.items():
-            if provider in model:
+            if provider in lowered:
                 return config
         raise ValueError(f"No provider found for model: {model}")
+
+    def _get_provider_key(self, provider_config: dict) -> str:
+        for provider, config in self.PROVIDERS.items():
+            if config is provider_config:
+                return provider
+        base_url = provider_config.get("base_url")
+        for provider, config in self.PROVIDERS.items():
+            if config.get("base_url") == base_url and config.get("api_key_env") == provider_config.get("api_key_env"):
+                return provider
+        return "unknown"
 
     def _get_api_key(self, provider_config: dict) -> str:
         """Get API key with rotation if available
@@ -179,6 +202,7 @@ class APIFactory:
 
         # Get provider config
         provider_config = self._get_provider_config(model_to_use)
+        provider_key = self._get_provider_key(provider_config)
 
         # Apply model transform if specified
         if "model_transform" in provider_config:
@@ -190,6 +214,14 @@ class APIFactory:
 
         # Get API key with rotation
         api_key = self._get_api_key(provider_config)
+
+        logging.warning(
+            "LLM provider selected: model=%s provider=%s base_url=%s key_env=%s",
+            model_to_use,
+            provider_key,
+            provider_config.get("base_url"),
+            provider_config.get("api_key_env"),
+        )
 
         # Create client
         client = AsyncOpenAI(

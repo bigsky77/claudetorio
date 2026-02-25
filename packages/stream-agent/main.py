@@ -33,6 +33,7 @@ class SpawnRequest(BaseModel):
     title: str
     image: str = ""
     client_volume: str = ""
+    env_vars: dict = {}
 
 
 @app.post("/spawn/stream-client")
@@ -51,6 +52,8 @@ async def spawn_stream_client(req: SpawnRequest, _=Depends(require_auth)):
         "DISPLAY_WIDTH": "1280",
         "DISPLAY_HEIGHT": "720",
     }
+    # Merge any extra env vars from the request (e.g. stream keys)
+    env_vars.update(req.env_vars)
 
     cmd = ["docker", "run", "-d", "--rm", "--name", req.container_name]
     if DOCKER_NETWORK:
@@ -94,6 +97,32 @@ async def spawn_stream_client(req: SpawnRequest, _=Depends(require_auth)):
         raise HTTPException(status_code=504, detail="HLS manifest not available — FFmpeg may not have started")
 
     print(f"[stream-agent] {req.container_name} is ready — HLS stream live", flush=True)
+    return {"ok": True}
+
+
+@app.post("/containers/{name}/rtmp/start")
+async def rtmp_start(name: str, _=Depends(require_auth)):
+    _ensure_docker_available()
+    proc = await asyncio.create_subprocess_exec(
+        "docker", "exec", name, "/scripts/start-rtmp.sh",
+        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+    )
+    stdout, stderr = await proc.communicate()
+    if proc.returncode != 0:
+        raise HTTPException(status_code=500, detail=stderr.decode().strip())
+    return {"ok": True}
+
+
+@app.post("/containers/{name}/rtmp/stop")
+async def rtmp_stop(name: str, _=Depends(require_auth)):
+    _ensure_docker_available()
+    proc = await asyncio.create_subprocess_exec(
+        "docker", "exec", name, "/scripts/stop-rtmp.sh",
+        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+    )
+    stdout, stderr = await proc.communicate()
+    if proc.returncode != 0:
+        raise HTTPException(status_code=500, detail=stderr.decode().strip())
     return {"ok": True}
 
 

@@ -68,6 +68,12 @@ log "HLS manifest ready (${ELAPSED}s)"
 # 8. Cleanup handler
 cleanup() {
     log "Shutting down..."
+    if [ -f /tmp/rtmp.pid ]; then
+        RPID=$(cat /tmp/rtmp.pid)
+        kill -INT "$RPID" 2>/dev/null || true
+        for _ in $(seq 1 10); do kill -0 "$RPID" 2>/dev/null || break; sleep 1; done
+        rm -f /tmp/rtmp.pid
+    fi
     kill "${FFMPEG_PID}" 2>/dev/null || true
     pkill -f "bin/x64/factorio" 2>/dev/null || true
     kill "${OPENBOX_PID}" 2>/dev/null || true

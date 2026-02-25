@@ -35,6 +35,7 @@ export interface RunInfo {
   step_count: number;
   stream_url: string | null;
   replay_worker_running?: boolean | null;
+  rtmp_active?: boolean | null;
   stream_host?: string | null;
   stream_port?: number | null;
   stream_scheme?: string | null;

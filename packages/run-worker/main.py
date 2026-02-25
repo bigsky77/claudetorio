@@ -318,15 +318,51 @@ def parse_vcs_directives(code):
     return directives, '\n'.join(remaining)
 
 
+def _coerce_messages_to_text_only(messages):
+    """Convert structured/multimodal chat content into plain strings."""
+    coerced = []
+    for msg in messages:
+        content = msg.get("content")
+        if isinstance(content, list):
+            text_parts = []
+            for part in content:
+                if not isinstance(part, dict):
+                    text_parts.append(str(part))
+                    continue
+                if part.get("type") == "text":
+                    text_parts.append(str(part.get("text", "")))
+                elif part.get("type") == "image_url":
+                    text_parts.append("[Image attached]")
+                else:
+                    text_parts.append(str(part))
+            coerced.append({**msg, "content": "\n".join(p for p in text_parts if p)})
+        elif content is None:
+            coerced.append({**msg, "content": ""})
+        else:
+            coerced.append({**msg, "content": str(content)})
+    return coerced
+
+
+def _should_use_text_only_messages(model: str, custom_api_enabled: bool) -> bool:
+    """Providers like DeepSeek and some OpenAI-compatible endpoints reject image_url blocks."""
+    if custom_api_enabled:
+        return True
+    return "deepseek" in (model or "").lower()
+
+
 async def run(steps: int, broker_url: str, username: str):
     """Main agent loop: claim session, observe-think-act, release."""
     model = os.getenv("MODEL", DEFAULT_MODEL)
     server_host = os.getenv("SERVER_HOST", "localhost")
+    forced_llm_provider = (os.getenv("FORCE_LLM_PROVIDER", "") or "").strip().lower() or None
+    custom_api_enabled = forced_llm_provider == "custom" or os.getenv("CUSTOM_API", "").lower() in ("true", "1", "yes")
+    text_only_messages = _should_use_text_only_messages(model, custom_api_enabled)
+    forced_provider_config = None
 
     # If CUSTOM_API=true, register a "custom" provider using CUSTOM_API_URL and CUSTOM_API_KEY.
     # This lets you point at any OpenAI-compatible API (Groq, Ollama, vLLM, etc.)
     # without the model name needing to match a built-in provider.
-    if os.getenv("CUSTOM_API", "").lower() in ("true", "1", "yes"):
+    if custom_api_enabled:
         custom_url = os.getenv("CUSTOM_API_URL")
         custom_key = os.getenv("CUSTOM_API_KEY")
         if not custom_url or not custom_key:
@@ -337,13 +373,29 @@ async def run(steps: int, broker_url: str, username: str):
             "key_manager_provider": "custom",
         }
         APIFactory.PROVIDERS["custom"] = custom_provider
-        # Always route to custom provider — override detection entirely
-        APIFactory._get_provider_config = lambda self, m: custom_provider
 
     # Register "gpt" prefix so gpt-* models route to the openai provider
     # (APIFactory only matches provider keys as substrings of the model name)
     if "gpt" not in APIFactory.PROVIDERS:
         APIFactory.PROVIDERS["gpt"] = APIFactory.PROVIDERS["openai"]
+
+    if forced_llm_provider == "custom":
+        forced_provider_config = APIFactory.PROVIDERS.get("custom")
+    elif forced_llm_provider == "anthropic":
+        forced_provider_config = APIFactory.PROVIDERS.get("claude")
+    elif forced_llm_provider == "openai":
+        forced_provider_config = APIFactory.PROVIDERS.get("openai")
+    elif forced_llm_provider:
+        print(f"Warning: unknown FORCE_LLM_PROVIDER={forced_llm_provider!r}; falling back to model-based detection")
+
+    if forced_llm_provider and not forced_provider_config:
+        raise ValueError(f"FORCE_LLM_PROVIDER={forced_llm_provider} could not be resolved")
+    if forced_provider_config:
+        print(
+            f"Forcing LLM provider to '{forced_llm_provider}' "
+            f"(base_url={forced_provider_config.get('base_url')})"
+        )
+        APIFactory._get_provider_config = lambda self, m, cfg=forced_provider_config: cfg
 
     api_factory = APIFactory(model)
 
@@ -557,7 +609,7 @@ async def run(steps: int, broker_url: str, username: str):
             # Inject map rendering into the last user message (OpenAI image_url format
             # because acall uses AsyncOpenAI / chat.completions.create)
             map_b64 = render_map(instance)
-            if map_b64:
+            if map_b64 and not text_only_messages:
                 for i in range(len(messages) - 1, -1, -1):
                     if messages[i]["role"] == "user":
                         text = messages[i]["content"]
@@ -567,6 +619,8 @@ async def run(steps: int, broker_url: str, username: str):
                             {"type": "text", "text": "[Map view around player. Use legend to identify entities.]"},
                         ]
                         break
+            elif text_only_messages:
+                messages = _coerce_messages_to_text_only(messages)
 
             total_chars = sum(len(m.get("content", "")) if isinstance(m.get("content"), str) else sum(len(b.get("text", "")) for b in m["content"] if b.get("type") == "text") for m in messages)
             print(f"Context: {len(messages)} messages, ~{total_chars} chars")

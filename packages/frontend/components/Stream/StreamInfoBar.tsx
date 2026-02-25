@@ -1,7 +1,7 @@
 import type { StreamDefinition } from '@/lib/streams';
 
 export default function StreamInfoBar({ stream }: { stream: StreamDefinition }) {
-  const badgeColor = stream.type === 'live' ? 'bg-accent-green' : 'bg-accent-blue';
+  const badgeColor = (stream.type === 'live' || stream.type === 'twitch-live') ? 'bg-accent-green' : 'bg-accent-blue';
 
   return (
     <div className="bg-surface-1 border border-t-0 border-surface-3 px-4 py-3 flex items-center justify-between">
