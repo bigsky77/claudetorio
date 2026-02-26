@@ -5,6 +5,7 @@ from mcrcon import MCRcon
 
 from ..config import config
 from .streaming import _stop_container, _stop_remote_container
+from .vtuber_streaming import stop_vtuber_stream_client
 
 
 def allocate_replay_slot(active_replays: dict) -> int | None:
@@ -316,6 +317,9 @@ async def spawn_stream_worker_container(
 
 async def stop_replay_containers(run_id: str, slot: int | None = None) -> None:
     """Stop all containers for a replay (best-effort)."""
+    # Stop VTuber container if it's running (best-effort)
+    await stop_vtuber_stream_client(run_id)
+
     # stream-worker and factorio-replay always run on game-server
     for name in [f"stream-worker-{run_id}", f"factorio-replay-{run_id}"]:
         await _stop_container(name)

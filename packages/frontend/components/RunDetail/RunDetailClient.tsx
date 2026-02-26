@@ -92,9 +92,9 @@ export default function RunDetailClient({
               isActive={isActive}
               onStop={handleStop}
               onStartReplay={!replayUrl && run.step_count > 0 ? handleStartReplay : undefined}
-              onStartReplayWorker={replayUrl && !replayWorkerStarted ? handleStartReplayWorker : undefined}
+              onStartReplayWorker={replayUrl ? handleStartReplayWorker : undefined}
               onStopReplay={replayUrl ? handleStopReplay : undefined}
-              onGoLive={replayWorkerStarted && !isLive ? handleGoLive : undefined}
+              onGoLive={replayUrl && !isLive ? handleGoLive : undefined}
               onStopLive={isLive ? handleStopLive : undefined}
             />
           </div>

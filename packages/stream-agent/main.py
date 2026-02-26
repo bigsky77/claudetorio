@@ -9,7 +9,9 @@ STREAM_AGENT_KEY = os.getenv("STREAM_AGENT_KEY", "")
 DOCKER_NETWORK = os.getenv("DOCKER_NETWORK", "stream-network")
 STREAM_CLIENT_IMAGE = os.getenv("STREAM_CLIENT_IMAGE", "claudetorio-stream-client")
 FACTORIO_CLIENT_VOLUME = os.getenv("FACTORIO_CLIENT_VOLUME", "claudetorio_factorio_client")
+VTUBER_STREAM_CLIENT_IMAGE = os.getenv("VTUBER_STREAM_CLIENT_IMAGE", "claudetorio-vtuber-stream-client")
 HLS_READY_TIMEOUT_SECONDS = 180
+VTUBER_READY_TIMEOUT_SECONDS = 300
 
 
 def require_auth(x_stream_agent_key: str = Header(...)):
@@ -97,6 +99,71 @@ async def spawn_stream_client(req: SpawnRequest, _=Depends(require_auth)):
         raise HTTPException(status_code=504, detail="HLS manifest not available — FFmpeg may not have started")
 
     print(f"[stream-agent] {req.container_name} is ready — HLS stream live", flush=True)
+    return {"ok": True}
+
+
+class VtuberStreamClientRequest(BaseModel):
+    container_name: str
+    factorio_stream_url: str
+    host_port: int
+    image: str = ""
+    env_vars: dict = {}
+
+
+@app.post("/spawn/vtuber-stream-client")
+async def spawn_vtuber_stream_client(req: VtuberStreamClientRequest, _=Depends(require_auth)):
+    _ensure_docker_available()
+
+    image = req.image or VTUBER_STREAM_CLIENT_IMAGE
+
+    # Stop any existing container with this name (best-effort)
+    await _stop_container(req.container_name)
+
+    env_vars = {
+        "FACTORIO_STREAM_URL": req.factorio_stream_url,
+    }
+    env_vars.update(req.env_vars)
+
+    cmd = ["docker", "run", "-d", "--rm", "--name", req.container_name, "--shm-size", "2g"]
+    if DOCKER_NETWORK:
+        cmd += ["--network", DOCKER_NETWORK]
+    for k, v in env_vars.items():
+        cmd += ["-e", f"{k}={v}"]
+    cmd += ["-p", f"{req.host_port}:3000"]
+    cmd += [image]
+
+    print(
+        f"[stream-agent] Spawning {req.container_name}: "
+        f"factorio_stream_url={req.factorio_stream_url} -> :{req.host_port}",
+        flush=True,
+    )
+
+    proc = await asyncio.create_subprocess_exec(
+        *cmd,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    stdout, stderr = await proc.communicate()
+    if proc.returncode != 0:
+        err = (stderr or stdout or b"").decode().strip()
+        print(f"[stream-agent] ERROR spawning {req.container_name}: {err}", flush=True)
+        raise HTTPException(status_code=500, detail=f"Failed to spawn container: {err}")
+
+    container_id = stdout.decode().strip()[:12]
+    print(
+        f"[stream-agent] Started {req.container_name} ({container_id}), waiting for port 3000...",
+        flush=True,
+    )
+
+    ready = await _wait_for_port(req.container_name, 3000, timeout=VTUBER_READY_TIMEOUT_SECONDS)
+    if not ready:
+        raise HTTPException(status_code=504, detail="VTuber container port 3000 not ready in time")
+
+    hls_ready = await _wait_for_hls_manifest(req.container_name, timeout=VTUBER_READY_TIMEOUT_SECONDS)
+    if not hls_ready:
+        raise HTTPException(status_code=504, detail="VTuber HLS manifest not available")
+
+    print(f"[stream-agent] {req.container_name} is ready — VTuber HLS stream live", flush=True)
     return {"ok": True}
 
 

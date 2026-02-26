@@ -21,7 +21,11 @@ from ..services.replay import (
     stop_replay_containers,
 )
 from ..services.slots import claim_any_free_slot, release_slot_lock
-from ..services.streaming import start_rtmp, stop_rtmp
+from ..services.vtuber_streaming import (
+    spawn_vtuber_stream_client,
+    wait_for_vtuber_stream_client,
+    stop_vtuber_stream_client,
+)
 from ..state import AppState
 
 router = APIRouter()
@@ -504,10 +508,16 @@ async def start_replay_rtmp(
     replay = app_state.active_replays.get(run_id)
     if not replay:
         raise HTTPException(404, "No active replay for this run")
-    container_name = f"stream-client-replay-{replay['slot']}"
-    ok = await start_rtmp(container_name)
+    slot = replay["slot"]
+
+    # Factorio stream URL visible inside Docker network (internal)
+    factorio_stream_url = f"http://stream-client-replay-{slot}:3000/stream.m3u8"
+
+    ok = await spawn_vtuber_stream_client(run_id, slot, factorio_stream_url)
     if not ok:
-        raise HTTPException(500, "Failed to start RTMP push")
+        raise HTTPException(500, "Failed to spawn VTuber stream client")
+    await wait_for_vtuber_stream_client(run_id)
+
     app_state.active_replays[run_id]["rtmp_active"] = True
     return {"ok": True}
 
@@ -520,7 +530,7 @@ async def stop_replay_rtmp(
     replay = app_state.active_replays.get(run_id)
     if not replay:
         raise HTTPException(404, "No active replay for this run")
-    container_name = f"stream-client-replay-{replay['slot']}"
-    ok = await stop_rtmp(container_name)
+
+    await stop_vtuber_stream_client(run_id)
     app_state.active_replays[run_id].pop("rtmp_active", None)
-    return {"ok": ok}
+    return {"ok": True}

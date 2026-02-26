@@ -1,0 +1,343 @@
+system_config:
+  conf_version: 'v1.2.1'
+  host: '0.0.0.0'
+  port: 12393
+  config_alts_dir: 'characters'
+  tool_prompts:
+    live2d_expression_prompt: 'live2d_expression_prompt'
+    group_conversation_prompt: 'group_conversation_prompt'
+    mcp_prompt: 'mcp_prompt'
+    proactive_speak_prompt: 'proactive_speak_prompt'
+
+character_config:
+  conf_name: 'claudetorio'
+  conf_uid: 'claudetorio_001'
+  live2d_model_name: 'mao_pro'
+  character_name: 'Claude'
+  avatar: ''
+  human_name: 'Viewer'
+
+  persona_prompt: |
+    You are an AI VTuber commentating on an autonomous AI agent playing Factorio.
+    Be enthusiastic, knowledgeable about Factorio mechanics, and entertaining.
+    Keep responses concise and suitable for live streaming.
+
+  agent_config:
+    conversation_agent_choice: 'basic_memory_agent'
+
+    agent_settings:
+      basic_memory_agent:
+        llm_provider: 'claude_llm'
+        faster_first_response: True
+        segment_method: 'pysbd'
+        use_mcpp: False
+        mcp_enabled_servers: []
+
+      letta_agent:
+        host: 'localhost'
+        port: 8283
+        id: ''
+        faster_first_response: True
+        segment_method: 'pysbd'
+
+      hume_ai_agent:
+        api_key: ''
+        host: 'api.hume.ai'
+        config_id: ''
+        idle_timeout: 15
+
+    llm_configs:
+      stateless_llm_with_template:
+        base_url: 'http://localhost:8080/v1'
+        llm_api_key: 'unused'
+        organization_id: null
+        project_id: null
+        model: 'unused'
+        template: 'CHATML'
+        temperature: 1.0
+        interrupt_method: 'user'
+
+      openai_compatible_llm:
+        base_url: 'http://localhost:11434/v1'
+        llm_api_key: 'unused'
+        organization_id: null
+        project_id: null
+        model: 'unused'
+        temperature: 1.0
+        interrupt_method: 'user'
+
+      claude_llm:
+        base_url: 'https://api.anthropic.com'
+        llm_api_key: '${ANTHROPIC_API_KEY}'
+        model: 'claude-haiku-4-5-20251001'
+
+      llama_cpp_llm:
+        model_path: ''
+        verbose: False
+
+      ollama_llm:
+        base_url: 'http://localhost:11434/v1'
+        model: 'unused'
+        temperature: 1.0
+        keep_alive: -1
+        unload_at_exit: True
+
+      lmstudio_llm:
+        base_url: 'http://localhost:1234/v1'
+        model: 'unused'
+        temperature: 1.0
+
+      openai_llm:
+        llm_api_key: 'unused'
+        model: 'gpt-4o'
+        temperature: 1.0
+
+      gemini_llm:
+        llm_api_key: 'unused'
+        model: 'gemini-2.0-flash-exp'
+        temperature: 1.0
+
+      zhipu_llm:
+        llm_api_key: 'unused'
+        model: 'glm-4-flash'
+        temperature: 1.0
+
+      deepseek_llm:
+        llm_api_key: 'unused'
+        model: 'deepseek-chat'
+        temperature: 0.7
+
+      mistral_llm:
+        llm_api_key: 'unused'
+        model: 'pixtral-large-latest'
+        temperature: 1.0
+
+      groq_llm:
+        llm_api_key: 'unused'
+        model: 'llama-3.3-70b-versatile'
+        temperature: 1.0
+
+  asr_config:
+    asr_model: 'sherpa_onnx_asr'
+
+    azure_asr:
+      api_key: ''
+      region: 'eastus'
+      languages: ['en-US']
+
+    faster_whisper:
+      model_path: 'large-v3-turbo'
+      download_root: 'models/whisper'
+      language: 'en'
+      device: 'auto'
+      compute_type: 'int8'
+      prompt: ''
+
+    whisper_cpp:
+      model_name: 'small'
+      model_dir: 'models/whisper'
+      print_realtime: False
+      print_progress: False
+      language: 'auto'
+      prompt: ''
+
+    whisper:
+      name: 'medium'
+      download_root: 'models/whisper'
+      device: 'cpu'
+      prompt: ''
+
+    fun_asr:
+      model_name: 'iic/SenseVoiceSmall'
+      vad_model: 'fsmn-vad'
+      punc_model: 'ct-punc'
+      device: 'cpu'
+      disable_update: True
+      ncpu: 4
+      hub: 'ms'
+      use_itn: False
+      language: 'auto'
+
+    sherpa_onnx_asr:
+      model_type: 'sense_voice'
+      sense_voice: './models/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17/model.int8.onnx'
+      tokens: './models/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17/tokens.txt'
+      num_threads: 4
+      use_itn: True
+      provider: 'cpu'
+
+    groq_whisper_asr:
+      api_key: ''
+      model: 'whisper-large-v3-turbo'
+      lang: ''
+
+  tts_config:
+    tts_model: 'edge_tts'
+
+    azure_tts:
+      api_key: ''
+      region: 'eastus'
+      voice: 'en-US-AshleyNeural'
+      pitch: '26'
+      rate: '1'
+
+    bark_tts:
+      voice: 'v2/en_speaker_1'
+
+    edge_tts:
+      voice: 'en-US-AvaMultilingualNeural'
+
+    piper_tts:
+      model_path: ''
+      speaker_id: 0
+      length_scale: 1.0
+      noise_scale: 0.667
+      noise_w: 0.8
+      volume: 1.0
+      normalize_audio: true
+      use_cuda: false
+
+    cosyvoice_tts:
+      client_url: 'http://127.0.0.1:50000/'
+      mode_checkbox_group: '预训练音色'
+      sft_dropdown: '中文女'
+      prompt_text: ''
+      prompt_wav_upload_url: ''
+      prompt_wav_record_url: ''
+      instruct_text: ''
+      seed: 0
+      api_name: '/generate_audio'
+
+    cosyvoice2_tts:
+      client_url: 'http://127.0.0.1:50000/'
+      mode_checkbox_group: '3s极速复刻'
+      sft_dropdown: ''
+      prompt_text: ''
+      prompt_wav_upload_url: ''
+      prompt_wav_record_url: ''
+      instruct_text: ''
+      stream: False
+      seed: 0
+      speed: 1.0
+      api_name: '/generate_audio'
+
+    melo_tts:
+      speaker: 'EN-Default'
+      language: 'EN'
+      device: 'auto'
+      speed: 1.0
+
+    x_tts:
+      api_url: 'http://127.0.0.1:8020/tts_to_audio'
+      speaker_wav: 'female'
+      language: 'en'
+
+    gpt_sovits_tts:
+      api_url: 'http://127.0.0.1:9880/tts'
+      text_lang: 'zh'
+      ref_audio_path: ''
+      prompt_lang: 'zh'
+      prompt_text: ''
+      text_split_method: 'cut5'
+      batch_size: '1'
+      media_type: 'wav'
+      streaming_mode: 'false'
+
+    fish_api_tts:
+      api_key: ''
+      reference_id: ''
+      latency: 'balanced'
+      base_url: 'https://api.fish.audio'
+
+    coqui_tts:
+      model_name: 'tts_models/en/ljspeech/tacotron2-DDC'
+      speaker_wav: ''
+      language: 'en'
+      device: ''
+
+    sherpa_onnx_tts:
+      vits_model: ''
+      vits_lexicon: ''
+      vits_tokens: ''
+      vits_data_dir: ''
+      vits_dict_dir: ''
+      tts_rule_fsts: ''
+      max_num_sentences: 2
+      sid: 0
+      provider: 'cpu'
+      num_threads: 1
+      speed: 1.0
+      debug: false
+
+    openai_tts:
+      model: 'tts-1'
+      voice: 'alloy'
+      api_key: 'unused'
+      base_url: 'http://localhost:8880/v1'
+      file_extension: 'mp3'
+
+    minimax_tts:
+      group_id: ''
+      api_key: ''
+      model: 'speech-02-turbo'
+      voice_id: 'female-shaonv'
+      pronunciation_dict: ''
+
+    elevenlabs_tts:
+      api_key: ''
+      voice_id: ''
+      model_id: 'eleven_multilingual_v2'
+      output_format: 'mp3_44100_128'
+      stability: 0.5
+      similarity_boost: 0.5
+      style: 0.0
+      use_speaker_boost: true
+
+    cartesia_tts:
+      api_key: ''
+      voice_id: ''
+      model_id: 'sonic-3'
+      output_format: 'wav'
+      language: 'en'
+      emotion: 'neutral'
+      volume: 1.0
+      speed: 1.0
+
+  vad_config:
+    vad_model: null
+
+    silero_vad:
+      orig_sr: 16000
+      target_sr: 16000
+      prob_threshold: 0.4
+      db_threshold: 60
+      required_hits: 3
+      required_misses: 24
+      smoothing_window: 5
+
+  tts_preprocessor_config:
+    remove_special_char: True
+    ignore_brackets: True
+    ignore_parentheses: True
+    ignore_asterisks: True
+    ignore_angle_brackets: True
+
+    translator_config:
+      translate_audio: False
+      translate_provider: 'deeplx'
+
+      deeplx:
+        deeplx_target_lang: 'JA'
+        deeplx_api_endpoint: 'http://localhost:1188/v2/translate'
+
+      tencent:
+        secret_id: ''
+        secret_key: ''
+        region: 'ap-guangzhou'
+        source_lang: 'zh'
+        target_lang: 'ja'
+
+live_config:
+  bilibili_live:
+    room_ids: []
+    sessdata: ''

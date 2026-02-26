@@ -36,6 +36,9 @@ factorio-data/
 *.zip
 factorio-client/
 
+# VTuber ASR models (baked into Docker image at build time, not tracked in git)
+packages/vtuber-stream-client/models/
+
 # Logs
 *.log
 logs/

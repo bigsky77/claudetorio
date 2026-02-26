@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 1920px; height: 1080px; overflow: hidden; background: #000; }
+    #factorio-video {
+      position: absolute; top: 0; left: 0;
+      width: 1920px; height: 1080px; z-index: 1; object-fit: cover;
+    }
+    #vtuber-frame {
+      position: absolute; bottom: 0; right: 0;
+      width: 900px; height: 1080px;
+      border: none; z-index: 10; pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+  <video id="factorio-video" autoplay muted playsinline></video>
+  <iframe id="vtuber-frame" src="http://localhost:12393/" allow="autoplay; microphone"></iframe>
+  <script src="/hls.min.js"></script>
+  <script>
+    const video = document.getElementById('factorio-video');
+    const src = '${FACTORIO_STREAM_URL}';
+    if (Hls.isSupported()) {
+      const hls = new Hls({ enableWorker: false });
+      hls.loadSource(src);
+      hls.attachMedia(video);
+      hls.on(Hls.Events.MANIFEST_PARSED, () => video.play());
+    }
+  </script>
+</body>
+</html>
