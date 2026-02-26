@@ -1,6 +1,8 @@
 import Link from 'next/link';
 import BenchmarksList from './BenchmarksList';
+import TournamentCountdown from './TournamentCountdown';
 import type { TwitchStream, TwitchVideo } from '@/lib/twitch';
+import type { RunInfo } from '@/interfaces';
 
 function formatViewerCount(n: number): string {
   if (n >= 1000) return `${(n / 1000).toFixed(1)}K`;
@@ -13,15 +15,21 @@ function formatDuration(duration: string): string {
 }
 
 function getThumbnailUrl(url: string, width = 320, height = 180): string {
-  return url.replace('{width}', String(width)).replace('{height}', String(height));
+  return url
+    .replace('%{width}', String(width))
+    .replace('%{height}', String(height))
+    .replace('{width}', String(width))
+    .replace('{height}', String(height));
 }
 
 export default function HomePage({
   liveStream,
   videos,
+  liveRun,
 }: {
   liveStream: TwitchStream | null;
   videos: TwitchVideo[];
+  liveRun: RunInfo | null;
 }) {
   const channel = process.env.NEXT_PUBLIC_TWITCH_CHANNEL ?? '';
 
@@ -44,7 +52,37 @@ export default function HomePage({
             STREAMS
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {/* Live channel card */}
+            {/* Claudetorio live run card */}
+            {liveRun && (
+              <Link
+                href={`/run/${liveRun.run_id}`}
+                className="block bg-surface-1 border border-accent-green/40 hover:border-accent-green/70 transition-colors"
+              >
+                <div className="p-4 flex items-center gap-2">
+                  <span className="flex items-center gap-1.5 bg-accent-green text-black text-xs font-bold px-2 py-1 uppercase">
+                    <span className="w-1.5 h-1.5 rounded-full bg-black animate-pulse" />
+                    LIVE
+                  </span>
+                  <span className="text-white/60 text-xs truncate">{liveRun.model}</span>
+                </div>
+                <div className="px-4">
+                  <div className="bg-surface-2 p-1">
+                    <div className="w-full aspect-video bg-surface-3 flex items-center justify-center">
+                      <span className="text-white/30 text-sm font-[family-name:var(--font-heading)] tracking-wide">
+                        AI PLAYING FACTORIO
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                <div className="p-4">
+                  <div className="text-white/90 text-sm font-[family-name:var(--font-body)] font-medium">
+                    Step {liveRun.step_count} · {liveRun.task_key}
+                  </div>
+                </div>
+              </Link>
+            )}
+
+            {/* Live Twitch channel card */}
             {channel && (
               <Link
                 href="/stream/twitch-live"
@@ -85,7 +123,7 @@ export default function HomePage({
             )}
 
             {/* VOD cards */}
-            {videos.slice(0, channel ? 2 : 3).map((video) => (
+            {videos.slice(0, liveRun ? (channel ? 1 : 2) : (channel ? 2 : 3)).map((video) => (
               <Link
                 key={video.id}
                 href={`/stream/twitch-vod-${video.id}`}
@@ -124,11 +162,7 @@ export default function HomePage({
           <h2 className="font-[family-name:var(--font-heading)] text-2xl font-bold mb-6 tracking-wide">
             TOURNAMENT
           </h2>
-          <div className="bg-surface-1 border border-surface-3 h-40 flex items-center justify-center">
-            <div className="text-accent-amber font-[family-name:var(--font-heading)] font-bold text-2xl tracking-widest">
-              COUNTDOWN
-            </div>
-          </div>
+          <TournamentCountdown />
         </section>
 
         {/* BENCHMARKS */}

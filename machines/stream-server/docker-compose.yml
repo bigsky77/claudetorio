@@ -31,6 +31,7 @@ services:
     environment:
       - STREAM_AGENT_KEY=${STREAM_AGENT_KEY}
       - STREAM_CLIENT_IMAGE=claudetorio-stream-client
+      - VTUBER_STREAM_CLIENT_IMAGE=claudetorio-vtuber-stream-client
       - FACTORIO_CLIENT_VOLUME=claudetorio_factorio_client
       - DOCKER_NETWORK=stream-network
     networks:
@@ -57,6 +58,12 @@ services:
       context: ../../packages
       dockerfile: stream-worker/Dockerfile
     image: claudetorio-stream-worker
+    profiles: ["build-only"]
+
+  vtuber-stream-client:
+    build:
+      context: ../../packages/vtuber-stream-client
+    image: claudetorio-vtuber-stream-client
     profiles: ["build-only"]
 
 networks:

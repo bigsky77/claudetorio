@@ -1,6 +1,12 @@
+export const dynamic = 'force-dynamic';
+
 import HomePage from '@/components/Home/HomePage';
 import { getLiveStream, getVideos } from '@/lib/twitch';
+import { fetchRuns } from '@/services/api';
 import type { TwitchStream, TwitchVideo } from '@/lib/twitch';
+import type { RunInfo } from '@/interfaces';
+
+const BROKER_URL = process.env.BROKER_URL || process.env.NEXT_PUBLIC_API_URL || '';
 
 export default async function Home() {
   const channel = process.env.TWITCH_CHANNEL ?? '';
@@ -14,5 +20,8 @@ export default async function Home() {
     ]);
   }
 
-  return <HomePage liveStream={liveStream} videos={videos} />;
+  const runs = await fetchRuns({ status: 'running', limit: 1, baseUrl: BROKER_URL });
+  const liveRun: RunInfo | null = runs[0] ?? null;
+
+  return <HomePage liveStream={liveStream} videos={videos} liveRun={liveRun} />;
 }
