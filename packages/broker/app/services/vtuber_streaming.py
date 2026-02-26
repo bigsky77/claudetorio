@@ -9,6 +9,7 @@ async def spawn_vtuber_stream_client(
     run_id: str,
     slot: int,
     factorio_stream_url: str,
+    frontend_url: str,
 ) -> bool:
     """Spawn a vtuber-stream-client container for the given replay run.
 
@@ -33,6 +34,7 @@ async def spawn_vtuber_stream_client(
                         "host_port": host_port,
                         "image": config.VTUBER_STREAM_CLIENT_IMAGE,
                         "env_vars": {
+                            "FRONTEND_URL": frontend_url,
                             "TWITCH_STREAM_KEY": config.TWITCH_STREAM_KEY,
                             "KICK_STREAM_KEY": config.KICK_STREAM_KEY,
                             "ANTHROPIC_API_KEY": config.ANTHROPIC_API_KEY,
@@ -60,7 +62,7 @@ async def spawn_vtuber_stream_client(
     network = config.DOCKER_NETWORK
 
     env_vars = {
-        "FACTORIO_STREAM_URL": factorio_stream_url,
+        "FRONTEND_URL": frontend_url,
         "TWITCH_STREAM_KEY": config.TWITCH_STREAM_KEY,
         "KICK_STREAM_KEY": config.KICK_STREAM_KEY,
         "ANTHROPIC_API_KEY": config.ANTHROPIC_API_KEY,
@@ -79,7 +81,7 @@ async def spawn_vtuber_stream_client(
     cmd += [config.VTUBER_STREAM_CLIENT_IMAGE]
 
     print(
-        f"[vtuber] Spawning {container_name}: FACTORIO_STREAM_URL={factorio_stream_url}",
+        f"[vtuber] Spawning {container_name}: FRONTEND_URL={frontend_url}",
         flush=True,
     )
 

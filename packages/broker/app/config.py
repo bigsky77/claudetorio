@@ -59,6 +59,7 @@ class Config:
     STREAM_DOMAIN = os.getenv("STREAM_DOMAIN", "")  # e.g. "stream.claudetorio.ai"; empty = port-based (dev)
     # VTuber stream client
     VTUBER_STREAM_CLIENT_IMAGE: str = os.getenv("VTUBER_STREAM_CLIENT_IMAGE", "claudetorio-vtuber-stream-client")
+    FRONTEND_BASE_URL: str = os.getenv("FRONTEND_BASE_URL", "http://frontend:3000")
     VTUBER_STREAM_BASE_PORT: int = int(os.getenv("VTUBER_STREAM_BASE_PORT", "5002"))
     # Anthropic API key (passed to vtuber-stream-client containers)
     ANTHROPIC_API_KEY: str = os.getenv("ANTHROPIC_API_KEY", "")

@@ -4,13 +4,14 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 # Base system packages
 RUN apt-get update && apt-get install -y \
+    git \
     xvfb \
+    x11-utils \
     pulseaudio \
     ffmpeg \
     wget \
     gnupg2 \
     curl \
-    git \
     python3 \
     ca-certificates \
     gettext-base \
@@ -41,8 +42,12 @@ RUN wget -q -O /tmp/google-chrome.deb https://dl.google.com/linux/direct/google-
 # Install uv
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
-# Clone Open-LLM-VTuber (main branch)
-RUN git clone --depth=1 --branch main https://github.com/Open-LLM-VTuber/Open-LLM-VTuber.git /app/vtuber
+# Clone Open-LLM-VTuber at a pinned tag; recurse submodules for frontend/
+RUN git clone --depth 1 --branch v1.2.1 --recurse-submodules \
+    https://github.com/Open-LLM-VTuber/Open-LLM-VTuber /app/vtuber
+
+# Patch upstream frontend embed page with Claudetorio transparent/audio-safe overlay version
+COPY patches/embed.html /app/vtuber/frontend/embed.html
 
 # Install Python dependencies
 RUN cd /app/vtuber && uv sync --frozen --no-dev

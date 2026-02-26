@@ -1,0 +1,131 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Avatar Embed</title>
+    <link rel="stylesheet" crossorigin href="./assets/main-QEkl09-0.css">
+    <style>
+      /* Nuclear transparency: override ALL backgrounds */
+      :root,
+      [data-theme],
+      [data-theme="dark"],
+      .chakra-ui-dark {
+        --chakra-colors-gray-900: transparent !important;
+        --chakra-colors-gray-800: transparent !important;
+        --chakra-colors-gray-700: transparent !important;
+        --colors-gray-900: transparent !important;
+        --colors-gray-800: transparent !important;
+        --colors-gray-700: transparent !important;
+      }
+
+      html, body, #root {
+        background: transparent !important;
+        background-color: transparent !important;
+        overflow: hidden !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        width: 100vw;
+        height: 100vh;
+      }
+
+      /* Override every div's background */
+      #root *:not(canvas) {
+        background: transparent !important;
+        background-color: transparent !important;
+      }
+
+      /* Hide ALL UI except the canvas */
+      aside, nav, header, footer, button, input, textarea, select,
+      [role="dialog"], [role="menu"], [role="toolbar"],
+      svg:not(canvas svg) {
+        display: none !important;
+        visibility: hidden !important;
+      }
+
+      /* Hide sidebar, chat panel, drawer, settings, subtitles */
+      #root > div > div > div:not(:has(canvas)) {
+        display: none !important;
+      }
+
+      /* Make sure canvas itself is transparent and visible */
+      canvas {
+        background: transparent !important;
+        background-color: transparent !important;
+      }
+    </style>
+  </head>
+
+  <body>
+    <div id="root"></div>
+    <script>
+      // Block microphone access — we don't need voice input,
+      // and it interferes with TTS audio playback on the stream.
+      const origGetUserMedia = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+      navigator.mediaDevices.getUserMedia = function(constraints) {
+        if (constraints && constraints.audio) {
+          // Return a silent audio stream instead of real mic
+          const ctx = new AudioContext();
+          const oscillator = ctx.createOscillator();
+          const dst = ctx.createMediaStreamDestination();
+          oscillator.connect(dst);
+          oscillator.start();
+          oscillator.frequency.setValueAtTime(0, ctx.currentTime); // silent
+          return Promise.resolve(dst.stream);
+        }
+        return origGetUserMedia(constraints);
+      };
+
+      // Force-resume any AudioContext that gets created (browser suspends them
+      // inside iframes without a user gesture). Monkey-patch the constructor
+      // so every new context is resumed immediately + on an interval.
+      const _OrigAudioContext = window.AudioContext || window.webkitAudioContext;
+      const _audioContexts = [];
+      function PatchedAudioContext(...args) {
+        const ctx = new _OrigAudioContext(...args);
+        _audioContexts.push(ctx);
+        if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+        return ctx;
+      }
+      PatchedAudioContext.prototype = _OrigAudioContext.prototype;
+      Object.defineProperty(PatchedAudioContext, 'name', { value: 'AudioContext' });
+      window.AudioContext = PatchedAudioContext;
+      if (window.webkitAudioContext) window.webkitAudioContext = PatchedAudioContext;
+
+      // Periodically resume any suspended contexts
+      setInterval(() => {
+        _audioContexts.forEach(ctx => {
+          if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+        });
+      }, 1000);
+
+      // Listen for parent page telling us to enable audio
+      window.addEventListener('message', (e) => {
+        if (e.data && e.data.type === 'enable-audio') {
+          _audioContexts.forEach(ctx => {
+            if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+          });
+          // Also try to play any existing audio elements
+          document.querySelectorAll('audio').forEach(a => a.play().catch(() => {}));
+        }
+      });
+    </script>
+    <script type="module" crossorigin src="./assets/main-nu7uwxNJ.js"></script>
+    <script>
+      // After app mounts, aggressively strip backgrounds
+      const observer = new MutationObserver(() => {
+        document.querySelectorAll('#root *').forEach(el => {
+          const bg = getComputedStyle(el).backgroundColor;
+          if (bg && bg !== 'rgba(0, 0, 0, 0)' && bg !== 'transparent') {
+            el.style.setProperty('background', 'transparent', 'important');
+            el.style.setProperty('background-color', 'transparent', 'important');
+          }
+        });
+        // Hide non-canvas containers
+        document.querySelectorAll('#root button, #root aside, #root nav, #root input, #root textarea, #root [role=\"dialog\"]').forEach(el => {
+          el.style.setProperty('display', 'none', 'important');
+        });
+      });
+      observer.observe(document.body, { childList: true, subtree: true, attributes: true });
+    </script>
+  </body>
+</html>

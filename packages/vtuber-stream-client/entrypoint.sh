@@ -7,6 +7,7 @@ fail() { echo "[vtuber-entrypoint] ERROR: $*" >&2; exit 1; }
 DISPLAY_NUM="${DISPLAY_NUM:-:99}"
 DISPLAY_WIDTH=1920
 DISPLAY_HEIGHT=1080
+VTUBER_AUDIO_DEBUG="${VTUBER_AUDIO_DEBUG:-1}"
 
 mkdir -p /tmp/.X11-unix /tmp/chrome-profile /var/www/html
 chmod 1777 /tmp/.X11-unix
@@ -25,10 +26,72 @@ cleanup() {
     [ -n "$CHROME_PID" ] && kill "$CHROME_PID" 2>/dev/null || true
     [ -n "$HTTP_PID" ] && kill "$HTTP_PID" 2>/dev/null || true
     [ -n "$VTUBER_PID" ] && kill "$VTUBER_PID" 2>/dev/null || true
+    pulseaudio --kill 2>/dev/null || true
     [ -n "$PULSE_PID" ] && kill "$PULSE_PID" 2>/dev/null || true
     [ -n "$XVFB_PID" ] && kill "$XVFB_PID" 2>/dev/null || true
 }
 trap cleanup SIGTERM SIGINT
+
+wait_for_pulse() {
+    local elapsed=0
+    until pactl info >/dev/null 2>&1; do
+        if [ "$elapsed" -ge 20 ]; then
+            return 1
+        fi
+        sleep 1
+        elapsed=$((elapsed+1))
+    done
+    return 0
+}
+
+audio_diag_snapshot() {
+    local label="$1"
+    log "Audio diag (${label}): pactl info"
+    pactl info || true
+    log "Audio diag (${label}): sinks"
+    pactl list short sinks || true
+    log "Audio diag (${label}): sources"
+    pactl list short sources || true
+}
+
+audio_diag_sink_inputs() {
+    local label="$1"
+    log "Audio diag (${label}): sink-inputs"
+    pactl list short sink-inputs || true
+}
+
+audio_diag_poll_sink_inputs() {
+    local rounds="${1:-8}"
+    local interval="${2:-2}"
+    local found=0
+    local i
+    for i in $(seq 1 "$rounds"); do
+        local out=""
+        out="$(pactl list short sink-inputs 2>/dev/null || true)"
+        if [ -n "$out" ]; then
+            found=1
+            log "Audio diag (sink-inputs poll ${i}/${rounds}):"
+            printf '%s\n' "$out"
+        else
+            log "Audio diag (sink-inputs poll ${i}/${rounds}): none"
+        fi
+        sleep "$interval"
+    done
+    if [ "$found" -eq 0 ]; then
+        log "WARNING: Chrome is not writing audio to PulseAudio (no sink-inputs found)"
+    fi
+}
+
+audio_diag_probe_monitor() {
+    [ "$VTUBER_AUDIO_DEBUG" = "1" ] || return 0
+    log "Audio diag: probing virtual_speaker.monitor for signal (ffmpeg astats)"
+    timeout 6 ffmpeg -hide_banner -loglevel info \
+        -f pulse -i virtual_speaker.monitor \
+        -t 3 \
+        -af astats=metadata=1:reset=1 \
+        -f null - >/tmp/vtuber-audio-probe.log 2>&1 || true
+    sed -n '1,200p' /tmp/vtuber-audio-probe.log || true
+}
 
 # 1. Xvfb
 log "Starting Xvfb on ${DISPLAY_NUM} ${DISPLAY_WIDTH}x${DISPLAY_HEIGHT}x24"
@@ -46,9 +109,20 @@ log "X display ready (${ELAPSED}s)"
 
 # 2. PulseAudio null sink
 log "Starting PulseAudio..."
-pulseaudio --start --exit-idle-time=-1 2>/dev/null || true
+pulseaudio --kill 2>/dev/null || true
 sleep 1
-pactl load-module module-null-sink sink_name=virtual_speaker 2>/dev/null || true
+pulseaudio --start --exit-idle-time=-1 --log-level=error 2>/dev/null || true
+sleep 1
+
+wait_for_pulse || fail "PulseAudio did not become ready"
+
+pactl load-module module-null-sink \
+    sink_name=virtual_speaker \
+    sink_properties=device.description=VirtualSpeaker >/dev/null 2>&1 || true
+pactl set-default-sink virtual_speaker >/dev/null 2>&1 || true
+pactl set-default-source virtual_speaker.monitor >/dev/null 2>&1 || true
+
+audio_diag_snapshot "post-pulse-setup"
 
 # 3. Generate conf.yaml from template and start VTuber server
 log "Generating VTuber config..."
@@ -68,17 +142,25 @@ until curl -sf http://localhost:12393/ >/dev/null 2>&1; do
 done
 log "VTuber server ready (${ELAPSED}s)"
 
-# 4. Generate wrapper.html (substitutes FACTORIO_STREAM_URL)
+# Sanity check: verify our patched embed.html is being served (best-effort)
+if curl -sf http://localhost:12393/embed.html | grep -q "enable-audio"; then
+    log "Patched embed.html sanity check passed (enable-audio hook present)"
+else
+    log "WARNING: embed.html sanity check failed; upstream embed may be active"
+fi
+
+# 4. Generate wrapper.html (substitutes FRONTEND_URL)
 log "Generating wrapper.html..."
 envsubst < /wrapper.html > /var/www/html/index.html
 
-# 5. Start python HTTP server for wrapper page (replaces nginx)
-log "Starting HTTP server on :8080..."
-cd /var/www/html && python3 -m http.server 8080 &
+# 5. Start python HTTP server for wrapper page on compatibility port 3000
+log "Starting HTTP server on :3000..."
+cd /var/www/html && python3 -m http.server 3000 &
 HTTP_PID=$!
 
 # 6. Launch Chrome in kiosk mode pointing to wrapper page
 log "Launching Chrome..."
+unset DBUS_SESSION_BUS_ADDRESS || true
 DISPLAY="${DISPLAY_NUM}" google-chrome-stable \
     --no-sandbox \
     --no-first-run \
@@ -90,16 +172,24 @@ DISPLAY="${DISPLAY_NUM}" google-chrome-stable \
     --start-fullscreen \
     --kiosk \
     --autoplay-policy=no-user-gesture-required \
+    --use-fake-ui-for-media-stream \
+    --use-fake-device-for-media-stream \
     --disable-infobars \
     --window-size=1920,1080 \
     --window-position=0,0 \
     --user-data-dir=/tmp/chrome-profile \
-    http://localhost:8080/ &
+    http://localhost:3000/ &
 CHROME_PID=$!
 
 # 7. Wait for browser to render
 log "Waiting 8s for browser to render..."
 sleep 8
+
+audio_diag_sink_inputs "after-chrome-start"
+if [ "$VTUBER_AUDIO_DEBUG" = "1" ]; then
+    audio_diag_poll_sink_inputs 10 2
+    audio_diag_probe_monitor
+fi
 
 # 8. Build RTMP output list from stream key env vars
 OUTPUTS=()
@@ -124,7 +214,9 @@ done
 # 9. FFmpeg: x11grab + PulseAudio → H.264+AAC → RTMP directly
 log "Starting FFmpeg RTMP encoder (${#OUTPUTS[@]} destination(s))..."
 ffmpeg -loglevel warning \
+    -thread_queue_size 1024 \
     -f x11grab -framerate 30 -video_size "${DISPLAY_WIDTH}x${DISPLAY_HEIGHT}" -draw_mouse 0 -i "${DISPLAY_NUM}" \
+    -thread_queue_size 1024 \
     -f pulse -i virtual_speaker.monitor \
     "${OUTPUT_ARGS[@]}" &
 FFMPEG_PID=$!

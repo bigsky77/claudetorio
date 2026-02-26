@@ -159,11 +159,17 @@ async def spawn_vtuber_stream_client(req: VtuberStreamClientRequest, _=Depends(r
     if not ready:
         raise HTTPException(status_code=504, detail="VTuber container port 3000 not ready in time")
 
-    hls_ready = await _wait_for_hls_manifest(req.container_name, timeout=VTUBER_READY_TIMEOUT_SECONDS)
-    if not hls_ready:
-        raise HTTPException(status_code=504, detail="VTuber HLS manifest not available")
+    streaming_ready = await _wait_for_file(
+        req.container_name,
+        "/tmp/streaming",
+        timeout=VTUBER_READY_TIMEOUT_SECONDS,
+        poll_seconds=3,
+        ready_message="VTuber streaming sentinel found",
+    )
+    if not streaming_ready:
+        raise HTTPException(status_code=504, detail="VTuber streaming sentinel not available")
 
-    print(f"[stream-agent] {req.container_name} is ready — VTuber HLS stream live", flush=True)
+    print(f"[stream-agent] {req.container_name} is ready — VTuber stream live", flush=True)
     return {"ok": True}
 
 
@@ -227,18 +233,35 @@ async def _wait_for_port(host: str, port: int, timeout: int = 120) -> bool:
 
 
 async def _wait_for_hls_manifest(container_name: str, timeout: int = HLS_READY_TIMEOUT_SECONDS) -> bool:
+    return await _wait_for_file(
+        container_name,
+        "/tmp/hls/stream.m3u8",
+        timeout=timeout,
+        poll_seconds=3,
+        ready_message="HLS manifest found",
+    )
+
+
+async def _wait_for_file(
+    container_name: str,
+    path: str,
+    timeout: int,
+    poll_seconds: int = 3,
+    ready_message: str | None = None,
+) -> bool:
     deadline = asyncio.get_event_loop().time() + timeout
     while asyncio.get_event_loop().time() < deadline:
         proc = await asyncio.create_subprocess_exec(
-            "docker", "exec", container_name, "test", "-f", "/tmp/hls/stream.m3u8",
+            "docker", "exec", container_name, "test", "-f", path,
             stdout=asyncio.subprocess.DEVNULL,
             stderr=asyncio.subprocess.DEVNULL,
         )
         await proc.wait()
         if proc.returncode == 0:
-            print(f"[stream-agent] HLS manifest found in {container_name}", flush=True)
+            if ready_message:
+                print(f"[stream-agent] {ready_message} in {container_name}", flush=True)
             return True
-        await asyncio.sleep(3)
+        await asyncio.sleep(poll_seconds)
     return False
 
 
