@@ -48,6 +48,16 @@ export default function HomePage() {
           <BenchmarksList />
         </section>
       </div>
+
+      {/* Footer */}
+      <footer className="h-14 bg-surface-1 border-t border-surface-3 flex items-center justify-center gap-14 px-8">
+        <a href="https://www.twitch.tv/claudetorio" target="_blank" rel="noopener noreferrer" className="text-[#9146FF] hover:opacity-70 transition-opacity" aria-label="Twitch">
+          <svg height="22" viewBox="20 10 1100 270" fill="currentColor"><path d="M170 170h-70v20h70v80H60l-40-40V20h80v70h70zM470 270H230l-40-40V90h80v100h20V90h80v100h20V90h80zM490 90h80v180h-80zM490 20h80v50h-80zM740 170h-70v20h70v80H630l-40-40V20h80v70h70zM920 170h-80v20h80v80H800l-40-40V130l40-40h120zM1120 270h-80V170h-20v100h-80V20h80v70h60l40 40z"/></svg>
+        </a>
+        <a href="https://kick.com/claudetorio" target="_blank" rel="noopener noreferrer" className="text-[#53FC18] hover:opacity-70 transition-opacity" aria-label="Kick">
+          <svg height="18" viewBox="0 0 300 80" fill="currentColor"><rect x="0" y="0" width="20" height="80"/><rect x="20" y="30" width="20" height="20"/><rect x="40" y="20" width="20" height="20"/><rect x="40" y="40" width="20" height="20"/><rect x="60" y="0" width="20" height="20"/><rect x="60" y="60" width="20" height="20"/><rect x="100" y="0" width="20" height="80"/><rect x="140" y="0" width="60" height="20"/><rect x="140" y="20" width="20" height="40"/><rect x="140" y="60" width="60" height="20"/><rect x="220" y="0" width="20" height="80"/><rect x="240" y="30" width="20" height="20"/><rect x="260" y="20" width="20" height="20"/><rect x="260" y="40" width="20" height="20"/><rect x="280" y="0" width="20" height="20"/><rect x="280" y="60" width="20" height="20"/></svg>
+        </a>
+      </footer>
     </main>
   );
 }
