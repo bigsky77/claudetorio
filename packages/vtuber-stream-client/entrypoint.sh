@@ -19,9 +19,11 @@ VTUBER_PID=""
 CHROME_PID=""
 HTTP_PID=""
 FFMPEG_PID=""
+NARRATE_PID=""
 
 cleanup() {
     log "Shutting down..."
+    [ -n "$NARRATE_PID" ] && kill "$NARRATE_PID" 2>/dev/null || true
     [ -n "$FFMPEG_PID" ] && kill "$FFMPEG_PID" 2>/dev/null || true
     [ -n "$CHROME_PID" ] && kill "$CHROME_PID" 2>/dev/null || true
     [ -n "$HTTP_PID" ] && kill "$HTTP_PID" 2>/dev/null || true
@@ -141,6 +143,16 @@ until curl -sf http://localhost:12393/ >/dev/null 2>&1; do
     sleep 2; ELAPSED=$((ELAPSED+2))
 done
 log "VTuber server ready (${ELAPSED}s)"
+
+# 3b. Start narrator
+log "Starting narrator..."
+ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY:-}" \
+ELEVENLABS_API_KEY="${ELEVENLABS_API_KEY:-}" \
+BROKER_URL="${BROKER_URL:-https://app.claudetorio.ai}" \
+AVATAR_URL="http://localhost:12393" \
+  python3 /narrate.py >> /tmp/narrator.log 2>&1 &
+NARRATE_PID=$!
+log "Narrator running (PID: $NARRATE_PID, log: /tmp/narrator.log)"
 
 # Sanity check: verify our patched embed.html is being served (best-effort)
 if curl -sf http://localhost:12393/embed.html | grep -q "enable-audio"; then

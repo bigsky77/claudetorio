@@ -66,4 +66,8 @@ COPY wrapper.html /wrapper.html
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
+# Copy narration scripts
+COPY narrate.py /narrate.py
+COPY speak.py /speak.py
+
 CMD ["/entrypoint.sh"]

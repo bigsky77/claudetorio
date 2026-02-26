@@ -163,6 +163,20 @@ async def list_runs(
     ]
 
 
+@router.get("/api/runs/live")
+async def get_live_run(db: AsyncSession = Depends(get_db)):
+    """Return the most recent running run, or 404."""
+    run = await db.scalar(
+        select(Run)
+        .where(Run.status == "running")
+        .order_by(Run.created_at.desc())
+        .limit(1)
+    )
+    if not run:
+        raise HTTPException(404, "No live run")
+    return {"run_id": run.run_id}
+
+
 @router.get("/api/runs/{run_id}")
 async def get_run(run_id: str, db: AsyncSession = Depends(get_db), app_state: AppState = Depends(get_app_state)):
     run = await db.scalar(select(Run).where(Run.run_id == run_id))
