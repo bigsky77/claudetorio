@@ -37,14 +37,14 @@ export default function HomePage({
   return (
     <main className="min-h-screen bg-surface-0 text-white font-[family-name:var(--font-body)]">
       {/* Top bar */}
-      <header className="h-12 bg-surface-1 border-b border-surface-3 flex items-center justify-between px-8">
+      <header className="h-14 bg-surface-1 border-b border-surface-3 flex items-center justify-between px-8">
         <span className="font-[family-name:var(--font-heading)] font-bold text-lg tracking-wide text-white">
           CLAUDETORIO
         </span>
         <LoginWidget />
       </header>
 
-      <div className="px-10 py-8 space-y-12">
+      <div className="px-10 py-8 pb-20 space-y-12">
         {/* STREAMS */}
         <section>
           <h2 className="font-[family-name:var(--font-heading)] text-2xl font-bold mb-6 tracking-wide">
@@ -174,7 +174,7 @@ export default function HomePage({
       </div>
 
       {/* Footer */}
-      <footer className="h-14 bg-surface-1 border-t border-surface-3 flex items-center justify-center gap-14 px-8">
+      <footer className="fixed bottom-0 left-0 right-0 h-12 bg-surface-1 border-t border-surface-3 flex items-center justify-center gap-14 px-8 z-50">
         <a href="https://www.twitch.tv/claudetorio" target="_blank" rel="noopener noreferrer" className="text-[#9146FF] hover:opacity-70 transition-opacity" aria-label="Twitch">
           <svg height="22" viewBox="20 10 1100 270" fill="currentColor"><path d="M170 170h-70v20h70v80H60l-40-40V20h80v70h70zM470 270H230l-40-40V90h80v100h20V90h80v100h20V90h80zM490 90h80v180h-80zM490 20h80v50h-80zM740 170h-70v20h70v80H630l-40-40V20h80v70h70zM920 170h-80v20h80v80H800l-40-40V130l40-40h120zM1120 270h-80V170h-20v100h-80V20h80v70h60l40 40z"/></svg>
         </a>

@@ -2,9 +2,9 @@ import type { Metadata } from 'next';
 import Dashboard from '@/components/Dashboard';
 
 export const metadata: Metadata = {
-  title: { absolute: 'Claudetorio - APP' },
+  title: { absolute: 'Claudetorio - Dashboard' },
 };
 
-export default function ArenaPage() {
+export default function DashboardPage() {
   return <Dashboard />;
 }
