@@ -92,7 +92,7 @@ async def github_callback(body: GitHubCallbackRequest, db: AsyncSession = Depend
         gh_user.email = email
         gh_user.avatar_url = avatar_url
         gh_user.github_token = access_token
-        gh_user.updated_at = datetime.now(timezone.utc)
+        gh_user.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
     else:
         gh_user = GitHubUser(
             github_id=github_id,

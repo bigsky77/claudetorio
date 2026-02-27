@@ -14,8 +14,13 @@ export async function POST(request: NextRequest) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
-    const data = await res.json();
-    return NextResponse.json(data, { status: res.status });
+    const text = await res.text();
+    try {
+      const data = JSON.parse(text);
+      return NextResponse.json(data, { status: res.status });
+    } catch {
+      return NextResponse.json({ error: text || 'Unknown broker error' }, { status: res.status });
+    }
   } catch (err) {
     return NextResponse.json({ error: 'Auth service unavailable', detail: String(err) }, { status: 502 });
   }

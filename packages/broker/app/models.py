@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, List
 
 from sqlalchemy import (
@@ -173,7 +173,7 @@ class GitHubUser(Base):
     avatar_url: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     github_token: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     created_at: Mapped[Optional[datetime]] = mapped_column(server_default=text("NOW()"))
-    updated_at: Mapped[Optional[datetime]] = mapped_column(server_default=text("NOW()"), onupdate=datetime.now)
+    updated_at: Mapped[Optional[datetime]] = mapped_column(server_default=text("NOW()"), onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
 
 class ChatMessage(Base):
