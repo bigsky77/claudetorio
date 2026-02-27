@@ -31,7 +31,7 @@ export default function BenchmarksList() {
   if (!runs.length) {
     return (
       <div className="text-white/50 font-[family-name:var(--font-body)] text-sm">
-        No benchmarks found. (Start one from <Link className="text-accent-green underline" href="/arena">/arena</Link>)
+        No benchmarks found. (Start one from <Link className="text-accent-green underline" href="/dashboard">/dashboard</Link>)
       </div>
     );
   }

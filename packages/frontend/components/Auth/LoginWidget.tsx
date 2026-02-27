@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
+import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
 import ApiKeyManager from './ApiKeyManager';
 
@@ -54,6 +55,13 @@ export default function LoginWidget() {
 
             {/* Menu */}
             <div className="py-1">
+              <Link
+                href="/dashboard"
+                onClick={() => setDropdownOpen(false)}
+                className="block w-full text-left px-3 py-2 text-sm text-white/60 hover:bg-surface-2 hover:text-white transition-colors"
+              >
+                Dashboard
+              </Link>
               <button
                 onClick={() => setShowApiKeys(!showApiKeys)}
                 className="w-full text-left px-3 py-2 text-sm text-white/60 hover:bg-surface-2 hover:text-white transition-colors"
