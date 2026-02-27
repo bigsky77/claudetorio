@@ -1,12 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { API_BASE } from '@/constants';
 import { useAuth } from '@/contexts/AuthContext';
 
-export default function AuthCallbackPage() {
+function CallbackHandler() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const { handleCallback } = useAuth();
@@ -48,20 +48,24 @@ export default function AuthCallbackPage() {
 
   if (error) {
     return (
-      <main className="min-h-screen bg-surface-0 text-white font-[family-name:var(--font-body)] flex items-center justify-center">
-        <div className="text-center space-y-4">
-          <p className="text-red-400">Authentication failed: {error}</p>
-          <Link href="/" className="text-accent-green hover:opacity-80 transition-opacity">
-            Back to home
-          </Link>
-        </div>
-      </main>
+      <div className="text-center space-y-4">
+        <p className="text-red-400">Authentication failed: {error}</p>
+        <Link href="/" className="text-accent-green hover:opacity-80 transition-opacity">
+          Back to home
+        </Link>
+      </div>
     );
   }
 
+  return <p className="text-white/60">Authenticating...</p>;
+}
+
+export default function AuthCallbackPage() {
   return (
     <main className="min-h-screen bg-surface-0 text-white font-[family-name:var(--font-body)] flex items-center justify-center">
-      <p className="text-white/60">Authenticating...</p>
+      <Suspense fallback={<p className="text-white/60">Loading...</p>}>
+        <CallbackHandler />
+      </Suspense>
     </main>
   );
 }
