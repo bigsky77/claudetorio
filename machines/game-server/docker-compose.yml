@@ -117,8 +117,8 @@ services:
     build:
       context: ../../packages/frontend
       args:
-        - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://157.254.222.103:8080}
-        - NEXT_PUBLIC_STREAM_URL=${NEXT_PUBLIC_STREAM_URL:-https://157.254.222.104:3003}
+        - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-https://app.claudetorio.ai}
+        - NEXT_PUBLIC_STREAM_URL=${NEXT_PUBLIC_STREAM_URL:-https://stream.claudetorio.ai}
         - NEXT_PUBLIC_TWITCH_CHANNEL=${TWITCH_CHANNEL:-}
         - NEXT_PUBLIC_TWITCH_EMBED_PARENT=${NEXT_PUBLIC_TWITCH_EMBED_PARENT:-app.claudetorio.ai}
     container_name: claudetorio-frontend
@@ -126,8 +126,8 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://157.254.222.103:8080}
-      - NEXT_PUBLIC_STREAM_URL=${NEXT_PUBLIC_STREAM_URL:-https://157.254.222.104:3003}
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-https://app.claudetorio.ai}
+      - NEXT_PUBLIC_STREAM_URL=${NEXT_PUBLIC_STREAM_URL:-https://stream.claudetorio.ai}
       - BROKER_URL=http://broker:8080
       - TWITCH_CHANNEL=${TWITCH_CHANNEL:-}
       - TWITCH_CLIENT_ID=${TWITCH_CLIENT_ID:-}
