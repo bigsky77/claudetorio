@@ -88,6 +88,8 @@ function useLiveSteps(runId: string | null) {
 export default function LiveView() {
   const [run, setRun] = useState<RunInfo | null>(null);
   const [error, setError] = useState(false);
+  const [audioEnabled, setAudioEnabled] = useState(false);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
   const steps = useLiveSteps(run?.run_id ?? null);
 
   // Runtime display overlay (code/result text that fades in/out)
@@ -200,12 +202,26 @@ export default function LiveView() {
             {AVATAR_URL && (
               <div className="absolute bottom-0 right-0 w-[600px] h-[400px] overflow-hidden z-10 -mr-[100px]">
                 <iframe
+                  ref={iframeRef}
                   src={AVATAR_URL}
                   className="w-[600px] h-[600px] border-none"
                   style={{ transform: 'scale(2)', transformOrigin: 'top center' }}
-                  allow="autoplay"
+                  allow="autoplay; speaker; microphone"
                 />
               </div>
+            )}
+
+            {/* Click-to-enable-audio button */}
+            {AVATAR_URL && !audioEnabled && (
+              <button
+                className="pointer-events-auto absolute top-4 right-4 lg:top-6 lg:right-[360px] z-20 flex items-center gap-2 rounded-lg border border-white/20 bg-black/60 backdrop-blur-md px-3 py-1.5 text-xs text-white/70 hover:text-white hover:border-white/40 transition-all"
+                onClick={() => {
+                  setAudioEnabled(true);
+                  iframeRef.current?.contentWindow?.postMessage({ type: 'enable-audio' }, '*');
+                }}
+              >
+                <span className="text-base">🔇</span> Click to enable sound
+              </button>
             )}
           </div>
         </div>
