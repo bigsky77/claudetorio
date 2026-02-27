@@ -118,7 +118,7 @@ character_config:
         temperature: 1.0
 
   asr_config:
-    asr_model: 'sherpa_onnx_asr'
+    asr_model: null
 
     azure_asr:
       api_key: ''
@@ -172,7 +172,7 @@ character_config:
       lang: ''
 
   tts_config:
-    tts_model: 'edge_tts'
+    tts_model: 'elevenlabs_tts'
 
     azure_tts:
       api_key: ''
@@ -284,8 +284,8 @@ character_config:
       pronunciation_dict: ''
 
     elevenlabs_tts:
-      api_key: ''
-      voice_id: ''
+      api_key: '${ELEVENLABS_API_KEY}'
+      voice_id: 'jqcCZkN6Knx8BJ5TBdYR'
       model_id: 'eleven_multilingual_v2'
       output_format: 'mp3_44100_128'
       stability: 0.5

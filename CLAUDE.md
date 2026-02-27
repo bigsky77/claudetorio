@@ -98,10 +98,11 @@ game-server (157.254.222.103)
   └── stream-worker-{run_id}  ← replays steps via RCON to local factorio-replay
 
 stream-server (157.254.222.104)
-  ├── caddy (80/443)          ← TLS; routes :{STREAM_BASE_PORT+slot} → stream-client-{slot}:3000
+  ├── caddy (80/443)          ← TLS; routes by subdomain → stream-client-{slot}:3000
   ├── stream-agent (8090)     ← HTTP API: spawn/stop stream-client containers on this daemon
-  └── stream-client-{slot}    ← FFmpeg→HLS→nginx; UDP to game-server:34197+slot
-  └── stream-client-replay-{run_id}  ← FFmpeg→HLS→nginx; UDP to game-server:35100+slot
+  ├── stream-client-{slot}            ← FFmpeg→HLS→nginx; UDP to game-server:34197+slot
+  ├── stream-client-replay-{run_id}   ← FFmpeg→HLS→nginx; UDP to game-server:35100+slot
+  └── vtuber-stream-client-replay-{run_id}  ← composite RTMP: Factorio HLS + Live2D avatar
 ```
 
 The broker mounts `/var/run/docker.sock` and uses `docker run` to spawn game containers. Stream-client containers are spawned via HTTP to stream-agent (when `STREAM_AGENT_URL` is set) so they land on stream-server's Docker daemon. In dev, `STREAM_AGENT_URL` is unset and stream-clients are spawned locally.
@@ -114,8 +115,8 @@ The broker mounts `/var/run/docker.sock` and uses `docker run` to spawn game con
 2. `POST /api/runs/{id}/start-worker` → broker spawns `run-worker-{run_id}` Docker container, status=`running`
 3. run-worker: LLM observe-think-act loop, reports each step via `POST /api/runs/{id}/steps`
 4. run-worker exits → `_monitor_run` updates DB status to `completed`/`failed`, releases slot lock, stops Factorio
-5. `POST /api/runs/{id}/replay` → spawns `factorio-replay-{run_id}` + `stream-client-replay-{run_id}` (via stream-agent in prod) + `stream-worker-{run_id}`; stream-worker fetches all DB steps and re-executes them at STEP_INTERVAL pace
-6. `DELETE /api/runs/{id}/replay` → stops all three replay containers
+5. `POST /api/runs/{id}/replay` → spawns `factorio-replay-{run_id}` + `stream-client-replay-{run_id}` (via stream-agent in prod) + `stream-worker-{run_id}` + `vtuber-stream-client-replay-{run_id}`; stream-worker fetches all DB steps and re-executes them at STEP_INTERVAL pace
+6. `DELETE /api/runs/{id}/replay` → stops all four replay containers
 
 ## Port Conventions
 
@@ -127,6 +128,7 @@ The broker mounts `/var/run/docker.sock` and uses `docker run` to spawn game con
 | Replay Factorio UDP | `REPLAY_UDP_BASE_PORT + slot` | 35100 |
 | Replay Factorio RCON | `REPLAY_RCON_BASE_PORT + slot` | 28000 |
 | Replay stream | `REPLAY_STREAM_BASE_PORT + slot` | 4002 |
+| VTuber composite stream | `VTUBER_STREAM_BASE_PORT + slot` | 5002 |
 
 Slots 0-19 are used for live runs; slots 0-4 are used for replays (independent ranges).
 
@@ -148,12 +150,15 @@ packages/broker/
       leaderboard.py         # /api/leaderboard
       system.py              # /api/status, /api/health
       internal.py            # Internal run-worker reporting endpoints
+      chat.py                # /api/chat — stream chat messages
     services/
       factorio.py            # spawn_factorio, wait_for_factorio, stop_factorio
       streaming.py           # spawn_stream_client (local or via stream-agent)
       replay.py              # All replay container lifecycle functions
       slots.py               # Redis slot lock management
       rcon.py                # RCON helpers
+      vtuber_streaming.py    # spawn/wait/stop vtuber-stream-client containers
+      chat.py                # Chat message storage and retrieval
     tasks.py                 # Background: score_polling_loop, session_timeout_checker
 ```
 
@@ -180,6 +185,35 @@ packages/broker/
 5. nginx serves `/tmp/hls/stream.m3u8` + `.ts` segments on port 3000, plus a standalone `index.html` hls.js player at `/`
 
 The stream-agent waits for port 3000 then polls `docker exec test -f /tmp/hls/stream.m3u8` before declaring the container ready.
+
+## VTuber Stream Client
+
+`packages/vtuber-stream-client/` creates a composite RTMP broadcast combining the Factorio HLS stream, a Live2D avatar, and AI narration. Container startup (`entrypoint.sh`):
+
+1. Xvfb + PulseAudio for virtual display and audio
+2. Open-LLM-VTuber server (avatar rendering + speech synthesis via ElevenLabs)
+3. Chromium loads `wrapper.html` — a custom overlay compositing the Factorio HLS stream with the avatar iframe
+4. FFmpeg x11grabs the display, mixes audio, and pushes RTMP to Twitch and/or Kick
+5. nginx serves a status page on port 3000; a `/tmp/streaming` sentinel is written when the RTMP stream is live
+
+The stream-agent spawns these containers via `POST /spawn/vtuber-stream-client` and waits up to 300s for the sentinel. RTMP can be toggled post-spawn via `POST /containers/{name}/rtmp/start` and `POST /containers/{name}/rtmp/stop`.
+
+Key files:
+- `narrate.py` — AI narrator process (see Narration System below)
+- `speak.py` — sends text to the avatar server for lip-synced TTS
+- `conf.yaml.template` — Open-LLM-VTuber configuration (ElevenLabs voice, Sherpa-ONNX ASR)
+- `models/` — bundled Sherpa-ONNX speech recognition models (zh, en, ja, ko, yue)
+
+## Narration System
+
+`packages/vtuber-stream-client/narrate.py` runs as a sidecar process inside the VTuber container. It polls the broker for new run steps and generates first-person AI commentary:
+
+- **Mood system:** `chill | hyped | frustrated | thinking | philosophical` — affects comment frequency (6–14s when hyped, 15–35s when philosophical) and prompt tone
+- **Memory window:** Last 10 narration lines are included as conversation history for continuity
+- **Score tracking:** Detects milestones, error streaks, and score trends to inform mood transitions
+- **Idle variation:** 35% chance of a random observation, 15% chance of a philosophical meta-tangent during quiet moments
+- Polls `GET /api/runs/live` to discover the active run, then `GET /api/runs/{run_id}/steps` for new steps
+- Calls Claude (default `claude-sonnet-4-20250514`, overridable via `CLAUDE_MODEL`) with a first-person system prompt ("You ARE an AI agent playing Factorio... Punchy 1-3 sentences.")
 
 ## Other Packages
 
@@ -223,10 +257,11 @@ Factorio servers are started with a **vanilla save** (`--create`), not the `open
 
 - **App Router** (Next.js 16): pages under `app/`, API proxy routes under `app/api/`
 - `app/api/runs/[runId]/*/route.ts` — proxy to broker with `BROKER_ADMIN_KEY` header; never expose the key to the browser
-- `NEXT_PUBLIC_API_URL` and `NEXT_PUBLIC_STREAM_URL` are inlined at **build time** (Docker `ARG`); changing them requires a rebuild
+- `NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_STREAM_URL`, `NEXT_PUBLIC_TWITCH_CHANNEL`, and `NEXT_PUBLIC_TWITCH_EMBED_PARENT` are inlined at **build time** (Docker `ARG`); changing them requires a rebuild
 - Client components poll run/step state via `useRunPolling` hook
 - `StreamPanel` renders an hls.js `<video>` element from the replay `stream_url`; appends `/stream.m3u8` to the base URL
 - `stream_url` on `RunInfo` is only populated when a replay is active (`app_state.active_replays[run_id]`); live runs no longer auto-spawn a stream client
+- `lib/streams.ts` defines `StreamDefinition` with discriminated types: `live | replay | twitch-live | twitch-vod`. `resolveStreamSource()` switches between an `<iframe>` (Twitch embeds, VTuber wrapper) and an HLS `<video>` depending on stream type.
 
 ## Key Environment Variables
 
@@ -244,6 +279,19 @@ For the broker (see `dev/docker-compose.yml` for dev values):
 | `STREAM_AGENT_URL` | e.g. `http://157.254.222.104:8090` — when set, stream-clients are spawned on stream-server via HTTP instead of locally |
 | `STREAM_AGENT_KEY` | Shared secret for broker ↔ stream-agent auth |
 | `GAME_SERVER_PUBLIC_HOST` | Public IP of game-server (passed to stream-agent so stream-clients know where to connect) |
+| `VTUBER_STREAM_CLIENT_IMAGE` | Image name for vtuber-stream-client containers (default: `claudetorio-vtuber-stream-client`) |
+| `VTUBER_STREAM_BASE_PORT` | Base port for VTuber composite streams (default: `5002`) |
+| `ELEVENLABS_API_KEY` | TTS for VTuber narration |
+| `TWITCH_STREAM_KEY` / `KICK_STREAM_KEY` | RTMP destination keys |
+| `TWITCH_CLIENT_ID` / `TWITCH_CLIENT_SECRET` / `TWITCH_CHANNEL` | Twitch API integration |
+
+For the frontend (build-time `ARG` + runtime env):
+
+| Variable | Purpose |
+|----------|---------|
+| `NEXT_PUBLIC_TWITCH_CHANNEL` | Twitch channel name for embed |
+| `NEXT_PUBLIC_TWITCH_EMBED_PARENT` | Domain allowed by Twitch embed (e.g. `app.claudetorio.ai`) |
+| `TWITCH_CLIENT_ID` / `TWITCH_CLIENT_SECRET` / `TWITCH_CHANNEL` | Server-side Twitch OAuth |
 
 For run-worker:
 
@@ -261,14 +309,29 @@ For stream-worker:
 | `POLL_INTERVAL` | Seconds to wait when no new steps are available (default: 10.0) |
 | `CAMERA_ZOOM` | `zoom_to_world` zoom level for spectators (default: 0.5) |
 
-**Production stream URL routing:** When `STREAM_DOMAIN` is set on the broker, Caddy on stream-server routes by subdomain — `c{slot}.{STREAM_DOMAIN}` for live streams and `cr{slot}.{STREAM_DOMAIN}` for replay streams (requires a wildcard TLS cert). In dev, port-based routing is used instead (`{STREAM_URL}:{STREAM_BASE_PORT+slot}`).
+For vtuber-stream-client:
+
+| Variable | Purpose |
+|----------|---------|
+| `FACTORIO_STREAM_URL` | HLS URL of the replay stream to composite |
+| `CLAUDE_MODEL` | Model for narration (default: `claude-sonnet-4-20250514`) |
+| `ELEVENLABS_API_KEY` | ElevenLabs TTS key |
+| `TWITCH_STREAM_KEY` / `KICK_STREAM_KEY` | RTMP output destinations |
+| `BROKER_URL` | For narrate.py to poll run steps |
+| `AVATAR_URL` | Internal avatar server URL (set automatically by entrypoint) |
+
+**Production stream URL routing:** When `STREAM_DOMAIN` is set on the broker, Caddy on stream-server routes by subdomain — `c{slot}.{STREAM_DOMAIN}` for live streams, `cr{slot}.{STREAM_DOMAIN}` for replay streams, and `cv{slot}.{STREAM_DOMAIN}` for VTuber composite streams (requires a wildcard TLS cert). In dev, port-based routing is used instead.
 
 ## Deployment
 
 Push to `main` triggers GitHub Actions (`.github/workflows/deploy.yml`):
 - Changes in `packages/{broker,frontend,fle,run-worker,stream-worker}/` or `machines/game-server/` → deploy to **game-server**
-- Changes in `packages/{stream-client,stream-agent}/` or `machines/stream-server/` → deploy to **stream-server**
+- Changes in `packages/{stream-client,stream-agent,vtuber-stream-client}/` or `machines/stream-server/` → deploy to **stream-server**
 
 Manual deploy scripts: `machines/game-server/deploy.sh` and `machines/stream-server/deploy.sh`.
+
+**game-server/deploy.sh** syncs broker, frontend, agent-runner, run-worker, stream-worker, and fle packages; builds run-worker + stream-worker images; refreshes Factorio config and scenario volumes; restarts the compose stack.
+
+**stream-server/deploy.sh** syncs stream-client, stream-worker, stream-agent, and vtuber-stream-client packages; builds all three images (validates each with `docker image inspect`); re-populates `claudetorio_factorio_client` volume; restarts the compose stack. Requires `FACTORIO_CLIENT_PATH` in `.env`.
 
 Infrastructure (NixOS machine config + firewall rules) is in `machines/game-server/configuration.nix` and `machines/stream-server/configuration.nix`.
