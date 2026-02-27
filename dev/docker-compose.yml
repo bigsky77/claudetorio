@@ -108,6 +108,10 @@ services:
       - REPLAY_RCON_BASE_PORT=28000
       - VTUBER_STREAM_CLIENT_IMAGE=claudetorio-vtuber-stream-client
       - VTUBER_STREAM_BASE_PORT=5002
+      - GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID:-}
+      - GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET:-}
+      - GITHUB_CALLBACK_URL=${GITHUB_CALLBACK_URL:-http://localhost:3000/auth/callback}
+      - JWT_SECRET=${JWT_SECRET:-dev-jwt-secret-change-me}
     depends_on:
       postgres:
         condition: service_healthy

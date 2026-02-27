@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import BenchmarksList from './BenchmarksList';
 import TournamentCountdown from './TournamentCountdown';
+import LoginWidget from '@/components/Auth/LoginWidget';
 import type { TwitchStream, TwitchVideo } from '@/lib/twitch';
 import type { RunInfo } from '@/interfaces';
 
@@ -40,9 +41,7 @@ export default function HomePage({
         <span className="font-[family-name:var(--font-heading)] font-bold text-lg tracking-wide text-white">
           CLAUDETORIO
         </span>
-        <button className="text-accent-green font-semibold text-sm hover:opacity-80 transition-opacity">
-          Login
-        </button>
+        <LoginWidget />
       </header>
 
       <div className="px-10 py-8 space-y-12">

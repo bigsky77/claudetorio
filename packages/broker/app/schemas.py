@@ -132,6 +132,29 @@ class CompleteRunRequest(BaseModel):
 
 # --- Chat schemas ---
 
+# --- Auth schemas ---
+
+class GitHubAuthUrlResponse(BaseModel):
+    url: str
+
+class GitHubCallbackRequest(BaseModel):
+    code: str
+
+class AuthTokenResponse(BaseModel):
+    token: str
+    user: "AuthUser"
+
+class AuthUser(BaseModel):
+    id: int
+    github_id: int
+    github_username: str
+    email: Optional[str] = None
+    avatar_url: Optional[str] = None
+
+class AuthMeResponse(BaseModel):
+    user: AuthUser
+
+
 class ChatMessageCreate(BaseModel):
     content: str = Field(..., min_length=1, max_length=500)
     username: str = Field(..., min_length=1, max_length=30)

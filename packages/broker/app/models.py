@@ -163,6 +163,19 @@ class RunStep(Base):
     )
 
 
+class GitHubUser(Base):
+    __tablename__ = "github_users"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    github_id: Mapped[int] = mapped_column(BigInteger, unique=True, nullable=False)
+    github_username: Mapped[str] = mapped_column(String, nullable=False)
+    email: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    avatar_url: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    github_token: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    created_at: Mapped[Optional[datetime]] = mapped_column(server_default=text("NOW()"))
+    updated_at: Mapped[Optional[datetime]] = mapped_column(server_default=text("NOW()"), onupdate=datetime.now)
+
+
 class ChatMessage(Base):
     __tablename__ = "chat_messages"
 
