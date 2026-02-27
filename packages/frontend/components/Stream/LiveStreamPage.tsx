@@ -7,6 +7,7 @@ import { fetchLiveRun } from '@/services/api';
 import StreamPlayer from './StreamPlayer';
 import StreamInfoBar from './StreamInfoBar';
 import ChatPanel from '@/components/Chat/ChatPanel';
+import LoginWidget from '@/components/Auth/LoginWidget';
 
 export default function LiveStreamPage({
   initialStream,
@@ -54,9 +55,7 @@ export default function LiveStreamPage({
         <a href="/" className="font-[family-name:var(--font-heading)] font-bold text-lg tracking-wide text-white hover:opacity-80 transition-opacity">
           CLAUDETORIO
         </a>
-        <button className="text-accent-green font-semibold text-sm hover:opacity-80 transition-opacity">
-          Login
-        </button>
+        <LoginWidget />
       </header>
 
       <div className="mx-auto max-w-[1400px] px-6 py-6">

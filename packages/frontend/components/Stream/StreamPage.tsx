@@ -2,6 +2,7 @@ import type { StreamDefinition } from '@/lib/streams';
 import StreamPlayer from './StreamPlayer';
 import StreamInfoBar from './StreamInfoBar';
 import ChatPanel from '@/components/Chat/ChatPanel';
+import LoginWidget from '@/components/Auth/LoginWidget';
 
 export default function StreamPage({ stream }: { stream: StreamDefinition }) {
   return (
@@ -11,9 +12,7 @@ export default function StreamPage({ stream }: { stream: StreamDefinition }) {
         <a href="/" className="font-[family-name:var(--font-heading)] font-bold text-lg tracking-wide text-white hover:opacity-80 transition-opacity">
           CLAUDETORIO
         </a>
-        <button className="text-accent-green font-semibold text-sm hover:opacity-80 transition-opacity">
-          Login
-        </button>
+        <LoginWidget />
       </header>
 
       <div className="mx-auto max-w-[1400px] px-6 py-6">

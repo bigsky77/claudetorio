@@ -5,6 +5,7 @@ from .system import router as system_router
 from .runs import router as runs_router
 from .internal import router as internal_router
 from .chat import router as chat_router
+from .auth import router as auth_router
 
 all_routers = [
     sessions_router,
@@ -14,4 +15,5 @@ all_routers = [
     runs_router,
     internal_router,
     chat_router,
+    auth_router,
 ]

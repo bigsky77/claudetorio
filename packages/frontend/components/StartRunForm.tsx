@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useEscapeKey } from '@/hooks/use-escape-key';
 import { createRun } from '@/services/api';
+import { getApiKeys } from '@/utils/api-keys';
 
 type Provider = 'anthropic' | 'openai' | 'custom';
 type StoredFormData = Partial<{
@@ -78,6 +79,16 @@ export default function StartRunForm({ onClose }: { onClose: () => void }) {
 
   useEscapeKey(onClose);
 
+  // Auto-fill from saved API keys (api-keys manager) if form fields are empty
+  useEffect(() => {
+    const saved = getApiKeys();
+    if (!apiKey && saved.anthropic && provider === 'anthropic') setApiKey(saved.anthropic);
+    if (!apiKey && saved.openai && provider === 'openai') setApiKey(saved.openai);
+    if (!customApiUrl && saved.custom.url) setCustomApiUrl(saved.custom.url);
+    if (!customApiKey && saved.custom.key) setCustomApiKey(saved.custom.key);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
     localStorage.setItem(
       FORM_STORAGE_KEY,
@@ -96,6 +107,10 @@ export default function StartRunForm({ onClose }: { onClose: () => void }) {
   function handleProviderChange(p: Provider) {
     setProvider(p);
     setModel(PROVIDER_DEFAULTS[p] || model);
+    // Load the matching saved key for the selected provider
+    const saved = getApiKeys();
+    if (p === 'anthropic') setApiKey(saved.anthropic);
+    else if (p === 'openai') setApiKey(saved.openai);
   }
 
   async function handleSubmit(e: React.FormEvent) {

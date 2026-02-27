@@ -71,6 +71,11 @@ class Config:
     TWITCH_CLIENT_ID: str = os.getenv("TWITCH_CLIENT_ID", "")
     TWITCH_CLIENT_SECRET: str = os.getenv("TWITCH_CLIENT_SECRET", "")
     TWITCH_CHANNEL: str = os.getenv("TWITCH_CHANNEL", "")
+    # GitHub OAuth
+    GITHUB_CLIENT_ID: str = os.getenv("GITHUB_CLIENT_ID", "")
+    GITHUB_CLIENT_SECRET: str = os.getenv("GITHUB_CLIENT_SECRET", "")
+    GITHUB_CALLBACK_URL: str = os.getenv("GITHUB_CALLBACK_URL", "http://localhost:3000/auth/callback")
+    JWT_SECRET: str = os.getenv("JWT_SECRET", "dev-jwt-secret-change-me")
 
     @classmethod
     def get_udp_port(cls, slot: int) -> int:

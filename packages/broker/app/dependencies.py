@@ -1,5 +1,6 @@
 from typing import AsyncGenerator, Optional
 
+import jwt
 from fastapi import Header, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -27,3 +28,29 @@ async def require_worker_key(authorization: Optional[str] = Header(None)):
     if config.RUN_WORKER_API_KEY:
         if not authorization or authorization != f"Bearer {config.RUN_WORKER_API_KEY}":
             raise HTTPException(401, "Invalid worker key")
+
+
+def _decode_jwt(token: str) -> dict:
+    try:
+        return jwt.decode(token, config.JWT_SECRET, algorithms=["HS256"])
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(401, "Token expired")
+    except jwt.InvalidTokenError:
+        raise HTTPException(401, "Invalid token")
+
+
+async def get_current_user_optional(authorization: Optional[str] = Header(None)) -> Optional[dict]:
+    """Decode JWT from Authorization header, or return None if absent."""
+    if not authorization or not authorization.startswith("Bearer "):
+        return None
+    try:
+        return _decode_jwt(authorization[7:])
+    except HTTPException:
+        return None
+
+
+async def get_current_user(authorization: Optional[str] = Header(None)) -> dict:
+    """Decode JWT from Authorization header, or raise 401."""
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(401, "Missing authorization header")
+    return _decode_jwt(authorization[7:])

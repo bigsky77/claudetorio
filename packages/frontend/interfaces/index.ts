@@ -25,3 +25,5 @@ export type {
 export type { RunInfo, RunStepInfo, TokenUsage } from './run';
 
 export type { ChatMessage } from './chat';
+
+export type { AuthUser } from './auth';
