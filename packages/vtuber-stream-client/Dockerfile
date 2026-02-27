@@ -15,6 +15,8 @@ RUN apt-get update && apt-get install -y \
     python3 \
     ca-certificates \
     gettext-base \
+    # Mesa software GL (llvmpipe) — more CPU-efficient than Chrome's SwiftShader
+    libgl1-mesa-dri \
     # Chrome dependencies
     libatk1.0-0 \
     libatk-bridge2.0-0 \
@@ -42,9 +44,14 @@ RUN wget -q -O /tmp/google-chrome.deb https://dl.google.com/linux/direct/google-
 # Install uv
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
-# Clone Open-LLM-VTuber at a pinned tag; recurse submodules for frontend/
-RUN git clone --depth 1 --branch v1.2.1 --recurse-submodules \
-    https://github.com/Open-LLM-VTuber/Open-LLM-VTuber /app/vtuber
+# Clone Open-LLM-VTuber at a pinned commit; recurse submodules for frontend/
+# Commit 19b58b1 is post-v1.2.1 and adds elevenlabs_tts + cartesia_tts support
+RUN git init /app/vtuber \
+    && cd /app/vtuber \
+    && git remote add origin https://github.com/Open-LLM-VTuber/Open-LLM-VTuber \
+    && git fetch --depth 1 origin 19b58b1f6c01e082289fce089392997b9d14fbc4 \
+    && git checkout FETCH_HEAD \
+    && git submodule update --init --recursive
 
 # Patch upstream frontend embed page with Claudetorio transparent/audio-safe overlay version
 COPY patches/embed.html /app/vtuber/frontend/embed.html

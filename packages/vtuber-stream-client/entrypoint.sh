@@ -177,8 +177,7 @@ DISPLAY="${DISPLAY_NUM}" google-chrome-stable \
     --no-sandbox \
     --no-first-run \
     --no-default-browser-check \
-    --use-gl=angle \
-    --use-angle=swiftshader \
+    --use-gl=desktop \
     --disable-dev-shm-usage \
     --ozone-platform=x11 \
     --start-fullscreen \

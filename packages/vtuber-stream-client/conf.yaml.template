@@ -118,7 +118,7 @@ character_config:
         temperature: 1.0
 
   asr_config:
-    asr_model: null
+    asr_model: 'sherpa_onnx_asr'
 
     azure_asr:
       api_key: ''
