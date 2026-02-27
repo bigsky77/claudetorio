@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=1920, height=1080">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 1920px; height: 1080px; overflow: hidden; background: #000; }
+    #frontend-frame {
+      position: absolute; top: 0; left: 0;
+      width: 1920px; height: 1080px; z-index: 1; border: none;
+    }
+
+    #avatar-container {
+      position: absolute;
+      bottom: 0;
+      right: -100px;
+      width: 600px;
+      height: 1080px;
+      overflow: hidden;
+      z-index: 10;
+      pointer-events: none;
+    }
+
+    #avatar-frame {
+      width: 600px;
+      height: 600px;
+      border: none;
+      transform: scale(2);
+      transform-origin: top center;
+    }
+  </style>
+</head>
+<body>
+  <iframe id="frontend-frame" src="${FRONTEND_URL}" allow="autoplay"></iframe>
+  <div id="avatar-container">
+    <iframe id="avatar-frame" src="http://localhost:12393/embed.html" allow="autoplay"></iframe>
+  </div>
+  <script>
+    const avatarFrame = document.getElementById('avatar-frame');
+    function log(...args) {
+      console.log('[vtuber-wrapper]', ...args);
+    }
+
+    function enableAvatarAudio() {
+      try {
+        avatarFrame.contentWindow?.postMessage({ type: 'enable-audio' }, '*');
+        log('Sent enable-audio to avatar iframe');
+      } catch (err) {
+        log('Failed to send enable-audio', err);
+      }
+    }
+
+    avatarFrame.addEventListener('load', () => {
+      log('Avatar iframe loaded');
+      enableAvatarAudio();
+      let attempts = 0;
+      const maxAttempts = 20;
+      const interval = setInterval(() => {
+        attempts += 1;
+        enableAvatarAudio();
+        if (attempts >= maxAttempts) {
+          clearInterval(interval);
+          log('Stopped repeated enable-audio sends');
+        }
+      }, 1000);
+    });
+  </script>
+</body>
+</html>

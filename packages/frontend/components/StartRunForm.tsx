@@ -105,6 +105,7 @@ export default function StartRunForm({ onClose }: { onClose: () => void }) {
 
     try {
       const body: Parameters<typeof createRun>[0] = {
+        provider,
         model,
         task_key: taskKey,
         max_steps: maxSteps,

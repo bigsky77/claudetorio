@@ -5,6 +5,7 @@ from mcrcon import MCRcon
 
 from ..config import config
 from .streaming import _stop_container, _stop_remote_container
+from .vtuber_streaming import stop_vtuber_stream_client
 
 
 def allocate_replay_slot(active_replays: dict) -> int | None:
@@ -150,19 +151,28 @@ async def spawn_replay_stream_client(run_id: str, slot: int) -> bool:
             f"({factorio_host}:{udp_port} -> :{host_port})",
             flush=True,
         )
+        env_vars: dict[str, str] = {}
+        if config.TWITCH_STREAM_KEY:
+            env_vars["TWITCH_STREAM_KEY"] = config.TWITCH_STREAM_KEY
+        if config.KICK_STREAM_KEY:
+            env_vars["KICK_STREAM_KEY"] = config.KICK_STREAM_KEY
+
         try:
             async with httpx.AsyncClient() as client:
+                body: dict = {
+                    "container_name": container_name,
+                    "factorio_host": factorio_host,
+                    "factorio_port": udp_port,
+                    "host_port": host_port,
+                    "title": f"ClaudeTorio Replay {run_id}",
+                    "image": config.STREAM_CLIENT_IMAGE,
+                    "client_volume": config.FACTORIO_CLIENT_VOLUME,
+                }
+                if env_vars:
+                    body["env_vars"] = env_vars
                 r = await client.post(
                     f"{config.STREAM_AGENT_URL}/spawn/stream-client",
-                    json={
-                        "container_name": container_name,
-                        "factorio_host": factorio_host,
-                        "factorio_port": udp_port,
-                        "host_port": host_port,
-                        "title": f"ClaudeTorio Replay {run_id}",
-                        "image": config.STREAM_CLIENT_IMAGE,
-                        "client_volume": config.FACTORIO_CLIENT_VOLUME,
-                    },
+                    json=body,
                     headers={"X-Stream-Agent-Key": config.STREAM_AGENT_KEY},
                     timeout=130.0,
                 )
@@ -204,6 +214,10 @@ async def spawn_replay_stream_client(run_id: str, slot: int) -> bool:
         "PGID": "1000",
         "TZ": "UTC",
     }
+    if config.TWITCH_STREAM_KEY:
+        env_vars["TWITCH_STREAM_KEY"] = config.TWITCH_STREAM_KEY
+    if config.KICK_STREAM_KEY:
+        env_vars["KICK_STREAM_KEY"] = config.KICK_STREAM_KEY
 
     cmd = ["docker", "run", "--platform", "linux/amd64", "-d", "--rm", "--name", container_name]
     if network:
@@ -303,6 +317,9 @@ async def spawn_stream_worker_container(
 
 async def stop_replay_containers(run_id: str, slot: int | None = None) -> None:
     """Stop all containers for a replay (best-effort)."""
+    # Stop VTuber container if it's running (best-effort)
+    await stop_vtuber_stream_client(run_id)
+
     # stream-worker and factorio-replay always run on game-server
     for name in [f"stream-worker-{run_id}", f"factorio-replay-{run_id}"]:
         await _stop_container(name)

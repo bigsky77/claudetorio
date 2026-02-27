@@ -36,6 +36,10 @@ factorio-data/
 *.zip
 factorio-client/
 
+# VTuber: models baked into Docker image at build time; vendor cloned at build time
+packages/vtuber-stream-client/models/
+packages/vtuber-stream-client/vendor/
+
 # Logs
 *.log
 logs/

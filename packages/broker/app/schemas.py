@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Optional, List
+from typing import Optional, List, Literal
 
 from pydantic import BaseModel, Field
 
@@ -61,6 +61,7 @@ class SystemStatus(BaseModel):
 # --- Run-related schemas ---
 
 class CreateRunRequest(BaseModel):
+    provider: Optional[Literal["anthropic", "openai", "custom"]] = None
     task_key: str = "open_play"
     model: str = "claude-sonnet-4-5-20250929"
     max_steps: int = 200
@@ -91,6 +92,7 @@ class RunInfo(BaseModel):
     step_count: int = 0
     stream_url: Optional[str] = None
     replay_worker_running: Optional[bool] = None
+    rtmp_active: Optional[bool] = None
     stream_host: Optional[str] = None
     stream_port: Optional[int] = None
     stream_scheme: Optional[str] = None

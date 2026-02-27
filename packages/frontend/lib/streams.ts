@@ -1,14 +1,16 @@
 // lib/streams.ts
-export type StreamId = 'live' | 'replay-1' | 'replay-2';
-export type StreamType = 'live' | 'replay';
+export type StreamId = 'live' | 'replay-1' | 'replay-2' | 'twitch-live' | string;
+export type StreamType = 'live' | 'replay' | 'twitch-live' | 'twitch-vod';
 
 export interface StreamDefinition {
   id: StreamId;
   type: StreamType;
-  label: 'LIVE' | 'Replay';
+  label: 'LIVE' | 'Replay' | 'VOD';
   subtitle: string;
   thumbnailSrc: string;
   videoSrc?: string;
+  // For Twitch VODs
+  twitchVideoId?: string;
 }
 
 export const STREAMS: StreamDefinition[] = [
@@ -41,12 +43,48 @@ export const STREAMS: StreamDefinition[] = [
 ];
 
 export function getStreamById(id: string): StreamDefinition | undefined {
+  // Handle Twitch live stream
+  if (id === 'twitch-live') {
+    return {
+      id: 'twitch-live',
+      type: 'twitch-live',
+      label: 'LIVE',
+      subtitle: 'Twitch Live Stream',
+      thumbnailSrc: '',
+    };
+  }
+
+  // Handle Twitch VODs: twitch-vod-{videoId}
+  if (id.startsWith('twitch-vod-')) {
+    const videoId = id.slice('twitch-vod-'.length);
+    return {
+      id,
+      type: 'twitch-vod',
+      label: 'VOD',
+      subtitle: `Twitch VOD`,
+      thumbnailSrc: '',
+      twitchVideoId: videoId,
+    };
+  }
+
   return STREAMS.find((s) => s.id === id);
 }
 
 export function resolveStreamSource(
   stream: StreamDefinition,
 ): { kind: 'iframe' | 'video'; src: string } | null {
+  if (stream.type === 'twitch-live') {
+    const channel = process.env.NEXT_PUBLIC_TWITCH_CHANNEL;
+    const parent = process.env.NEXT_PUBLIC_TWITCH_EMBED_PARENT || 'localhost';
+    if (!channel) return null;
+    return { kind: 'iframe', src: `https://player.twitch.tv/?channel=${channel}&parent=${parent}&autoplay=true` };
+  }
+
+  if (stream.type === 'twitch-vod' && stream.twitchVideoId) {
+    const parent = process.env.NEXT_PUBLIC_TWITCH_EMBED_PARENT || 'localhost';
+    return { kind: 'iframe', src: `https://player.twitch.tv/?video=${stream.twitchVideoId}&parent=${parent}&autoplay=false` };
+  }
+
   if (stream.type === 'live') {
     // Pump stream wrapper (VTuber + Factorio composite)
     const wrapperUrl = process.env.NEXT_PUBLIC_LIVE_STREAM_URL || '';

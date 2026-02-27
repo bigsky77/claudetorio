@@ -17,11 +17,13 @@ RUN mkdir -p /opt/factorio /tmp/hls /tmp/factorio-data /tmp/factorio-client \
              /var/log/nginx /var/lib/nginx /run/nginx
 
 COPY scripts/start-factorio.sh /scripts/start-factorio.sh
+COPY scripts/start-rtmp.sh /scripts/start-rtmp.sh
+COPY scripts/stop-rtmp.sh /scripts/stop-rtmp.sh
 COPY entrypoint.sh /entrypoint.sh
 COPY nginx.conf /etc/nginx/nginx.conf
 COPY index.html /var/www/hls/index.html
 
-RUN chmod +x /scripts/start-factorio.sh /entrypoint.sh
+RUN chmod +x /scripts/start-factorio.sh /scripts/start-rtmp.sh /scripts/stop-rtmp.sh /entrypoint.sh
 
 ENV DISPLAY=:1 \
     DISPLAY_WIDTH=1280 \

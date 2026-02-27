@@ -1,0 +1,8 @@
+.git
+.DS_Store
+*.log
+
+# Upstream source is cloned at build time; exclude from build context
+vendor/
+
+# Local runtime noise (models/ is intentionally included for COPY)

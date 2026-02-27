@@ -7,10 +7,13 @@ const BROKER_URL = process.env.BROKER_URL || process.env.NEXT_PUBLIC_API_URL || 
 
 export default async function RunPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ runId: string }>;
+  searchParams: Promise<{ stream_url?: string }>;
 }) {
   const { runId } = await params;
+  const { stream_url: streamUrlOverride } = await searchParams;
 
   const run = await fetchRunInfo(runId, BROKER_URL);
   if (!run) notFound();
@@ -30,11 +33,12 @@ export default async function RunPage({
     afterIdx = Math.max(...batch.map((s) => s.step_idx));
   }
 
+  const effectiveRun = streamUrlOverride ? { ...run, stream_url: streamUrlOverride } : run;
   return (
     <RunDetailClient
-      initialRun={run}
+      initialRun={effectiveRun}
       initialSteps={allSteps}
-      streamUrl={run.stream_url as string}
+      streamUrl={effectiveRun.stream_url as string}
     />
   );
 }

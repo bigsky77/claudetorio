@@ -96,10 +96,18 @@ services:
       - STREAM_CLIENT_IMAGE=claudetorio-stream-client
       - FACTORIO_CLIENT_VOLUME=claudetorio_factorio_client
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - ELEVENLABS_API_KEY=${ELEVENLABS_API_KEY:-}
+      - TWITCH_STREAM_KEY=${TWITCH_STREAM_KEY:-}
+      - KICK_STREAM_KEY=${KICK_STREAM_KEY:-}
+      - TWITCH_CLIENT_ID=${TWITCH_CLIENT_ID:-}
+      - TWITCH_CLIENT_SECRET=${TWITCH_CLIENT_SECRET:-}
+      - TWITCH_CHANNEL=${TWITCH_CHANNEL:-}
       - STREAM_WORKER_IMAGE=claudetorio-stream-worker
       - REPLAY_STREAM_BASE_PORT=4002
       - REPLAY_UDP_BASE_PORT=35100
       - REPLAY_RCON_BASE_PORT=28000
+      - VTUBER_STREAM_CLIENT_IMAGE=claudetorio-vtuber-stream-client
+      - VTUBER_STREAM_BASE_PORT=5002
     depends_on:
       postgres:
         condition: service_healthy
@@ -113,10 +121,15 @@ services:
       args:
         - NEXT_PUBLIC_API_URL=http://localhost:8080
         - NEXT_PUBLIC_STREAM_URL=http://localhost:3002
+        - NEXT_PUBLIC_TWITCH_CHANNEL=${TWITCH_CHANNEL:-}
+        - NEXT_PUBLIC_TWITCH_EMBED_PARENT=localhost
     ports:
       - "3000:3000"
     environment:
       - BROKER_URL=http://broker:8080
+      - TWITCH_CHANNEL=${TWITCH_CHANNEL:-}
+      - TWITCH_CLIENT_ID=${TWITCH_CLIENT_ID:-}
+      - TWITCH_CLIENT_SECRET=${TWITCH_CLIENT_SECRET:-}
     depends_on:
       - broker
 
@@ -149,6 +162,14 @@ services:
     image: claudetorio-stream-worker
     platform: linux/amd64
     entrypoint: ["sh", "-c", "echo 'stream-worker image ready'"]
+    restart: "no"
+  # Build-only target — image used by broker to spawn vtuber-stream-client containers
+  vtuber-stream-client:
+    build:
+      context: ../packages/vtuber-stream-client
+    image: claudetorio-vtuber-stream-client
+    platform: linux/amd64
+    entrypoint: ["sh", "-c", "echo 'vtuber-stream-client image ready'"]
     restart: "no"
 
 volumes:

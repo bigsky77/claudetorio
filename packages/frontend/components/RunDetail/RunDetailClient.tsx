@@ -3,7 +3,7 @@
 import { useCallback, useState } from 'react';
 import type { RunInfo, RunStepInfo } from '@/interfaces';
 import { useRunPolling } from '@/hooks/use-run-polling';
-import { stopRun, startReplay, startReplayWorker, stopReplay, stopReplayWorker } from '@/services/api';
+import { stopRun, startReplay, startReplayWorker, stopReplay, stopReplayWorker, startRtmp, stopRtmp } from '@/services/api';
 import RunHeader from './RunHeader';
 import StreamPanel from './StreamPanel';
 import MatrixLogPanel, { RuntimeDisplayPayload } from './MatrixLogPanel';
@@ -20,6 +20,7 @@ export default function RunDetailClient({
   const { run, steps, isActive, refetch } = useRunPolling(initialRun, initialSteps);
   const [replayUrl, setReplayUrl] = useState<string | null>(run.stream_url ?? initialStreamUrl ?? null);
   const [replayWorkerStarted, setReplayWorkerStarted] = useState(false);
+  const [isLive, setIsLive] = useState(run.rtmp_active ?? false);
   const [runtimeDisplay, setRuntimeDisplay] = useState<{
     text: string;
     tone: RuntimeDisplayPayload['tone'];
@@ -53,6 +54,17 @@ export default function RunDetailClient({
     await stopReplay(run.run_id);
     setReplayUrl(null);
     setReplayWorkerStarted(false);
+    setIsLive(false);
+  }
+
+  async function handleGoLive() {
+    const ok = await startRtmp(run.run_id);
+    if (ok) setIsLive(true);
+  }
+
+  async function handleStopLive() {
+    await stopRtmp(run.run_id);
+    setIsLive(false);
   }
 
   const handleDisplayChange = useCallback((payload: RuntimeDisplayPayload) => {
@@ -80,8 +92,10 @@ export default function RunDetailClient({
               isActive={isActive}
               onStop={handleStop}
               onStartReplay={!replayUrl && run.step_count > 0 ? handleStartReplay : undefined}
-              onStartReplayWorker={replayUrl && !replayWorkerStarted ? handleStartReplayWorker : undefined}
+              onStartReplayWorker={replayUrl ? handleStartReplayWorker : undefined}
               onStopReplay={replayUrl ? handleStopReplay : undefined}
+              onGoLive={replayUrl && !isLive ? handleGoLive : undefined}
+              onStopLive={isLive ? handleStopLive : undefined}
             />
           </div>
 

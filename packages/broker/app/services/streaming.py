@@ -168,6 +168,76 @@ async def is_stream_client_running(slot: int) -> bool:
         return False
 
 
+async def start_rtmp(container_name: str) -> bool:
+    """Start RTMP push on a stream-client container."""
+    if config.STREAM_AGENT_URL:
+        try:
+            async with httpx.AsyncClient() as client:
+                r = await client.post(
+                    f"{config.STREAM_AGENT_URL}/containers/{container_name}/rtmp/start",
+                    headers={"X-Stream-Agent-Key": config.STREAM_AGENT_KEY},
+                    timeout=30.0,
+                )
+            if r.status_code == 200:
+                return True
+            print(f"[streaming] stream-agent rtmp/start returned {r.status_code}: {r.text}", flush=True)
+            return False
+        except Exception as e:
+            print(f"[streaming] ERROR calling stream-agent rtmp/start for {container_name}: {e}", flush=True)
+            return False
+
+    # Local path: docker exec
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "docker", "exec", container_name, "/scripts/start-rtmp.sh",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        _, stderr = await proc.communicate()
+        if proc.returncode != 0:
+            print(f"[streaming] ERROR starting RTMP on {container_name}: {stderr.decode().strip()}", flush=True)
+            return False
+        return True
+    except Exception as e:
+        print(f"[streaming] ERROR starting RTMP on {container_name}: {e}", flush=True)
+        return False
+
+
+async def stop_rtmp(container_name: str) -> bool:
+    """Stop RTMP push on a stream-client container."""
+    if config.STREAM_AGENT_URL:
+        try:
+            async with httpx.AsyncClient() as client:
+                r = await client.post(
+                    f"{config.STREAM_AGENT_URL}/containers/{container_name}/rtmp/stop",
+                    headers={"X-Stream-Agent-Key": config.STREAM_AGENT_KEY},
+                    timeout=30.0,
+                )
+            if r.status_code == 200:
+                return True
+            print(f"[streaming] stream-agent rtmp/stop returned {r.status_code}: {r.text}", flush=True)
+            return False
+        except Exception as e:
+            print(f"[streaming] ERROR calling stream-agent rtmp/stop for {container_name}: {e}", flush=True)
+            return False
+
+    # Local path: docker exec
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "docker", "exec", container_name, "/scripts/stop-rtmp.sh",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        _, stderr = await proc.communicate()
+        if proc.returncode != 0:
+            print(f"[streaming] ERROR stopping RTMP on {container_name}: {stderr.decode().strip()}", flush=True)
+            return False
+        return True
+    except Exception as e:
+        print(f"[streaming] ERROR stopping RTMP on {container_name}: {e}", flush=True)
+        return False
+
+
 async def _stop_remote_container(container_name: str) -> None:
     """Call stream-agent to stop a remote container (best-effort)."""
     try:

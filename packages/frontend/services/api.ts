@@ -163,6 +163,7 @@ export async function fetchRunSteps(
 }
 
 export async function createRun(body: {
+  provider?: 'anthropic' | 'openai' | 'custom';
   task_key?: string;
   model?: string;
   max_steps?: number;
@@ -237,6 +238,24 @@ export async function stopReplay(runId: string): Promise<void> {
     await fetch(`/api/runs/${runId}/replay`, { method: 'DELETE' });
   } catch {
     // best-effort
+  }
+}
+
+export async function startRtmp(runId: string): Promise<boolean> {
+  try {
+    const res = await fetch(`/api/runs/${runId}/replay/rtmp/start`, { method: 'POST' });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+export async function stopRtmp(runId: string): Promise<boolean> {
+  try {
+    const res = await fetch(`/api/runs/${runId}/replay/rtmp/stop`, { method: 'POST' });
+    return res.ok;
+  } catch {
+    return false;
   }
 }
 
