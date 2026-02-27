@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { fetchChatMessages, sendChatMessage } from '@/services/api';
 import type { ChatMessage } from '@/interfaces';
 
-const CHAT_POLL_INTERVAL_MS = 3000;
+const CHAT_POLL_INTERVAL_MS = 10000;
 
 export function useChat(streamId: string) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);

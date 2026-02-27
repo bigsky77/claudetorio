@@ -1,9 +1,22 @@
+import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { fetchRunInfo, fetchRunSteps } from '@/services/api';
 import type { RunStepInfo } from '@/interfaces';
 import RunDetailClient from '@/components/RunDetail/RunDetailClient';
 
 const BROKER_URL = process.env.BROKER_URL || process.env.NEXT_PUBLIC_API_URL || '';
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ runId: string }>;
+}): Promise<Metadata> {
+  const { runId } = await params;
+  const run = await fetchRunInfo(runId, BROKER_URL);
+  return {
+    title: run ? `Run ${run.run_id}` : 'Run',
+  };
+}
 
 export default async function RunPage({
   params,

@@ -1,10 +1,32 @@
+'use client';
+
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { fetchRuns } from '@/services/api';
+import type { RunInfo } from '@/interfaces';
 
-const BROKER_URL = process.env.BROKER_URL || process.env.NEXT_PUBLIC_API_URL || '';
+export default function BenchmarksList() {
+  const [runs, setRuns] = useState<RunInfo[]>([]);
+  const [loaded, setLoaded] = useState(false);
 
-export default async function BenchmarksList() {
-  const runs = await fetchRuns({ limit: 200, baseUrl: BROKER_URL });
+  useEffect(() => {
+    let cancelled = false;
+    fetchRuns({ limit: 200 }).then((data) => {
+      if (!cancelled) {
+        setRuns(data);
+        setLoaded(true);
+      }
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  if (!loaded) {
+    return (
+      <div className="text-white/50 font-[family-name:var(--font-body)] text-sm">
+        Loading...
+      </div>
+    );
+  }
 
   if (!runs.length) {
     return (

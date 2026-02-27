@@ -6,7 +6,7 @@ export default function StreamCard({ stream }: { stream: StreamDefinition }) {
 
   return (
     <Link
-      href={`/stream/${stream.id}`}
+      href={stream.type === 'live' ? '/live' : `/run/${stream.runId ?? stream.id}`}
       className="block bg-surface-1 border border-surface-3 hover:border-surface-3/80 transition-colors"
     >
       <div className="p-4">
