@@ -150,6 +150,7 @@ ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY:-}" \
 ELEVENLABS_API_KEY="${ELEVENLABS_API_KEY:-}" \
 BROKER_URL="${BROKER_URL:-https://app.claudetorio.ai}" \
 AVATAR_URL="http://localhost:12393" \
+RUN_ID="${RUN_ID:-}" \
   python3 /narrate.py >> /tmp/narrator.log 2>&1 &
 NARRATE_PID=$!
 log "Narrator running (PID: $NARRATE_PID, log: /tmp/narrator.log)"

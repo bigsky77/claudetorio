@@ -41,6 +41,7 @@ async def spawn_vtuber_stream_client(
                             "ELEVENLABS_API_KEY": config.ELEVENLABS_API_KEY,
                             "ANGLE_BACKEND": config.VTUBER_ANGLE_BACKEND,
                             "NVIDIA_DRIVER_CAPABILITIES": "all",
+                            "RUN_ID": run_id,
                         },
                     },
                     headers={"X-Stream-Agent-Key": config.STREAM_AGENT_KEY},
@@ -71,6 +72,7 @@ async def spawn_vtuber_stream_client(
         "ELEVENLABS_API_KEY": config.ELEVENLABS_API_KEY,
         "ANGLE_BACKEND": config.VTUBER_ANGLE_BACKEND,
         "NVIDIA_DRIVER_CAPABILITIES": "all",
+        "RUN_ID": run_id,
     }
 
     cmd = [
