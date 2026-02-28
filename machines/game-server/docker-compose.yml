@@ -102,6 +102,7 @@ services:
       - VTUBER_STREAM_CLIENT_IMAGE=claudetorio-vtuber-stream-client
       - VTUBER_STREAM_BASE_PORT=5002
       - VTUBER_ANGLE_BACKEND=${VTUBER_ANGLE_BACKEND:-vulkan}
+      - FRONTEND_BASE_URL=${FRONTEND_BASE_URL:-https://app.claudetorio.ai}
       - GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID:-}
       - GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET:-}
       - GITHUB_CALLBACK_URL=${GITHUB_CALLBACK_URL:-https://app.claudetorio.ai/auth/callback}
