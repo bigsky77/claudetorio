@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>WebGL Diagnostic</title>
+  <style>
+    body {
+      margin: 0;
+      background: #1a1a2e;
+      color: #eee;
+      font-family: monospace;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 20px;
+    }
+    h1 { color: #e94560; margin-bottom: 8px; }
+    #status {
+      font-size: 1.4em;
+      font-weight: bold;
+      margin: 12px 0;
+      padding: 10px 24px;
+      border-radius: 6px;
+    }
+    .ok { background: #1a472a; color: #4eff91; }
+    .fail { background: #4a0e0e; color: #ff4e4e; }
+    #info {
+      background: #16213e;
+      border: 1px solid #0f3460;
+      border-radius: 6px;
+      padding: 16px;
+      max-width: 700px;
+      width: 100%;
+      margin: 12px 0;
+    }
+    #info table { width: 100%; border-collapse: collapse; }
+    #info td { padding: 4px 8px; border-bottom: 1px solid #0f3460; }
+    #info td:first-child { color: #8899aa; width: 200px; }
+    canvas { border: 2px solid #0f3460; border-radius: 4px; margin: 12px 0; }
+    #gpu-link { margin-top: 12px; }
+    #gpu-link a { color: #4e94ff; }
+  </style>
+</head>
+<body>
+  <h1>WebGL Diagnostic</h1>
+  <div id="status">Testing...</div>
+  <div id="info">
+    <table id="info-table"></table>
+  </div>
+  <canvas id="canvas" width="400" height="200"></canvas>
+  <div id="gpu-link"><a href="chrome://gpu" target="_blank">Open chrome://gpu for full GPU info</a></div>
+
+  <script>
+    const statusEl = document.getElementById('status');
+    const tableEl = document.getElementById('info-table');
+    const canvas = document.getElementById('canvas');
+
+    function addRow(label, value) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${label}</td><td>${value}</td>`;
+      tableEl.appendChild(tr);
+    }
+
+    function tryWebGL(type) {
+      try {
+        const ctx = canvas.getContext(type, { failIfMajorPerformanceCaveat: false });
+        return ctx;
+      } catch (e) {
+        return null;
+      }
+    }
+
+    // Try WebGL2 first, fall back to WebGL1
+    let gl = tryWebGL('webgl2');
+    let version = 'WebGL 2';
+    if (!gl) {
+      gl = tryWebGL('webgl');
+      version = 'WebGL 1';
+    }
+
+    if (!gl) {
+      statusEl.textContent = 'FAIL — WebGL not available';
+      statusEl.className = 'fail';
+      addRow('WebGL', 'Not available');
+      addRow('Hint', 'Try GL_MODE=swiftshader or LIBGL_ALWAYS_SOFTWARE=1');
+    } else {
+      statusEl.textContent = `OK — ${version} available`;
+      statusEl.className = 'ok';
+
+      const ext = gl.getExtension('WEBGL_debug_renderer_info');
+      const renderer = ext
+        ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL)
+        : gl.getParameter(gl.RENDERER);
+      const vendor = ext
+        ? gl.getParameter(ext.UNMASKED_VENDOR_WEBGL)
+        : gl.getParameter(gl.VENDOR);
+
+      addRow('Version', version);
+      addRow('Renderer', renderer);
+      addRow('Vendor', vendor);
+      addRow('GL Version', gl.getParameter(gl.VERSION));
+      addRow('GLSL Version', gl.getParameter(gl.SHADING_LANGUAGE_VERSION));
+      addRow('Max Texture Size', gl.getParameter(gl.MAX_TEXTURE_SIZE));
+
+      // Render a colored triangle
+      const vsrc = `
+        attribute vec2 pos;
+        attribute vec3 color;
+        varying vec3 vColor;
+        void main() {
+          gl_Position = vec4(pos, 0.0, 1.0);
+          vColor = color;
+        }
+      `;
+      const fsrc = `
+        precision mediump float;
+        varying vec3 vColor;
+        void main() {
+          gl_FragColor = vec4(vColor, 1.0);
+        }
+      `;
+
+      function makeShader(type, src) {
+        const s = gl.createShader(type);
+        gl.shaderSource(s, src);
+        gl.compileShader(s);
+        return s;
+      }
+
+      const prog = gl.createProgram();
+      gl.attachShader(prog, makeShader(gl.VERTEX_SHADER, vsrc));
+      gl.attachShader(prog, makeShader(gl.FRAGMENT_SHADER, fsrc));
+      gl.linkProgram(prog);
+      gl.useProgram(prog);
+
+      // Triangle: positions + colors interleaved
+      const verts = new Float32Array([
+         0.0,  0.8,   0.1, 0.9, 0.2,   // top — green-ish
+        -0.7, -0.6,   0.0, 0.6, 1.0,   // bottom-left — blue
+         0.7, -0.6,   1.0, 0.8, 0.0,   // bottom-right — yellow
+      ]);
+      const buf = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+      gl.bufferData(gl.ARRAY_BUFFER, verts, gl.STATIC_DRAW);
+
+      const stride = 5 * 4;
+      const posLoc = gl.getAttribLocation(prog, 'pos');
+      gl.enableVertexAttribArray(posLoc);
+      gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, stride, 0);
+
+      const colLoc = gl.getAttribLocation(prog, 'color');
+      gl.enableVertexAttribArray(colLoc);
+      gl.vertexAttribPointer(colLoc, 3, gl.FLOAT, false, stride, 2 * 4);
+
+      gl.clearColor(0.1, 0.1, 0.2, 1.0);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+      addRow('Triangle render', 'OK');
+
+      // Detect software renderer
+      const isSoftware = /swiftshader|llvmpipe|softpipe|software/i.test(renderer);
+      addRow('Hardware accel', isSoftware ? 'No (software renderer)' : 'Yes');
+    }
+  </script>
+</body>
+</html>

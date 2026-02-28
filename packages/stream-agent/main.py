@@ -124,7 +124,7 @@ async def spawn_vtuber_stream_client(req: VtuberStreamClientRequest, _=Depends(r
     }
     env_vars.update(req.env_vars)
 
-    cmd = ["docker", "run", "-d", "--rm", "--name", req.container_name, "--shm-size", "2g"]
+    cmd = ["docker", "run", "-d", "--rm", "--name", req.container_name, "--shm-size", "2g", "--gpus", "all"]
     if DOCKER_NETWORK:
         cmd += ["--network", DOCKER_NETWORK]
     for k, v in env_vars.items():

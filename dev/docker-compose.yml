@@ -108,6 +108,7 @@ services:
       - REPLAY_RCON_BASE_PORT=28000
       - VTUBER_STREAM_CLIENT_IMAGE=claudetorio-vtuber-stream-client
       - VTUBER_STREAM_BASE_PORT=5002
+      - VTUBER_ANGLE_BACKEND=${VTUBER_ANGLE_BACKEND:-vulkan}
       - GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID:-}
       - GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET:-}
       - GITHUB_CALLBACK_URL=${GITHUB_CALLBACK_URL:-http://localhost:3000/auth/callback}
@@ -175,6 +176,7 @@ services:
     platform: linux/amd64
     entrypoint: ["sh", "-c", "echo 'vtuber-stream-client image ready'"]
     restart: "no"
+
 
 volumes:
   postgres_data:

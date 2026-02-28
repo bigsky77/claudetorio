@@ -15,13 +15,14 @@ RUN apt-get update && apt-get install -y \
     python3 \
     ca-certificates \
     gettext-base \
-    # Mesa software GL (llvmpipe) — more CPU-efficient than Chrome's SwiftShader
+    # Mesa GL (llvmpipe) — software fallback if GPU is unavailable
     libgl1-mesa-dri \
     # Chrome dependencies
     libatk1.0-0 \
     libatk-bridge2.0-0 \
     libcups2 \
     libdrm2 \
+    libvulkan1 \
     libgbm1 \
     libgtk-3-0 \
     libnspr4 \

@@ -172,12 +172,17 @@ HTTP_PID=$!
 
 # 6. Launch Chrome in kiosk mode pointing to wrapper page
 log "Launching Chrome..."
+# Clear stale GPU caches to avoid WebGL failures after driver changes
+rm -rf /tmp/chrome-profile/GpuCache /tmp/chrome-profile/ShaderCache
 unset DBUS_SESSION_BUS_ADDRESS || true
 DISPLAY="${DISPLAY_NUM}" google-chrome-stable \
     --no-sandbox \
     --no-first-run \
     --no-default-browser-check \
-    --use-gl=desktop \
+    --use-gl=angle \
+    --use-angle="${ANGLE_BACKEND:-vulkan}" \
+    --ignore-gpu-blocklist \
+    --enable-webgl \
     --disable-dev-shm-usage \
     --ozone-platform=x11 \
     --start-fullscreen \

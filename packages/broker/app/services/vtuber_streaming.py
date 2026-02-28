@@ -39,6 +39,8 @@ async def spawn_vtuber_stream_client(
                             "KICK_STREAM_KEY": config.KICK_STREAM_KEY,
                             "ANTHROPIC_API_KEY": config.ANTHROPIC_API_KEY,
                             "ELEVENLABS_API_KEY": config.ELEVENLABS_API_KEY,
+                            "ANGLE_BACKEND": config.VTUBER_ANGLE_BACKEND,
+                            "NVIDIA_DRIVER_CAPABILITIES": "all",
                         },
                     },
                     headers={"X-Stream-Agent-Key": config.STREAM_AGENT_KEY},
@@ -67,12 +69,15 @@ async def spawn_vtuber_stream_client(
         "KICK_STREAM_KEY": config.KICK_STREAM_KEY,
         "ANTHROPIC_API_KEY": config.ANTHROPIC_API_KEY,
         "ELEVENLABS_API_KEY": config.ELEVENLABS_API_KEY,
+        "ANGLE_BACKEND": config.VTUBER_ANGLE_BACKEND,
+        "NVIDIA_DRIVER_CAPABILITIES": "all",
     }
 
     cmd = [
         "docker", "run", "--platform", "linux/amd64",
         "-d", "--rm", "--name", container_name,
         "--shm-size", "2g",
+        "--gpus", "all",
     ]
     if network:
         cmd += ["--network", network]

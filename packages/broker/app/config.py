@@ -61,6 +61,7 @@ class Config:
     VTUBER_STREAM_CLIENT_IMAGE: str = os.getenv("VTUBER_STREAM_CLIENT_IMAGE", "claudetorio-vtuber-stream-client")
     FRONTEND_BASE_URL: str = os.getenv("FRONTEND_BASE_URL", "http://frontend:3000")
     VTUBER_STREAM_BASE_PORT: int = int(os.getenv("VTUBER_STREAM_BASE_PORT", "5002"))
+    VTUBER_ANGLE_BACKEND: str = os.getenv("VTUBER_ANGLE_BACKEND", "vulkan")
     # Anthropic API key (passed to vtuber-stream-client containers)
     ANTHROPIC_API_KEY: str = os.getenv("ANTHROPIC_API_KEY", "")
     ELEVENLABS_API_KEY: str = os.getenv("ELEVENLABS_API_KEY", "")
