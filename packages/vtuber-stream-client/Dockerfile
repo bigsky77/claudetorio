@@ -54,6 +54,9 @@ RUN git init /app/vtuber \
     && git checkout FETCH_HEAD \
     && git submodule update --init --recursive
 
+# Patch upstream routes.py to add /api/speak and /api/speak/status endpoints
+COPY patches/routes.py /app/vtuber/src/open_llm_vtuber/routes.py
+
 # Patch upstream frontend embed page with Claudetorio transparent/audio-safe overlay version
 COPY patches/embed.html /app/vtuber/frontend/embed.html
 
