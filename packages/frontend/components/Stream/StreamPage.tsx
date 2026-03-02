@@ -1,4 +1,5 @@
 import type { StreamDefinition } from '@/lib/streams';
+import Link from 'next/link';
 import StreamPlayer from './StreamPlayer';
 import StreamInfoBar from './StreamInfoBar';
 import ChatPanel from '@/components/Chat/ChatPanel';
@@ -9,9 +10,9 @@ export default function StreamPage({ stream }: { stream: StreamDefinition }) {
     <main className="min-h-screen bg-surface-0 text-white font-[family-name:var(--font-body)]">
       {/* Top bar — same as home */}
       <header className="h-12 bg-surface-1 border-b border-surface-3 flex items-center justify-between px-8">
-        <a href="/" className="font-[family-name:var(--font-heading)] font-bold text-lg tracking-wide text-white hover:opacity-80 transition-opacity">
+        <Link href="/" className="font-[family-name:var(--font-heading)] font-bold text-lg tracking-wide text-white hover:opacity-80 transition-opacity">
           CLAUDETORIO
-        </a>
+        </Link>
         <LoginWidget />
       </header>
 

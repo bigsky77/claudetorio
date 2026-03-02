@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Hls from 'hls.js';
+import Link from 'next/link';
 import { fetchLiveRun, fetchRunSteps } from '@/services/api';
 import type { RunInfo, RunStepInfo } from '@/interfaces';
 import ChatPanel from '@/components/Chat/ChatPanel';
@@ -153,9 +154,9 @@ export default function LiveView() {
           <div className="relative h-full p-4 lg:p-6">
             {/* Top bar — run info */}
             <div className="pointer-events-auto inline-flex items-center gap-3 rounded-xl border border-white/10 bg-black/50 backdrop-blur-md px-4 py-2">
-              <a href="/" className="font-bold text-sm tracking-wide text-white/80 hover:text-white">
+              <Link href="/" className="font-bold text-sm tracking-wide text-white/80 hover:text-white">
                 CLAUDETORIO
-              </a>
+              </Link>
               <span className="bg-green-500 text-black font-bold px-1.5 py-0.5 text-[10px] uppercase rounded">
                 LIVE
               </span>
@@ -166,12 +167,12 @@ export default function LiveView() {
               {run.final_score != null && (
                 <span className="text-xs text-white/50">score {run.final_score}</span>
               )}
-              <a
+              <Link
                 href={`/run/${run.run_id}`}
                 className="text-xs text-green-400/70 hover:text-green-400 underline pointer-events-auto"
               >
                 details
-              </a>
+              </Link>
             </div>
 
             {/* Code/result overlay text (fades in/out) */}

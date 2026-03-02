@@ -1,0 +1,311 @@
+name: PR Checks
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  # ─── 1. Frontend: lint + typecheck + production build ────────────────────
+  frontend-checks:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: packages/frontend/package-lock.json
+
+      - run: npm ci
+
+      - run: npm run lint
+
+      - run: npx tsc --noEmit
+
+      - name: Build
+        run: npm run build
+        env:
+          NEXT_PUBLIC_API_URL: ''
+          NEXT_PUBLIC_STREAM_URL: ''
+          NEXT_TELEMETRY_DISABLED: 1
+
+  # ─── 2. Broker: startup smoke test ───────────────────────────────────────
+  broker-health:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: claudetorio
+          POSTGRES_PASSWORD: testpass
+          POSTGRES_DB: claudetorio
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports: ['5432:5432']
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports: ['6379:6379']
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+
+      - run: uv sync
+        working-directory: packages/broker
+
+      - name: Start broker
+        working-directory: packages/broker
+        env:
+          POSTGRES_HOST: localhost
+          POSTGRES_DB: claudetorio
+          POSTGRES_USER: claudetorio
+          POSTGRES_PASSWORD: testpass
+          REDIS_HOST: localhost
+          BROKER_ADMIN_KEY: ci-key
+          RUN_WORKER_API_KEY: ci-worker-key
+          RCON_PASSWORD: testpass
+          FACTORIO_IMAGE: factoriotools/factorio:1.1.110
+          DOCKER_NETWORK: claudetorio_game
+        run: |
+          uv run uvicorn main:app --host 0.0.0.0 --port 8080 &
+          echo $! > /tmp/broker.pid
+
+      - name: Wait for health
+        run: |
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:8080/health && exit 0 || sleep 2
+          done
+          exit 1
+
+      - name: Check /api/status
+        run: curl -sf http://localhost:8080/api/status | jq .
+
+      - name: Stop broker
+        if: always()
+        run: kill $(cat /tmp/broker.pid) 2>/dev/null || true
+
+  # ─── 3. Integration: Factorio + mock LLM + 3 steps + frontend ────────────
+  integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Build broker and run-worker images with GitHub Actions layer cache
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build broker image
+        uses: docker/build-push-action@v6
+        with:
+          context: packages/broker
+          tags: claudetorio-broker:ci
+          load: true
+          cache-from: type=gha,scope=broker-ci
+          cache-to: type=gha,scope=broker-ci,mode=max
+
+      - name: Build run-worker image
+        uses: docker/build-push-action@v6
+        with:
+          context: packages
+          file: packages/run-worker/Dockerfile
+          tags: claudetorio-run-worker:ci
+          load: true
+          cache-from: type=gha,scope=run-worker-ci
+          cache-to: type=gha,scope=run-worker-ci,mode=max
+
+      # Docker network + named volumes (mirrors dev/docker-compose.yml init containers)
+      - name: Create Docker network and volumes
+        run: |
+          docker network create claudetorio_game
+          docker volume create claudetorio_factorio_config
+          docker volume create claudetorio_factorio_scenarios
+
+      - name: Populate Factorio config volume
+        run: |
+          docker run --rm \
+            -v claudetorio_factorio_config:/dest \
+            -v ${{ github.workspace }}/packages/fle/fle/cluster/config:/src:ro \
+            alpine sh -c "cp -f /src/* /dest/ && echo 'config populated'"
+
+      - name: Populate Factorio scenarios volume
+        run: |
+          docker run --rm \
+            -v claudetorio_factorio_scenarios:/dest \
+            -v ${{ github.workspace }}/packages/fle/fle/cluster/scenarios:/src:ro \
+            alpine sh -c "cp -rf /src/* /dest/ && echo 'scenarios populated'"
+
+      - name: Pull Factorio image
+        run: docker pull factoriotools/factorio:1.1.110
+
+      # Start infrastructure containers on claudetorio_game network
+      - name: Start postgres
+        run: |
+          docker run -d --name postgres \
+            --network claudetorio_game \
+            -e POSTGRES_USER=claudetorio \
+            -e POSTGRES_PASSWORD=testpass \
+            -e POSTGRES_DB=claudetorio \
+            postgres:16-alpine
+
+      - name: Start redis
+        run: docker run -d --name redis --network claudetorio_game redis:7-alpine
+
+      - name: Start mock LLM API
+        run: |
+          docker run -d --name mock-llm \
+            --network claudetorio_game \
+            -v ${{ github.workspace }}/tests/mock-llm.py:/mock-llm.py:ro \
+            python:3.12-slim \
+            python3 /mock-llm.py
+
+      - name: Wait for postgres
+        run: |
+          for i in $(seq 1 30); do
+            docker exec postgres pg_isready -U claudetorio && break || sleep 2
+          done
+
+      # Broker runs as container so it can reach factorio-{slot} via Docker DNS
+      - name: Start broker
+        run: |
+          docker run -d --name broker \
+            --network claudetorio_game \
+            -p 8080:8080 \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -e POSTGRES_HOST=postgres \
+            -e POSTGRES_DB=claudetorio \
+            -e POSTGRES_USER=claudetorio \
+            -e POSTGRES_PASSWORD=testpass \
+            -e REDIS_HOST=redis \
+            -e BROKER_ADMIN_KEY=ci-key \
+            -e RUN_WORKER_API_KEY=ci-worker-key \
+            -e RCON_PASSWORD=testpass \
+            -e FACTORIO_IMAGE=factoriotools/factorio:1.1.110 \
+            -e DOCKER_NETWORK=claudetorio_game \
+            -e FACTORIO_CONFIG_VOLUME=claudetorio_factorio_config \
+            -e FACTORIO_SCENARIOS_VOLUME=claudetorio_factorio_scenarios \
+            -e RUN_WORKER_IMAGE=claudetorio-run-worker:ci \
+            claudetorio-broker:ci
+
+      - name: Wait for broker health
+        run: |
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:8080/health && exit 0 || sleep 2
+          done
+          docker logs broker
+          exit 1
+
+      # Start Next.js dev server on host; BROKER_URL points at containerised broker
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: packages/frontend/package-lock.json
+
+      - run: npm ci
+        working-directory: packages/frontend
+
+      - name: Start frontend dev server
+        working-directory: packages/frontend
+        env:
+          BROKER_URL: http://localhost:8080
+          BROKER_ADMIN_KEY: ci-key
+          NEXT_TELEMETRY_DISABLED: 1
+        run: npm run dev &
+
+      - name: Wait for frontend
+        run: |
+          for i in $(seq 1 20); do
+            curl -sf http://localhost:3000 > /dev/null 2>&1 && exit 0 || sleep 3
+          done
+          echo "Frontend failed to start"
+          exit 1
+
+      # POST /api/runs blocks until Factorio RCON is ready (~30–90 s)
+      - name: Create run with mock LLM (waits for Factorio RCON)
+        id: create-run
+        run: |
+          RESPONSE=$(curl -sf --max-time 300 \
+            -X POST http://localhost:8080/api/runs \
+            -H "Authorization: Bearer ci-key" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "task_key": "open_play",
+              "model": "mock",
+              "max_steps": 3,
+              "provider": "custom",
+              "custom_api_url": "http://mock-llm:8000",
+              "custom_api_key": "mock-key"
+            }')
+          echo "Response: $RESPONSE"
+          RUN_ID=$(echo "$RESPONSE" | jq -r '.run_id')
+          STATUS=$(echo "$RESPONSE" | jq -r '.status')
+          echo "run_id=$RUN_ID" >> "$GITHUB_OUTPUT"
+          [ "$STATUS" = "running" ] || { echo "Expected running, got $STATUS"; exit 1; }
+
+      - name: Verify Factorio container is running
+        run: |
+          docker ps --filter "name=factorio-" --format "table {{.Names}}\t{{.Status}}"
+          docker ps --filter "name=factorio-" -q | grep -q . \
+            || { echo "No Factorio container running"; exit 1; }
+
+      # Poll until run-worker exits (after 3 steps) and monitor marks completed
+      - name: Wait for run to complete
+        run: |
+          RUN_ID="${{ steps.create-run.outputs.run_id }}"
+          for i in $(seq 1 60); do
+            STATUS=$(curl -sf "http://localhost:8080/api/runs/$RUN_ID" | jq -r '.status')
+            echo "[$i/60] status=$STATUS"
+            [ "$STATUS" = "completed" ] && exit 0
+            [ "$STATUS" = "failed" ] && { echo "Run failed"; exit 1; }
+            sleep 3
+          done
+          echo "Timeout: run did not complete within 3 minutes"
+          exit 1
+
+      # Broker API: verify 3 steps recorded
+      - name: Verify steps in broker API
+        run: |
+          RUN_ID="${{ steps.create-run.outputs.run_id }}"
+          STEPS=$(curl -sf "http://localhost:8080/api/runs/$RUN_ID/steps")
+          COUNT=$(echo "$STEPS" | jq 'length')
+          echo "Step count: $COUNT"
+          [ "$COUNT" -ge 3 ] || { echo "Expected >=3 steps, got $COUNT"; exit 1; }
+
+      # Frontend API: verify the proxy routes return the same data
+      - name: Verify frontend proxies run and steps
+        run: |
+          RUN_ID="${{ steps.create-run.outputs.run_id }}"
+          curl -sf "http://localhost:3000/api/runs/$RUN_ID" | jq .run_id
+          STEPS=$(curl -sf "http://localhost:3000/api/runs/$RUN_ID/steps?limit=10")
+          echo "Frontend steps: $STEPS"
+          COUNT=$(echo "$STEPS" | jq 'length')
+          [ "$COUNT" -ge 3 ] || { echo "Frontend returned only $COUNT steps"; exit 1; }
+
+      - name: Cleanup
+        if: always()
+        run: |
+          RUN_ID="${{ steps.create-run.outputs.run_id }}"
+          [ -n "$RUN_ID" ] && \
+            curl -sf -X POST "http://localhost:8080/api/runs/$RUN_ID/stop" \
+              -H "Authorization: Bearer ci-key" 2>/dev/null || true
+          pkill -f "npm run dev" 2>/dev/null || true
+          docker stop broker postgres redis mock-llm 2>/dev/null || true
+          docker rm -f broker postgres redis mock-llm 2>/dev/null || true
+          docker ps -q --filter "name=factorio-" | xargs -r docker stop
+          docker ps -q --filter "name=factorio-" | xargs -r docker rm -f
+          docker ps -q --filter "name=run-worker-" | xargs -r docker stop
+          docker ps -q --filter "name=run-worker-" | xargs -r docker rm -f
+          docker volume rm claudetorio_factorio_config claudetorio_factorio_scenarios 2>/dev/null || true
+          docker volume ls --filter name=factorio-slot -q | xargs -r docker volume rm || true
+          docker network rm claudetorio_game 2>/dev/null || true

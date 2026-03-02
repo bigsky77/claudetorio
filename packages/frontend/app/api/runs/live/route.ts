@@ -1,6 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 
-export async function GET(_request: NextRequest) {
+export async function GET() {
   const brokerUrl = process.env.BROKER_URL || process.env.NEXT_PUBLIC_API_URL || '';
   try {
     const res = await fetch(`${brokerUrl}/api/runs/live`, { cache: 'no-store' });

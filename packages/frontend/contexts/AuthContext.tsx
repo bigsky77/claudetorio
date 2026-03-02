@@ -19,7 +19,10 @@ const TOKEN_KEY = 'claudetorio_jwt';
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => {
+    if (typeof window === 'undefined') return true;
+    return !!localStorage.getItem(TOKEN_KEY);
+  });
 
   const fetchMe = useCallback(async (token: string): Promise<AuthUser | null> => {
     try {
@@ -39,7 +42,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
     const token = localStorage.getItem(TOKEN_KEY);
     if (!token) {
-      setLoading(false);
       return;
     }
     fetchMe(token).then((u) => {

@@ -34,14 +34,14 @@ export default async function RunPage({
   // Fetch all steps with pagination
   const allSteps: RunStepInfo[] = [];
   let afterIdx = -1;
-  // eslint-disable-next-line no-constant-condition
-  while (true) {
+  for (let hasMore = true; hasMore;) {
     const batch = await fetchRunSteps(runId, {
       limit: 500,
       afterStepIdx: afterIdx >= 0 ? afterIdx : undefined,
       baseUrl: BROKER_URL,
     });
-    if (batch.length === 0) break;
+    hasMore = batch.length > 0;
+    if (!hasMore) break;
     allSteps.push(...batch);
     afterIdx = Math.max(...batch.map((s) => s.step_idx));
   }

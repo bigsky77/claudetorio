@@ -19,12 +19,18 @@ export default function StepList({
 
   // When new steps arrive on an active run, auto-expand latest + show jump button
   useEffect(() => {
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
     if (steps.length > prevLenRef.current && isActive) {
       const latest = steps[steps.length - 1].step_idx;
-      setExpanded((prev) => new Set(prev).add(latest));
-      setShowJump(true);
+      timeoutId = setTimeout(() => {
+        setExpanded((prev) => new Set(prev).add(latest));
+        setShowJump(true);
+      }, 0);
     }
     prevLenRef.current = steps.length;
+    return () => {
+      if (timeoutId) clearTimeout(timeoutId);
+    };
   }, [steps.length, isActive, steps]);
 
   const toggle = useCallback((idx: number) => {
