@@ -1,0 +1,66 @@
+name: Build and Push Images
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: broker
+            context: ./packages/broker
+            dockerfile: Dockerfile
+          - name: frontend
+            context: ./packages/frontend
+            dockerfile: Dockerfile
+          - name: run-worker
+            context: ./packages
+            dockerfile: run-worker/Dockerfile
+          - name: stream-agent
+            context: ./packages/stream-agent
+            dockerfile: Dockerfile
+          - name: stream-worker
+            context: ./packages
+            dockerfile: stream-worker/Dockerfile
+          - name: stream-client
+            context: ./packages/stream-client
+            dockerfile: Dockerfile
+          - name: vtuber-stream-client
+            context: ./packages/vtuber-stream-client
+            dockerfile: Dockerfile
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate image metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/bigsky77/claudetorio-${{ matrix.name }}
+          tags: |
+            type=raw,value=latest
+            type=sha
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.context }}/${{ matrix.dockerfile }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
