@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { fetchLiveRun, fetchRunInfo } from '@/services/api';
-import { streamFromRun } from '@/lib/streams';
+import { getStreamById, streamFromRun } from '@/lib/streams';
 import StreamPage from '@/components/Stream/StreamPage';
 import LiveStreamPage from '@/components/Stream/LiveStreamPage';
 
@@ -32,7 +32,13 @@ export default async function StreamRoute({
     return <LiveStreamPage initialStream={stream} />;
   }
 
-  // For any other streamId, treat as a run ID and show its page
+  // Handle non-run stream IDs (twitch-live, twitch-vod-*, replay-1, replay-2)
+  const staticStream = getStreamById(streamId);
+  if (staticStream) {
+    return <StreamPage stream={staticStream} />;
+  }
+
+  // Remaining IDs are run IDs
   const runInfo = await fetchRunInfo(streamId);
   if (!runInfo) notFound();
 
