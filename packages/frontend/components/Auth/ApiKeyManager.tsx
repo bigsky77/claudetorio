@@ -1,15 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { getApiKeys, saveApiKeys, clearApiKeys, type StoredApiKeys } from '@/utils/api-keys';
 
 export default function ApiKeyManager() {
-  const [keys, setKeys] = useState<StoredApiKeys>({ anthropic: '', openai: '', custom: { url: '', key: '' } });
+  const [keys, setKeys] = useState<StoredApiKeys>(() => getApiKeys());
   const [saved, setSaved] = useState(false);
-
-  useEffect(() => {
-    setKeys(getApiKeys());
-  }, []);
 
   function handleSave() {
     saveApiKeys(keys);

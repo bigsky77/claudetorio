@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useSyncExternalStore } from 'react';
 import { useChat } from '@/hooks/use-chat';
 import { getOrCreateUsername } from '@/lib/names';
 import type { ChatMessage } from '@/interfaces';
@@ -34,13 +34,12 @@ function TypingIndicator() {
 export default function ChatPanel({ streamId }: { streamId: string }) {
   const { messages, sendMessage, isLoading, isAiTyping } = useChat(streamId);
   const [input, setInput] = useState('');
-  const [username, setUsername] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
-
-  // Defer username to client to avoid SSR hydration mismatch
-  useEffect(() => {
-    setUsername(getOrCreateUsername());
-  }, []);
+  const username = useSyncExternalStore(
+    () => () => {},
+    () => getOrCreateUsername(),
+    () => '',
+  );
 
   // Auto-scroll to bottom on new messages or typing state change
   useEffect(() => {

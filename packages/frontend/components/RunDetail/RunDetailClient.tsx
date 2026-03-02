@@ -19,7 +19,6 @@ export default function RunDetailClient({
 }) {
   const { run, steps, isActive, refetch } = useRunPolling(initialRun, initialSteps);
   const [replayUrl, setReplayUrl] = useState<string | null>(run.stream_url ?? initialStreamUrl ?? null);
-  const [replayWorkerStarted, setReplayWorkerStarted] = useState(false);
   const [isLive, setIsLive] = useState(run.rtmp_active ?? false);
   const [runtimeDisplay, setRuntimeDisplay] = useState<{
     text: string;
@@ -37,14 +36,12 @@ export default function RunDetailClient({
     const result = await startReplay(run.run_id);
     if (result?.stream_url) {
       setReplayUrl(result.stream_url);
-      setReplayWorkerStarted(false);
     }
   }
 
   async function handleStartReplayWorker() {
     const result = await startReplayWorker(run.run_id);
     if (result?.status === 'running') {
-      setReplayWorkerStarted(true);
       await refetch();
     }
   }
@@ -53,7 +50,6 @@ export default function RunDetailClient({
     await stopReplayWorker(run.run_id);
     await stopReplay(run.run_id);
     setReplayUrl(null);
-    setReplayWorkerStarted(false);
     setIsLive(false);
   }
 

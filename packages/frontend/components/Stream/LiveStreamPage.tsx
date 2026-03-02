@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import type { StreamDefinition } from '@/lib/streams';
 import { streamFromRun } from '@/lib/streams';
 import { fetchLiveRun } from '@/services/api';
@@ -36,9 +37,9 @@ export default function LiveStreamPage({
     return (
       <main className="min-h-screen bg-surface-0 text-white font-[family-name:var(--font-body)]">
         <header className="h-12 bg-surface-1 border-b border-surface-3 flex items-center justify-between px-8">
-          <a href="/" className="font-[family-name:var(--font-heading)] font-bold text-lg tracking-wide text-white hover:opacity-80 transition-opacity">
+          <Link href="/" className="font-[family-name:var(--font-heading)] font-bold text-lg tracking-wide text-white hover:opacity-80 transition-opacity">
             CLAUDETORIO
-          </a>
+          </Link>
         </header>
         <div className="flex items-center justify-center h-[calc(100vh-3rem)]">
           <div className="text-white/40 text-lg font-[family-name:var(--font-body)]">
@@ -52,9 +53,9 @@ export default function LiveStreamPage({
   return (
     <main className="min-h-screen bg-surface-0 text-white font-[family-name:var(--font-body)]">
       <header className="h-12 bg-surface-1 border-b border-surface-3 flex items-center justify-between px-8">
-        <a href="/" className="font-[family-name:var(--font-heading)] font-bold text-lg tracking-wide text-white hover:opacity-80 transition-opacity">
+        <Link href="/" className="font-[family-name:var(--font-heading)] font-bold text-lg tracking-wide text-white hover:opacity-80 transition-opacity">
           CLAUDETORIO
-        </a>
+        </Link>
         <LoginWidget />
       </header>
 
