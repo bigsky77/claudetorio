@@ -4,6 +4,7 @@ set -euo pipefail
 log() { echo "[entrypoint] $*"; }
 fail() { echo "[entrypoint] ERROR: $*" >&2; exit 1; }
 
+
 DISPLAY_WIDTH="${DISPLAY_WIDTH:-1280}"
 DISPLAY_HEIGHT="${DISPLAY_HEIGHT:-720}"
 DISPLAY="${DISPLAY:-:1}"
