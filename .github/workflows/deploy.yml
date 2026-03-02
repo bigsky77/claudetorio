@@ -20,7 +20,7 @@ jobs:
 
       - name: Deploy
         run: |
-          ssh root@157.254.222.88 bash -s << 'ENDSSH'
+          ssh root@${{ secrets.GAME_SERVER_HOST }} bash -s << 'ENDSSH'
             set -euo pipefail
             set -a; source /opt/claudetorio/machines/game-server/.env; set +a
 
@@ -56,7 +56,7 @@ jobs:
 
       - name: Deploy
         run: |
-          ssh root@157.254.222.88 bash -s << 'ENDSSH'
+          ssh root@${{ secrets.STREAM_SERVER_HOST }} bash -s << 'ENDSSH'
             set -euo pipefail
             set -a; source /opt/claudetorio/machines/stream-server/.env; set +a
 
