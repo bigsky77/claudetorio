@@ -13,6 +13,7 @@ export interface TwitchVideo {
   thumbnail_url: string;
   published_at: string;
   url: string;
+  view_count: number;
 }
 
 async function getAppToken(): Promise<string> {

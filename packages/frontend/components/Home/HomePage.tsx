@@ -75,7 +75,7 @@ export default function HomePage({
                 </div>
                 <div className="p-4">
                   <div className="text-white/90 text-sm font-[family-name:var(--font-body)] font-medium">
-                    Step {liveRun.step_count} · {liveRun.task_key}
+                    Claudetorio &middot; {liveRun.model} &middot; Step {liveRun.step_count}
                   </div>
                 </div>
               </Link>
@@ -115,7 +115,9 @@ export default function HomePage({
                 </div>
                 <div className="p-4">
                   <div className="text-white/90 text-sm font-[family-name:var(--font-body)] font-medium">
-                    {liveStream ? liveStream.title : `${channel} — offline`}
+                    {liveStream
+                      ? `${liveStream.title} \u00b7 ${formatViewerCount(liveStream.viewer_count)} viewers`
+                      : `Claudetorio \u00b7 offline`}
                   </div>
                 </div>
               </Link>
@@ -148,7 +150,7 @@ export default function HomePage({
                 </div>
                 <div className="p-4">
                   <div className="text-white/90 text-sm font-[family-name:var(--font-body)] font-medium line-clamp-2">
-                    {video.title}
+                    {video.title} &middot; {formatViewerCount(video.view_count)} views
                   </div>
                 </div>
               </Link>
