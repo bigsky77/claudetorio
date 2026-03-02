@@ -569,6 +569,7 @@ async def run(steps: int, broker_url: str, username: str):
     consecutive_fle_errors = 0
     MAX_CONSECUTIVE_FLE_ERRORS = 5
 
+    run_error: str | None = None
     try:
         # 3. Agent loop
         for step in range(1, steps + 1):
