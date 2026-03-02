@@ -5,4 +5,5 @@
 # Upstream source is cloned at build time; exclude from build context
 vendor/
 
-# Local runtime noise (models/ is intentionally included for COPY)
+# Exclude host-side model files — they are bind-mounted at runtime, not baked in
+models/

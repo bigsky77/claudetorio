@@ -130,6 +130,13 @@ audio_diag_snapshot "post-pulse-setup"
 log "Generating VTuber config..."
 envsubst < /conf.yaml.template > /app/vtuber/conf.yaml
 
+# Copy ASR models from host-mounted volume if present
+if [ -d /models-src ] && [ "$(ls -A /models-src 2>/dev/null)" ]; then
+    log "Copying ASR models from /models-src..."
+    cp -r /models-src/. /app/vtuber/models/
+    log "Models copied."
+fi
+
 log "Starting Open-LLM-VTuber server..."
 cd /app/vtuber && DISPLAY="${DISPLAY_NUM}" uv run run_server.py &
 VTUBER_PID=$!

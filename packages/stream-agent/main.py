@@ -10,6 +10,7 @@ DOCKER_NETWORK = os.getenv("DOCKER_NETWORK", "stream-network")
 STREAM_CLIENT_IMAGE = os.getenv("STREAM_CLIENT_IMAGE", "claudetorio-stream-client")
 FACTORIO_CLIENT_VOLUME = os.getenv("FACTORIO_CLIENT_VOLUME", "claudetorio_factorio_client")
 VTUBER_STREAM_CLIENT_IMAGE = os.getenv("VTUBER_STREAM_CLIENT_IMAGE", "claudetorio-vtuber-stream-client")
+VTUBER_MODELS_PATH = os.getenv("VTUBER_MODELS_PATH", "")
 HLS_READY_TIMEOUT_SECONDS = 180
 VTUBER_READY_TIMEOUT_SECONDS = 300
 
@@ -130,6 +131,8 @@ async def spawn_vtuber_stream_client(req: VtuberStreamClientRequest, _=Depends(r
     for k, v in env_vars.items():
         cmd += ["-e", f"{k}={v}"]
     cmd += ["-p", f"{req.host_port}:3000"]
+    if VTUBER_MODELS_PATH:
+        cmd += ["-v", f"{VTUBER_MODELS_PATH}:/models-src:ro"]
     cmd += [image]
 
     print(
