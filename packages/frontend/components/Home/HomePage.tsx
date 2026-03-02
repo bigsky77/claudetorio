@@ -27,11 +27,16 @@ export default function HomePage({
   liveStream,
   videos,
   liveRun,
+  recentRuns = [],
 }: {
   liveStream: TwitchStream | null;
   videos: TwitchVideo[];
   liveRun: RunInfo | null;
+  recentRuns?: RunInfo[];
 }) {
+  // Match VODs to completed runs by order (both reverse-chronological).
+  // Skip the live/running run since it maps to the live card, not a VOD.
+  const completedRuns = recentRuns.filter((r) => r.status !== 'running');
   const channel = process.env.NEXT_PUBLIC_TWITCH_CHANNEL ?? '';
 
   return (
@@ -116,15 +121,18 @@ export default function HomePage({
                 <div className="p-4">
                   <div className="text-white/90 text-sm font-[family-name:var(--font-body)] font-medium">
                     {liveStream
-                      ? `${liveStream.title} \u00b7 ${formatViewerCount(liveStream.viewer_count)} viewers`
-                      : `Claudetorio \u00b7 offline`}
+                      ? `${liveStream.title || 'Claudetorio'} \u00b7 ${liveRun?.model ?? 'claude-sonnet-4-5'} \u00b7 ${formatViewerCount(liveStream.viewer_count)} viewers`
+                      : `Claudetorio \u00b7 ${liveRun?.model ?? 'claude-sonnet-4-5'} \u00b7 offline`}
                   </div>
                 </div>
               </Link>
             )}
 
             {/* VOD cards */}
-            {videos.slice(0, liveRun ? (channel ? 1 : 2) : (channel ? 2 : 3)).map((video) => (
+            {videos.slice(0, liveRun ? (channel ? 1 : 2) : (channel ? 2 : 3)).map((video, idx) => {
+              const matchedRun = completedRuns[idx];
+              const model = matchedRun?.model ?? 'claude-sonnet-4-5';
+              return (
               <Link
                 key={video.id}
                 href={`/stream/twitch-vod-${video.id}`}
@@ -150,11 +158,12 @@ export default function HomePage({
                 </div>
                 <div className="p-4">
                   <div className="text-white/90 text-sm font-[family-name:var(--font-body)] font-medium line-clamp-2">
-                    {video.title} &middot; {formatViewerCount(video.view_count)} views
+                    {video.title || 'Claudetorio'} &middot; {model} &middot; {formatViewerCount(video.view_count)} views
                   </div>
                 </div>
               </Link>
-            ))}
+              );
+            })}
           </div>
         </section>
 

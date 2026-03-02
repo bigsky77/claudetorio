@@ -20,8 +20,11 @@ export default async function Home() {
     ]);
   }
 
-  const runs = await fetchRuns({ status: 'running', limit: 1, baseUrl: BROKER_URL });
-  const liveRun: RunInfo | null = runs[0] ?? null;
+  const [liveRuns, recentRuns] = await Promise.all([
+    fetchRuns({ status: 'running', limit: 1, baseUrl: BROKER_URL }),
+    fetchRuns({ limit: 10, baseUrl: BROKER_URL }),
+  ]);
+  const liveRun: RunInfo | null = liveRuns[0] ?? null;
 
-  return <HomePage liveStream={liveStream} videos={videos} liveRun={liveRun} />;
+  return <HomePage liveStream={liveStream} videos={videos} liveRun={liveRun} recentRuns={recentRuns} />;
 }
