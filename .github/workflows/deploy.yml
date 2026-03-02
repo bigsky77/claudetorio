@@ -1,179 +1,79 @@
 name: Deploy
 
 on:
-  push:
+  workflow_run:
+    workflows: ["Build and Push Images"]
+    types: [completed]
     branches: [main]
 
 jobs:
-  deploy:
-    name: Deploy
+  deploy-game-server:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 2
-
-      - name: Detect changes
-        id: changes
-        run: |
-          # Get changed files
-          CHANGED=$(git diff --name-only HEAD~1 HEAD)
-          echo "Changed files:"
-          echo "$CHANGED"
-
-          DEPLOY_GAME=false
-          DEPLOY_STREAM=false
-
-          # Check if stream-related files changed
-          if echo "$CHANGED" | grep -qE '^(packages/stream-client/|packages/stream-agent/|machines/stream-server/)'; then
-            DEPLOY_STREAM=true
-          fi
-
-          # Check if game-server related files changed
-          # (packages except stream-client/stream-agent, machines except stream-server, or config)
-          if echo "$CHANGED" | grep -qE '^(packages/(broker|frontend|agent-runner|fle|run-worker|stream-worker)/|machines/game-server/|config/)'; then
-            DEPLOY_GAME=true
-          fi
-
-          # If workflow or scripts changed, deploy both
-          if echo "$CHANGED" | grep -qE '^(\.github/workflows/deploy\.yml|scripts/)'; then
-            DEPLOY_STREAM=true
-            DEPLOY_GAME=true
-          fi
-
-          echo "deploy_game=$DEPLOY_GAME" >> $GITHUB_OUTPUT
-          echo "deploy_stream=$DEPLOY_STREAM" >> $GITHUB_OUTPUT
-          echo "Deploy game: $DEPLOY_GAME, Deploy stream: $DEPLOY_STREAM"
-
-      - name: Setup SSH
+      - name: Configure SSH
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.DEPLOY_SSH_KEY }}" | base64 -d > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
-          echo "${{ secrets.KNOWN_HOSTS }}" >> ~/.ssh/known_hosts
-          chmod 644 ~/.ssh/known_hosts
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          echo "${{ secrets.KNOWN_HOSTS }}" > ~/.ssh/known_hosts
 
-      - name: Deploy to game-server
-        if: steps.changes.outputs.deploy_game == 'true'
-        env:
-          HOST: ${{ secrets.GAME_SERVER_HOST }}
+      - name: Deploy
         run: |
-          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new root@$HOST bash -s << 'EOF'
-            set -e
-            cd /opt/claudetorio
+          ssh root@157.254.222.103 bash -s << 'ENDSSH'
+            set -euo pipefail
+            set -a; source /opt/claudetorio/machines/game-server/.env; set +a
 
-            # Save current SHA for rollback
-            git rev-parse HEAD > .deployed-sha.prev
+            echo "$GHCR_PAT" | docker login ghcr.io -u bigsky77 --password-stdin
 
-            # Pull latest
-            git fetch origin main
-            git reset --hard origin/main
-
-            # Record new SHA
-            git rev-parse HEAD > .deployed-sha
-
-            # Prepare game stack
-            cd machines/game-server
-
-            # Fail fast on missing required env
-            test -f .env || { echo "ERROR: machines/game-server/.env is missing"; exit 1; }
-            for key in POSTGRES_PASSWORD RCON_PASSWORD FACTORIO_IMAGE STREAM_AGENT_KEY; do
-              val="$(grep -E "^${key}=" .env | tail -n1 | cut -d= -f2-)"
-              if [ -z "$val" ]; then
-                echo "ERROR: required key '${key}' is missing/empty in .env"
-                exit 1
-              fi
+            for img in broker frontend run-worker stream-worker; do
+              docker pull ghcr.io/bigsky77/claudetorio-${img}:latest
+              docker tag ghcr.io/bigsky77/claudetorio-${img}:latest claudetorio-${img}:latest
             done
 
-            # Deterministically populate config/scenario volumes
+            git -C /opt/claudetorio fetch origin main
+            git -C /opt/claudetorio reset --hard origin/main
+
+            cd /opt/claudetorio/machines/game-server
             docker compose run --rm factorio-config-init
             docker compose run --rm factorio-scenarios-init
+            docker compose up -d --remove-orphans
 
-            # Sanity-check that expected files exist in config volume
-            docker run --rm -v claudetorio_factorio_config:/v alpine sh -c "test -f /v/server-settings.json"
-
-            # Build broker-spawned images used at runtime
-            docker compose --profile build-only build run-worker stream-worker
-
-            # Verify required broker-spawned images exist locally
-            docker image inspect claudetorio-run-worker:latest >/dev/null
-            docker image inspect claudetorio-stream-worker:latest >/dev/null
-
-            # Recreate stack with fresh config
-            docker compose up --build -d --force-recreate
-
-            # Verify broker runtime contract
-            docker inspect claudetorio-broker --format '{{range .Config.Env}}{{println .}}{{end}}' | grep -q '^DOCKER_NETWORK=claudetorio_game$'
-            docker inspect claudetorio-broker --format '{{range .Config.Env}}{{println .}}{{end}}' | grep -q '^FACTORIO_CONFIG_VOLUME=claudetorio_factorio_config$'
-            docker inspect claudetorio-broker --format '{{range .Config.Env}}{{println .}}{{end}}' | grep -q '^STREAM_AGENT_URL='
-
-            # Health check
             sleep 5
-            curl -sf http://localhost:8080/api/status || echo "Health check pending..."
+            curl -sf http://localhost:8080/api/status | jq .run_count
+          ENDSSH
 
-            echo "Game server deployed: $(cat /opt/claudetorio/.deployed-sha)"
-          EOF
-
-      - name: Deploy to stream-server
-        if: steps.changes.outputs.deploy_stream == 'true'
-        env:
-          HOST: ${{ secrets.STREAM_SERVER_HOST }}
+  deploy-stream-server:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configure SSH
         run: |
-          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new root@$HOST bash -s << 'EOF'
-            set -e
-            cd /opt/claudetorio
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          echo "${{ secrets.KNOWN_HOSTS }}" > ~/.ssh/known_hosts
 
-            # Save current SHA for rollback
-            git rev-parse HEAD > .deployed-sha.prev
+      - name: Deploy
+        run: |
+          ssh root@157.254.222.104 bash -s << 'ENDSSH'
+            set -euo pipefail
+            set -a; source /opt/claudetorio/machines/stream-server/.env; set +a
 
-            # Pull latest
-            git fetch origin main
-            git reset --hard origin/main
+            echo "$GHCR_PAT" | docker login ghcr.io -u bigsky77 --password-stdin
 
-            # Record new SHA
-            git rev-parse HEAD > .deployed-sha
-
-            cd machines/stream-server
-
-            # Fail fast on missing required env
-            test -f .env || { echo "ERROR: machines/stream-server/.env is missing"; exit 1; }
-            for key in STREAM_AGENT_KEY FACTORIO_CLIENT_PATH; do
-              val="$(grep -E "^${key}=" .env | tail -n1 | cut -d= -f2-)"
-              if [ -z "$val" ]; then
-                echo "ERROR: required key '${key}' is missing/empty in .env"
-                exit 1
-              fi
+            for img in stream-agent stream-client stream-worker vtuber-stream-client; do
+              docker pull ghcr.io/bigsky77/claudetorio-${img}:latest
+              docker tag ghcr.io/bigsky77/claudetorio-${img}:latest claudetorio-${img}:latest
             done
-            FACTORIO_CLIENT_PATH="$(grep -E '^FACTORIO_CLIENT_PATH=' .env | tail -n1 | cut -d= -f2-)"
-            test -d "$FACTORIO_CLIENT_PATH" || { echo "ERROR: FACTORIO_CLIENT_PATH does not exist: $FACTORIO_CLIENT_PATH"; exit 1; }
 
-            # Build broker-spawned images
-            docker compose --profile build-only build stream-client stream-worker
+            git -C /opt/claudetorio fetch origin main
+            git -C /opt/claudetorio reset --hard origin/main
 
-            # Verify images exist
-            docker image inspect claudetorio-stream-client:latest >/dev/null
-
-            # Populate Factorio client volume
+            cd /opt/claudetorio/machines/stream-server
             docker compose run --rm factorio-client-init
-            docker run --rm -v claudetorio_factorio_client:/v alpine sh -c "test -e /v/bin/x64/factorio || test -e /v/bin/factorio"
+            docker compose up -d --remove-orphans
 
-            # Restart stack (includes stream-agent)
-            docker compose up --build -d
-
-            # Reload Caddy config (bind-mounted Caddyfile changes aren't picked up without this)
-            docker compose exec -T caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile
-
-            # Health check
             sleep 5
-            curl -sf http://localhost:8090/health || echo "stream-agent health check pending..."
-            docker ps | grep -q caddy && echo "Caddy running" || echo "Caddy health check pending..."
-
-            echo "Stream server deployed: $(cat /opt/claudetorio/.deployed-sha)"
-          EOF
-
-      - name: Summary
-        run: |
-          echo "## Deployment Summary" >> $GITHUB_STEP_SUMMARY
-          echo "- Game server: ${{ steps.changes.outputs.deploy_game }}" >> $GITHUB_STEP_SUMMARY
-          echo "- Stream server: ${{ steps.changes.outputs.deploy_stream }}" >> $GITHUB_STEP_SUMMARY
-          echo "- Commit: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+            curl -sf http://localhost:8090/health
+          ENDSSH
