@@ -278,7 +278,7 @@ jobs:
         run: |
           RUN_ID="${{ steps.create-run.outputs.run_id }}"
           STEPS=$(curl -sf "http://localhost:8080/api/runs/$RUN_ID/steps")
-          COUNT=$(echo "$STEPS" | jq '.steps | length')
+          COUNT=$(echo "$STEPS" | jq 'length')
           echo "Step count: $COUNT"
           [ "$COUNT" -ge 3 ] || { echo "Expected >=3 steps, got $COUNT"; exit 1; }
 
@@ -289,7 +289,7 @@ jobs:
           curl -sf "http://localhost:3000/api/runs/$RUN_ID" | jq .run_id
           STEPS=$(curl -sf "http://localhost:3000/api/runs/$RUN_ID/steps?limit=10")
           echo "Frontend steps: $STEPS"
-          COUNT=$(echo "$STEPS" | jq '.steps | length')
+          COUNT=$(echo "$STEPS" | jq 'length')
           [ "$COUNT" -ge 3 ] || { echo "Frontend returned only $COUNT steps"; exit 1; }
 
       - name: Cleanup
