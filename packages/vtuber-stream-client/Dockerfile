@@ -68,8 +68,12 @@ RUN mkdir -p /var/www/html \
     && wget -q -O /var/www/html/hls.min.js \
        "https://cdn.jsdelivr.net/npm/hls.js@latest/dist/hls.min.js"
 
-# Copy pre-downloaded ASR models (avoids slow download at container startup)
-COPY models/ /app/vtuber/models/
+# Download ASR models from k2-fsa GitHub releases (cached as a Docker layer)
+RUN mkdir -p /app/vtuber/models \
+    && wget -q -O /tmp/sense-voice.tar.bz2 \
+       "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17.tar.bz2" \
+    && tar -xjf /tmp/sense-voice.tar.bz2 -C /app/vtuber/models/ \
+    && rm /tmp/sense-voice.tar.bz2
 
 # Copy configs and scripts
 COPY conf.yaml.template /conf.yaml.template
