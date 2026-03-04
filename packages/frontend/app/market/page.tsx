@@ -1,8 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
-import LoginWidget from "@/components/Auth/LoginWidget";
+import NavHeader from "@/components/NavHeader";
 
 // ─── Design Tokens (matching globals.css) ───
 const C = {
@@ -389,19 +388,7 @@ export default function MarketPage() {
 
   return (
     <main className="min-h-screen bg-surface-0 text-white font-[family-name:var(--font-body)]">
-      {/* Top bar — matches HomePage h-14 bg-surface-1 border-b border-surface-3 px-8 */}
-      <header className="h-14 bg-surface-1 border-b border-surface-3 flex items-center justify-between px-8">
-        <div className="flex items-center gap-3">
-          <Link
-            href="/"
-            className="font-[family-name:var(--font-heading)] font-bold text-lg tracking-wide text-white hover:opacity-80 transition-opacity"
-          >
-            CLAUDETORIO
-          </Link>
-          <span className="text-white/25 text-xs font-semibold tracking-widest">MARKETS</span>
-        </div>
-        <LoginWidget />
-      </header>
+      <NavHeader />
 
       {/* Content */}
       <div style={{ padding: "32px 40px 80px", display: "flex", flexDirection: "column", gap: 48 }}>

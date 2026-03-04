@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import LoginWidget from '@/components/Auth/LoginWidget';
+import NavHeader from '@/components/NavHeader';
 import { useAuth } from '@/contexts/AuthContext';
 import { REFRESH_INTERVAL_MS } from '@/constants';
 import type { RunInfo, SystemStatus } from '@/interfaces';
@@ -412,27 +412,13 @@ export default function DashboardPage(props: {
 
   return (
     <main className="min-h-screen bg-surface-0 text-white font-[family-name:var(--font-body)]">
-      {/* Header */}
-      <header className="h-14 bg-surface-1 border-b border-surface-3 flex items-center justify-between px-8">
-        <div className="flex items-center gap-3">
-          <Link
-            href="/"
-            className="font-[family-name:var(--font-heading)] font-bold text-lg tracking-wide text-white hover:opacity-80 transition-opacity"
-          >
-            CLAUDETORIO
-          </Link>
-          <span className="text-white/25 text-xs font-semibold tracking-widest">
-            DASHBOARD
+      <NavHeader>
+        {!canControl && (
+          <span className="ml-2 bg-surface-2 border border-surface-3 text-white/60 text-[11px] font-bold tracking-widest px-2 py-1">
+            READ ONLY
           </span>
-
-          {!canControl && (
-            <span className="ml-2 bg-surface-2 border border-surface-3 text-white/60 text-[11px] font-bold tracking-widest px-2 py-1">
-              READ ONLY
-            </span>
-          )}
-        </div>
-        <LoginWidget />
-      </header>
+        )}
+      </NavHeader>
 
       {/* Content */}
       <div className="px-10 py-8">
