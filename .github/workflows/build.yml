@@ -9,7 +9,15 @@ permissions:
   packages: write
 
 jobs:
+  validate-game-compose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate game-server compose
+        run: docker compose --env-file machines/game-server/.env.example -f machines/game-server/docker-compose.yml config
+
   build:
+    needs: validate-game-compose
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false

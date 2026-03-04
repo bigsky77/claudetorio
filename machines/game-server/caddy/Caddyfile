@@ -1,0 +1,7 @@
+app.claudetorio.ai {
+    reverse_proxy frontend:3000
+}
+
+api.claudetorio.ai {
+    reverse_proxy broker:8080
+}

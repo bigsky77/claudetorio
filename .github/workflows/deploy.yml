@@ -42,7 +42,7 @@ jobs:
       - name: Health check
         run: |
           sleep 10
-          ssh root@${{ secrets.GAME_SERVER_HOST }} 'curl -sf http://localhost:8080/api/status | jq .run_count'
+          ssh root@${{ secrets.GAME_SERVER_HOST }} 'set -a; source /opt/claudetorio/machines/game-server/.env; set +a; curl -sf -H "Host: ${APP_DOMAIN}" http://localhost/api/status | jq .run_count'
 
   deploy-stream-server:
     if: ${{ github.event.workflow_run.conclusion == 'success' }}

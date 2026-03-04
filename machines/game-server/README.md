@@ -10,10 +10,11 @@ Main ClaudeTorio game server running headless Factorio instances, broker, and fr
 
 ## Components
 
+- Caddy reverse proxy (ports 80/443)
 - PostgreSQL 16 (port 5432, localhost only)
 - Redis 7 (port 6379, localhost only)
-- Broker (port 8080)
-- Frontend (port 3000)
+- Broker (internal only, proxied by Caddy)
+- Frontend (internal only, proxied by Caddy)
 - Headless Factorio instances (ports 34197-34216)
 
 ## Deployment
@@ -30,7 +31,7 @@ vim .env
 ## Health Check
 
 ```bash
-curl http://157.254.222.103:8080/api/status
+curl http://157.254.222.103/api/status
 ```
 
 ## Logs
