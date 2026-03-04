@@ -38,6 +38,12 @@ export async function POST(request: NextRequest) {
       'Authorization': `Bearer ${adminKey}`,
     };
 
+    // Forward user JWT so broker can associate runs with GitHub users
+    const userAuth = request.headers.get('Authorization');
+    if (userAuth) {
+      headers['X-User-Token'] = userAuth;
+    }
+
     const res = await fetch(target, {
       method: 'POST',
       headers,

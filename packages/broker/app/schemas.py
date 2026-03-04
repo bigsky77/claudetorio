@@ -155,6 +155,18 @@ class AuthMeResponse(BaseModel):
     user: AuthUser
 
 
+class RunsLeaderboardEntry(BaseModel):
+    rank: int
+    username: str
+    avatar_url: Optional[str] = None
+    model: str
+    best_score: float
+    best_run_id: str
+    milestone: Optional[str] = None
+    status: str
+    run_count: int
+
+
 class ChatMessageCreate(BaseModel):
     content: str = Field(..., min_length=1, max_length=500)
     username: str = Field(..., min_length=1, max_length=30)

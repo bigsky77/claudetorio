@@ -32,6 +32,11 @@ async def init_db():
                 "ALTER TABLE runs ALTER COLUMN map_seed TYPE BIGINT"
             )
         )
+        await conn.execute(
+            __import__("sqlalchemy").text(
+                "ALTER TABLE runs ADD COLUMN IF NOT EXISTS github_user_id INTEGER REFERENCES github_users(id)"
+            )
+        )
 
 
 async def close_db():

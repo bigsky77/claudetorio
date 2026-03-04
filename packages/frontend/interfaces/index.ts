@@ -8,6 +8,7 @@ export type {
 
 export type {
   LeaderboardEntry,
+  RunsLeaderboardEntry,
   UnifiedLeaderboardEntry,
 } from './leaderboard';
 
