@@ -56,10 +56,10 @@ export default function HomePage({
             STREAMS
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {/* Claudetorio live run card */}
-            {liveRun && (
+            {/* Claudetorio live / offline card */}
+            {liveRun ? (
               <Link
-                href={`/run/${liveRun.run_id}`}
+                href={channel ? '/stream/twitch-live' : `/run/${liveRun.run_id}`}
                 className="block bg-surface-1 border border-accent-green/40 hover:border-accent-green/70 transition-colors"
               >
                 <div className="p-4 flex items-center gap-2">
@@ -71,40 +71,7 @@ export default function HomePage({
                 </div>
                 <div className="px-4">
                   <div className="bg-surface-2 p-1">
-                    <div className="w-full aspect-video bg-surface-3 flex items-center justify-center">
-                      <span className="text-white/30 text-sm font-[family-name:var(--font-heading)] tracking-wide">
-                        AI PLAYING FACTORIO
-                      </span>
-                    </div>
-                  </div>
-                </div>
-                <div className="p-4">
-                  <div className="text-white/90 text-sm font-[family-name:var(--font-body)] font-medium">
-                    Claudetorio &middot; {liveRun.model} &middot; Step {liveRun.step_count}
-                  </div>
-                </div>
-              </Link>
-            )}
-
-            {/* Live Twitch channel card */}
-            {channel && (
-              <Link
-                href="/stream/twitch-live"
-                className="block bg-surface-1 border border-surface-3 hover:border-surface-3/80 transition-colors"
-              >
-                <div className="p-4 flex items-center gap-2">
-                  {liveStream ? (
-                    <>
-                      <span className="bg-accent-green text-black text-xs font-bold px-2 py-1 uppercase">LIVE</span>
-                      <span className="text-white/60 text-xs">{formatViewerCount(liveStream.viewer_count)} viewers</span>
-                    </>
-                  ) : (
-                    <span className="bg-surface-3 text-white/60 text-xs font-bold px-2 py-1 uppercase">OFFLINE</span>
-                  )}
-                </div>
-                <div className="px-4">
-                  <div className="bg-surface-2 p-1">
-                    {liveStream ? (
+                    {liveStream?.thumbnail_url ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
                         src={getThumbnailUrl(liveStream.thumbnail_url)}
@@ -113,23 +80,43 @@ export default function HomePage({
                       />
                     ) : (
                       <div className="w-full aspect-video bg-surface-3 flex items-center justify-center">
-                        <span className="text-white/30 text-sm">No stream</span>
+                        <span className="text-white/30 text-sm font-[family-name:var(--font-heading)] tracking-wide">
+                          AI PLAYING FACTORIO
+                        </span>
                       </div>
                     )}
                   </div>
                 </div>
                 <div className="p-4">
                   <div className="text-white/90 text-sm font-[family-name:var(--font-body)] font-medium">
-                    {liveStream
-                      ? `${liveStream.title || 'Claudetorio'} \u00b7 ${liveRun?.model ?? 'claude-sonnet-4-5'} \u00b7 ${formatViewerCount(liveStream.viewer_count)} viewers`
-                      : `Claudetorio \u00b7 ${liveRun?.model ?? 'claude-sonnet-4-5'} \u00b7 offline`}
+                    Claudetorio &middot; {liveRun.model} &middot; Step {liveRun.step_count}
                   </div>
                 </div>
               </Link>
+            ) : (
+              <div className="block bg-surface-1 border border-surface-3">
+                <div className="p-4 flex items-center gap-2">
+                  <span className="bg-surface-3 text-white/60 text-xs font-bold px-2 py-1 uppercase">OFFLINE</span>
+                </div>
+                <div className="px-4">
+                  <div className="bg-surface-2 p-1">
+                    <div className="w-full aspect-video bg-surface-3 flex items-center justify-center">
+                      <span className="text-white/30 text-sm font-[family-name:var(--font-heading)] tracking-wide">
+                        AI PLAYING FACTORIO
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                <div className="p-4">
+                  <div className="text-white/60 text-sm font-[family-name:var(--font-body)] font-medium">
+                    Claudetorio &middot; offline
+                  </div>
+                </div>
+              </div>
             )}
 
             {/* VOD cards */}
-            {videos.slice(0, liveRun ? (channel ? 1 : 2) : (channel ? 2 : 3)).map((video, idx) => {
+            {videos.slice(0, 2).map((video, idx) => {
               const matchedRun = completedRuns[idx];
               const model = matchedRun?.model ?? 'claude-sonnet-4-5';
               return (
