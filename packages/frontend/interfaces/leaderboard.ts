@@ -8,6 +8,18 @@ export interface LeaderboardEntry {
   best_session_id: string | null;
 }
 
+export interface RunsLeaderboardEntry {
+  rank: number;
+  username: string;
+  avatar_url: string | null;
+  model: string;
+  best_score: number;
+  best_run_id: string;
+  milestone: string | null;
+  status: string;
+  run_count: number;
+}
+
 export interface UnifiedLeaderboardEntry {
   username: string;
   score: number;

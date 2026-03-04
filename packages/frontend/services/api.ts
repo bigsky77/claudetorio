@@ -2,6 +2,7 @@ import { API_BASE } from '@/constants';
 import { getAuthToken } from '@/utils/auth-token';
 import type {
   LeaderboardEntry,
+  RunsLeaderboardEntry,
   SystemStatus,
   SessionScore,
   FactoryData,
@@ -125,6 +126,16 @@ export async function fetchSessionEntities(sessionId: string): Promise<EntitiesD
 
 export function getDownloadUrl(sessionId: string): string {
   return `${API_BASE}/api/session/${sessionId}/download`;
+}
+
+export async function fetchRunsLeaderboard(): Promise<RunsLeaderboardEntry[]> {
+  try {
+    const res = await fetch('/api/runs/leaderboard', { cache: 'no-store' });
+    if (res.ok) return res.json();
+    return [];
+  } catch {
+    return [];
+  }
 }
 
 export async function fetchLiveRun(baseUrl?: string): Promise<RunInfo | null> {

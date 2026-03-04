@@ -39,8 +39,17 @@ def _decode_jwt(token: str) -> dict:
         raise HTTPException(401, "Invalid token")
 
 
-async def get_current_user_optional(authorization: Optional[str] = Header(None)) -> Optional[dict]:
-    """Decode JWT from Authorization header, or return None if absent."""
+async def get_current_user_optional(
+    authorization: Optional[str] = Header(None),
+    x_user_token: Optional[str] = Header(None),
+) -> Optional[dict]:
+    """Decode JWT from X-User-Token (preferred) or Authorization header, or return None if absent."""
+    # X-User-Token carries the user JWT when Authorization holds the admin key
+    if x_user_token and x_user_token.startswith("Bearer "):
+        try:
+            return _decode_jwt(x_user_token[7:])
+        except HTTPException:
+            pass
     if not authorization or not authorization.startswith("Bearer "):
         return None
     try:

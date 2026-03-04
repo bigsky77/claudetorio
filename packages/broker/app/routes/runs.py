@@ -7,9 +7,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import config
 from ..db import async_session_factory
-from ..dependencies import get_db, get_app_state, require_admin_key
-from ..models import Run, RunStep
-from ..schemas import CreateRunRequest, CreateRunResponse, RunInfo, RunStepInfo
+from ..dependencies import get_db, get_app_state, require_admin_key, get_current_user_optional
+from ..models import Run, RunStep, GitHubUser
+from ..schemas import CreateRunRequest, CreateRunResponse, RunInfo, RunStepInfo, RunsLeaderboardEntry
 from ..services.factorio import spawn_factorio, stop_factorio, wait_for_factorio, get_map_seed
 from ..services.replay import (
     allocate_replay_slot,
@@ -163,6 +163,88 @@ async def list_runs(
     ]
 
 
+def _score_to_milestone(score: float) -> str | None:
+    if score >= 200_000:
+        return "M5"
+    if score >= 100_000:
+        return "M4"
+    if score >= 50_000:
+        return "M3"
+    if score >= 20_000:
+        return "M2"
+    if score >= 5_000:
+        return "M1"
+    return None
+
+
+@router.get("/api/runs/leaderboard")
+async def runs_leaderboard(db: AsyncSession = Depends(get_db)):
+    """Best final_score per (github_user_id, model) — includes anonymous runs."""
+    from sqlalchemy.orm import selectinload
+
+    # Fetch all scored runs, eagerly load github_user
+    stmt = (
+        select(Run)
+        .options(selectinload(Run.github_user))
+        .where(Run.final_score.isnot(None))
+        .where(Run.status.in_(["completed", "failed", "stopped"]))
+        .order_by(Run.final_score.desc())
+    )
+    result = await db.execute(stmt)
+    runs = result.scalars().all()
+
+    # Group: authenticated by (github_user_id, model), anonymous each gets own key
+    groups: dict[str, dict] = {}
+    for r in runs:
+        if r.github_user_id and r.github_user:
+            key = f"user_{r.github_user_id}_{r.model}"
+            if key not in groups:
+                groups[key] = {
+                    "username": r.github_user.github_username,
+                    "avatar_url": r.github_user.avatar_url,
+                    "model": r.model,
+                    "best_score": r.final_score,
+                    "best_run_id": r.run_id,
+                    "status": r.status,
+                    "run_count": 0,
+                }
+            g = groups[key]
+            g["run_count"] += 1
+            if r.final_score > g["best_score"]:
+                g["best_score"] = r.final_score
+                g["best_run_id"] = r.run_id
+                g["status"] = r.status
+        else:
+            # Anonymous run — deterministic username from run_id
+            key = f"anon_{r.run_id}"
+            groups[key] = {
+                "username": f"anon_{r.run_id[:6]}",
+                "avatar_url": None,
+                "model": r.model,
+                "best_score": r.final_score,
+                "best_run_id": r.run_id,
+                "status": r.status,
+                "run_count": 1,
+            }
+
+    # Sort by best_score descending, assign ranks
+    sorted_groups = sorted(groups.values(), key=lambda g: g["best_score"], reverse=True)
+    return [
+        RunsLeaderboardEntry(
+            rank=rank,
+            username=g["username"],
+            avatar_url=g["avatar_url"],
+            model=g["model"],
+            best_score=g["best_score"],
+            best_run_id=g["best_run_id"],
+            milestone=_score_to_milestone(g["best_score"]),
+            status=g["status"],
+            run_count=g["run_count"],
+        )
+        for rank, g in enumerate(sorted_groups, 1)
+    ]
+
+
 @router.get("/api/runs/live")
 async def get_live_run(db: AsyncSession = Depends(get_db), app_state: AppState = Depends(get_app_state)):
     """Return the most recent running run, or 404 if none."""
@@ -281,6 +363,7 @@ async def create_run(
     req: CreateRunRequest,
     db: AsyncSession = Depends(get_db),
     app_state: AppState = Depends(get_app_state),
+    current_user: dict | None = Depends(get_current_user_optional),
 ):
     if req.provider == "custom" and not req.custom_api_url:
         raise HTTPException(400, "custom_api_url is required when provider=custom")
@@ -293,6 +376,11 @@ async def create_run(
     if slot is None:
         raise HTTPException(503, "No available slots")
 
+    # Resolve github_user_id from JWT if present
+    github_user_id = None
+    if current_user and current_user.get("sub"):
+        github_user_id = int(current_user["sub"])
+
     # Create DB row
     run = Run(
         run_id=run_id,
@@ -302,6 +390,7 @@ async def create_run(
         model=req.model,
         max_steps=req.max_steps,
         step_timeout_seconds=req.step_timeout_seconds,
+        github_user_id=github_user_id,
     )
     db.add(run)
     await db.commit()

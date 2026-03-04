@@ -1,7 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import NavHeader from "@/components/NavHeader";
+import { fetchRunsLeaderboard } from "@/services/api";
+import type { RunsLeaderboardEntry } from "@/interfaces";
 
 // ─── Design Tokens (matching globals.css) ───
 const C = {
@@ -370,17 +372,7 @@ function MilestoneMarket({ milestone: ms }: { milestone: Milestone }) {
   );
 }
 
-// ─── Data ───
-const LEADERS = [
-  { rank: 1, user: "bigsky77", model: "claude-opus-4", score: "293,206", best: "M1", bestColor: C.green, status: "running" },
-  { rank: 2, user: "jackh", model: "claude-sonnet-4.5", score: "187,412", best: "\u2014", bestColor: C.faint, status: "completed" },
-  { rank: 3, user: "akbir_k", model: "gpt-4o", score: "124,830", best: "\u2014", bestColor: C.faint, status: "completed" },
-  { rank: 4, user: "mart_b", model: "deepseek-v3", score: "98,204", best: "\u2014", bestColor: C.faint, status: "completed" },
-  { rank: 5, user: "anon_42", model: "gemini-2-flash", score: "72,100", best: "\u2014", bestColor: C.faint, status: "failed" },
-  { rank: 6, user: "builder9", model: "llama-3.3-70b", score: "54,998", best: "\u2014", bestColor: C.faint, status: "completed" },
-  { rank: 7, user: "factoryfan", model: "gpt-4o-mini", score: "31,220", best: "\u2014", bestColor: C.faint, status: "failed" },
-];
-const STC: Record<string, string> = { completed: C.green, failed: C.red, running: C.amber };
+const STC: Record<string, string> = { completed: C.green, failed: C.red, running: C.amber, stopped: C.red };
 
 const MARKETS: Milestone[] = [
   {
@@ -420,7 +412,22 @@ const ROCKET_PRICE_DATA = [
 ];
 
 // ═══ MAIN PAGE ═══
+function formatScore(score: number): string {
+  return Math.round(score).toLocaleString();
+}
+
 export default function MarketPage() {
+  const [leaders, setLeaders] = useState<RunsLeaderboardEntry[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      const data = await fetchRunsLeaderboard();
+      if (!cancelled) setLeaders(data);
+    };
+    load();
+    const interval = setInterval(load, 30_000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, []);
 
   return (
     <main className="min-h-screen bg-surface-0 text-white font-[family-name:var(--font-body)]">
@@ -643,7 +650,7 @@ export default function MarketPage() {
                       FLE &middot; Open-Play &middot; 5k Steps
                     </span>
                   </div>
-                  <span style={{ fontSize: 10, color: C.faint }}>{LEADERS.length} runs</span>
+                  <span style={{ fontSize: 10, color: C.faint }}>{leaders.length} entries</span>
                 </div>
 
                 <div
@@ -671,9 +678,14 @@ export default function MarketPage() {
                   ))}
                 </div>
 
-                {LEADERS.map((e) => (
+                {leaders.length === 0 && (
+                  <div style={{ padding: "24px 6px", textAlign: "center", color: C.faint, fontFamily: F.m, fontSize: 11 }}>
+                    No ranked runs yet
+                  </div>
+                )}
+                {leaders.map((e) => (
                   <div
-                    key={e.rank}
+                    key={`${e.username}-${e.model}`}
                     style={{
                       display: "grid",
                       gridTemplateColumns: "24px 1fr 1.2fr 80px 50px",
@@ -714,7 +726,7 @@ export default function MarketPage() {
                           whiteSpace: "nowrap",
                         }}
                       >
-                        {e.user}
+                        {e.username}
                       </span>
                     </div>
                     <span
@@ -738,10 +750,10 @@ export default function MarketPage() {
                         fontVariantNumeric: "tabular-nums",
                       }}
                     >
-                      {e.score}
+                      {formatScore(e.best_score)}
                     </span>
-                    <span style={{ fontFamily: F.d, fontSize: 11, fontWeight: 700, color: e.bestColor }}>
-                      {e.best}
+                    <span style={{ fontFamily: F.d, fontSize: 11, fontWeight: 700, color: e.milestone ? C.green : C.faint }}>
+                      {e.milestone || "\u2014"}
                     </span>
                   </div>
                 ))}
@@ -778,7 +790,7 @@ export default function MarketPage() {
                 <span style={{ fontSize: 9, color: C.faint, letterSpacing: "0.06em" }}>
                   RANKED BY PRODUCTION SCORE (MEDIAN)
                 </span>
-                <span style={{ fontSize: 9, color: C.ghost }}>&ge;1 of 8 runs</span>
+                <span style={{ fontSize: 9, color: C.ghost }}>{leaders.length} entries</span>
               </div>
             </div>
           </div>
