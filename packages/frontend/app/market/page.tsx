@@ -126,37 +126,17 @@ function GifSlot({ label, color, h = 120 }: { label: string; color: string; h?: 
   const src = GIF_MAP[label];
   if (src) {
     return (
-      <div
-        style={{
-          background: C.surface2,
-          border: `1px solid ${C.border}`,
-          overflow: "hidden",
-          position: "relative",
-        }}
-      >
-        <div
+      <div style={{ overflow: "hidden", position: "relative" }}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={src}
+          alt={label}
           style={{
-            padding: 4,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            minHeight: h,
-            background: C.bg,
+            width: "100%",
+            display: "block",
+            imageRendering: "pixelated",
           }}
-        >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={src}
-            alt={label}
-            style={{
-              maxWidth: "100%",
-              maxHeight: h + 40,
-              objectFit: "contain",
-              imageRendering: "pixelated",
-              display: "block",
-            }}
-          />
-        </div>
+        />
       </div>
     );
   }
@@ -197,6 +177,57 @@ function GifSlot({ label, color, h = 120 }: { label: string; color: string; h?: 
         </span>
       </div>
     </div>
+  );
+}
+
+// ─── Market price chart ───
+function MarketChart({ data, color, w = 360, h = 200 }: { data: number[]; color: string; w?: number; h?: number }) {
+  if (!data || data.length < 2) return null;
+  const pad = { top: 12, right: 12, bottom: 28, left: 36 };
+  const cw = w - pad.left - pad.right;
+  const ch = h - pad.top - pad.bottom;
+  const mn = Math.min(...data);
+  const mx = Math.max(...data);
+  const range = mx - mn || 1;
+  const pts = data.map((v, i) => ({
+    x: pad.left + (i / (data.length - 1)) * cw,
+    y: pad.top + ch - ((v - mn) / range) * ch,
+  }));
+  const line = pts.map((p, i) => `${i === 0 ? "M" : "L"}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ");
+  const area = `${line} L${pts[pts.length - 1].x.toFixed(1)},${(pad.top + ch).toFixed(1)} L${pts[0].x.toFixed(1)},${(pad.top + ch).toFixed(1)} Z`;
+  const yTicks = 4;
+  const gid = `mc${color.replace("#", "")}`;
+  const xLabels = ["Jan", "Mar", "May", "Jul", "Sep", "Nov"];
+  return (
+    <svg width="100%" viewBox={`0 0 ${w} ${h}`} style={{ display: "block" }}>
+      <defs>
+        <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={color} stopOpacity={0.25} />
+          <stop offset="100%" stopColor={color} stopOpacity={0} />
+        </linearGradient>
+      </defs>
+      {Array.from({ length: yTicks + 1 }, (_, i) => {
+        const val = mn + (range / yTicks) * i;
+        const y = pad.top + ch - ((val - mn) / range) * ch;
+        return (
+          <g key={i}>
+            <line x1={pad.left} y1={y} x2={w - pad.right} y2={y} stroke={C.border} strokeWidth={0.5} />
+            <text x={pad.left - 6} y={y + 3} fill={C.faint} fontSize={9} textAnchor="end" fontFamily={F.m}>
+              {val.toFixed(0)}&cent;
+            </text>
+          </g>
+        );
+      })}
+      <path d={area} fill={`url(#${gid})`} />
+      <path d={line} fill="none" stroke={color} strokeWidth={2} strokeLinejoin="round" />
+      <circle cx={pts[pts.length - 1].x} cy={pts[pts.length - 1].y} r={4} fill={color} />
+      <circle cx={pts[pts.length - 1].x} cy={pts[pts.length - 1].y} r={7} fill={color} fillOpacity={0.2} />
+      {xLabels.map((m, i) => (
+        <text key={m} x={pad.left + (i / (xLabels.length - 1)) * cw} y={h - 6} fill={C.faint} fontSize={9} textAnchor="middle" fontFamily={F.m}>
+          {m}
+        </text>
+      ))}
+    </svg>
   );
 }
 
@@ -382,9 +413,14 @@ const MARKETS: Milestone[] = [
   },
 ];
 
+const ROCKET_PRICE_DATA = [
+  1.0, 1.2, 1.5, 1.3, 1.8, 2.0, 1.7, 2.2, 2.5, 2.3,
+  2.8, 3.0, 2.6, 2.9, 3.2, 3.5, 3.1, 2.8, 3.0, 3.3,
+  3.5, 3.2, 3.0, 2.8, 3.1, 3.3, 3.0, 2.9, 3.1, 3.0,
+];
+
 // ═══ MAIN PAGE ═══
 export default function MarketPage() {
-  const rocketChart = [0, 0, 1, 1, 1, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3];
 
   return (
     <main className="min-h-screen bg-surface-0 text-white font-[family-name:var(--font-body)]">
@@ -498,35 +534,56 @@ export default function MarketPage() {
                 <OutcomeBar label="No" pct={97} color={C.amber} side="no" />
               </div>
 
-              <div style={{ padding: "12px 24px" }}>
-                <GifSlot label="rocket-launch.gif" color={C.amber} h={140} />
-              </div>
-
-              <div
-                style={{
-                  padding: "0 24px 10px",
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                }}
-              >
-                <div>
+              {/* Chart + GIF row */}
+              <div style={{ padding: "12px 24px", display: "flex", gap: 16, alignItems: "stretch" }}>
+                {/* Left: Market Chart */}
+                <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
                   <div
                     style={{
                       fontSize: 9,
                       color: C.faint,
                       textTransform: "uppercase",
                       letterSpacing: "0.08em",
-                      marginBottom: 2,
+                      marginBottom: 8,
                     }}
                   >
-                    CLOSEST ATTEMPT
+                    PRICE HISTORY
                   </div>
-                  <span style={{ fontFamily: F.d, fontSize: 12, fontWeight: 700, color: C.amber }}>
-                    M1 reached (1 of 5)
-                  </span>
+                  <div style={{ flex: 1, display: "flex", alignItems: "center" }}>
+                    <MarketChart data={ROCKET_PRICE_DATA} color={C.amber} />
+                  </div>
+                  <div style={{ marginTop: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <div>
+                      <div
+                        style={{
+                          fontSize: 9,
+                          color: C.faint,
+                          textTransform: "uppercase",
+                          letterSpacing: "0.08em",
+                          marginBottom: 2,
+                        }}
+                      >
+                        CLOSEST ATTEMPT
+                      </div>
+                      <span style={{ fontFamily: F.d, fontSize: 12, fontWeight: 700, color: C.amber }}>
+                        M1 reached (1 of 5)
+                      </span>
+                    </div>
+                  </div>
                 </div>
-                <Spark data={rocketChart} color={C.amber} w={140} h={32} />
+                {/* Right: Enlarged GIF */}
+                <div style={{ width: 260, flexShrink: 0, overflow: "hidden", display: "flex", alignItems: "center" }}>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src="/gifs/rocket-launch.gif"
+                    alt="Rocket launch"
+                    style={{
+                      width: "100%",
+                      display: "block",
+                      imageRendering: "pixelated",
+                    }}
+                  />
+                </div>
               </div>
 
               <div style={{ padding: "0 24px 16px", display: "flex", gap: 10 }}>
