@@ -1,4 +1,7 @@
+import type { Metadata } from 'next';
+
 export const dynamic = 'force-dynamic';
+export const metadata: Metadata = { title: 'Streams' };
 
 import HomePage from '@/components/Home/HomePage';
 import { getLiveStream, getVideos } from '@/lib/twitch';

@@ -4,7 +4,7 @@ import DashboardPage from '@/components/Dashboard/DashboardPage';
 import { fetchRuns, fetchStatus } from '@/services/api';
 
 export const metadata: Metadata = {
-  title: { absolute: 'Claudetorio - Dashboard' },
+  title: 'Dashboard',
 };
 
 export default async function DashboardRoute() {
