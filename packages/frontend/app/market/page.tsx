@@ -485,9 +485,6 @@ export default function MarketPage() {
                     >
                       M5 &middot; FEATURED
                     </span>
-                    <span style={{ fontSize: 10, color: C.ghost, letterSpacing: "0.06em" }}>
-                      FLE &middot; Open-Play
-                    </span>
                   </div>
                   <span style={{ fontFamily: F.m, fontSize: 10, color: C.faint }}>$312K Vol</span>
                 </div>
@@ -645,9 +642,6 @@ export default function MarketPage() {
                       }}
                     >
                       LEADERBOARD
-                    </span>
-                    <span style={{ fontSize: 10, color: C.ghost, letterSpacing: "0.06em" }}>
-                      FLE &middot; Open-Play &middot; 5k Steps
                     </span>
                   </div>
                   <span style={{ fontSize: 10, color: C.faint }}>{leaders.length} entries</span>
