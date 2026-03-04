@@ -19,28 +19,39 @@ jobs:
           echo "${{ secrets.KNOWN_HOSTS }}" > ~/.ssh/known_hosts
 
       - name: Deploy
+        timeout-minutes: 10
         run: |
-          ssh root@${{ secrets.GAME_SERVER_HOST }} bash -s << 'ENDSSH'
+          ssh -o ServerAliveInterval=15 -o ServerAliveCountMax=4 root@${{ secrets.GAME_SERVER_HOST }} bash -s << 'ENDSSH'
             set -euo pipefail
             set -a; source /opt/claudetorio/machines/game-server/.env; set +a
 
+            echo "=== Logging into GHCR ==="
             echo "$GHCR_PAT" | docker login ghcr.io -u bigsky77 --password-stdin
 
+            echo "=== Pulling images ==="
             for img in broker frontend run-worker stream-worker; do
+              echo "Pulling $img..."
               docker pull ghcr.io/bigsky77/claudetorio-${img}:latest
               docker tag ghcr.io/bigsky77/claudetorio-${img}:latest claudetorio-${img}:latest
             done
 
+            echo "=== Syncing repo ==="
             git -C /opt/claudetorio fetch origin main
             git -C /opt/claudetorio reset --hard origin/main
 
             cd /opt/claudetorio/machines/game-server
-            docker compose run --rm factorio-config-init
-            docker compose run --rm factorio-scenarios-init
+
+            echo "=== Running init containers ==="
+            timeout 60 docker compose run --rm factorio-config-init
+            timeout 60 docker compose run --rm factorio-scenarios-init
+
+            echo "=== Restarting containers ==="
             docker compose up -d --remove-orphans
 
+            echo "=== Health check ==="
             sleep 5
             curl -sf http://localhost:8080/api/status | jq .run_count
+            echo "=== Deploy complete ==="
           ENDSSH
 
   deploy-stream-server:
@@ -55,25 +66,36 @@ jobs:
           echo "${{ secrets.KNOWN_HOSTS }}" > ~/.ssh/known_hosts
 
       - name: Deploy
+        timeout-minutes: 10
         run: |
-          ssh root@${{ secrets.STREAM_SERVER_HOST }} bash -s << 'ENDSSH'
+          ssh -o ServerAliveInterval=15 -o ServerAliveCountMax=4 root@${{ secrets.STREAM_SERVER_HOST }} bash -s << 'ENDSSH'
             set -euo pipefail
             set -a; source /opt/claudetorio/machines/stream-server/.env; set +a
 
+            echo "=== Logging into GHCR ==="
             echo "$GHCR_PAT" | docker login ghcr.io -u bigsky77 --password-stdin
 
+            echo "=== Pulling images ==="
             for img in stream-agent stream-client stream-worker vtuber-stream-client; do
+              echo "Pulling $img..."
               docker pull ghcr.io/bigsky77/claudetorio-${img}:latest
               docker tag ghcr.io/bigsky77/claudetorio-${img}:latest claudetorio-${img}:latest
             done
 
+            echo "=== Syncing repo ==="
             git -C /opt/claudetorio fetch origin main
             git -C /opt/claudetorio reset --hard origin/main
 
             cd /opt/claudetorio/machines/stream-server
-            docker compose run --rm factorio-client-init
+
+            echo "=== Running init containers ==="
+            timeout 60 docker compose run --rm factorio-client-init
+
+            echo "=== Restarting containers ==="
             docker compose up -d --remove-orphans
 
+            echo "=== Health check ==="
             sleep 5
             curl -sf http://localhost:8090/health
+            echo "=== Deploy complete ==="
           ENDSSH
