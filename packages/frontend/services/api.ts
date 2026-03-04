@@ -1,4 +1,5 @@
 import { API_BASE } from '@/constants';
+import { getAuthToken } from '@/utils/auth-token';
 import type {
   LeaderboardEntry,
   SystemStatus,
@@ -18,9 +19,24 @@ export async function fetchLeaderboard(): Promise<LeaderboardEntry[]> {
   return res.json();
 }
 
-export async function fetchStatus(): Promise<SystemStatus> {
-  const res = await fetch(`${API_BASE}/api/status`);
+export async function fetchStatus(baseUrl: string = API_BASE): Promise<SystemStatus> {
+  const res = await fetch(`${baseUrl}/api/status`, { cache: 'no-store' });
+  if (!res.ok) throw new Error('Failed to fetch status');
   return res.json();
+}
+
+export async function fetchOpsSummary(): Promise<any | null> {
+  try {
+    const token = getAuthToken();
+    const res = await fetch('/api/ops/summary', {
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      cache: 'no-store',
+    });
+    if (!res.ok) return null;
+    return res.json();
+  } catch {
+    return null;
+  }
 }
 
 export async function fetchSessionScore(sessionId: string): Promise<SessionScore | null> {
@@ -178,13 +194,19 @@ export async function createRun(body: {
   task_key?: string;
   model?: string;
   max_steps?: number;
+  step_timeout_seconds?: number;
+  enable_streaming?: boolean;
   api_key?: string;
   custom_api_url?: string;
   custom_api_key?: string;
 }): Promise<{ run_id: string; status: string; error?: string }> {
+  const token = getAuthToken();
   const res = await fetch('/api/runs', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
     body: JSON.stringify(body),
   });
   const data = await res.json();
@@ -196,7 +218,11 @@ export async function createRun(body: {
 
 export async function startWorker(runId: string): Promise<{ run_id: string; status: string } | null> {
   try {
-    const res = await fetch(`/api/runs/${runId}/start-worker`, { method: 'POST' });
+    const token = getAuthToken();
+    const res = await fetch(`/api/runs/${runId}/start-worker`, {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    });
     if (res.ok) return res.json();
     return null;
   } catch {
@@ -206,7 +232,11 @@ export async function startWorker(runId: string): Promise<{ run_id: string; stat
 
 export async function stopRun(runId: string): Promise<{ run_id: string; status: string } | null> {
   try {
-    const res = await fetch(`/api/runs/${runId}/stop`, { method: 'POST' });
+    const token = getAuthToken();
+    const res = await fetch(`/api/runs/${runId}/stop`, {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    });
     if (res.ok) return res.json();
     return null;
   } catch {
@@ -216,7 +246,11 @@ export async function stopRun(runId: string): Promise<{ run_id: string; status: 
 
 export async function startReplay(runId: string): Promise<{ stream_url: string } | null> {
   try {
-    const res = await fetch(`/api/runs/${runId}/replay`, { method: 'POST' });
+    const token = getAuthToken();
+    const res = await fetch(`/api/runs/${runId}/replay`, {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    });
     if (res.ok) return res.json();
     return null;
   } catch {
@@ -226,7 +260,11 @@ export async function startReplay(runId: string): Promise<{ stream_url: string }
 
 export async function startReplayWorker(runId: string): Promise<{ run_id: string; status: string } | null> {
   try {
-    const res = await fetch(`/api/runs/${runId}/replay/start-worker`, { method: 'POST' });
+    const token = getAuthToken();
+    const res = await fetch(`/api/runs/${runId}/replay/start-worker`, {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    });
     if (res.ok) return res.json();
     return null;
   } catch {
@@ -236,7 +274,11 @@ export async function startReplayWorker(runId: string): Promise<{ run_id: string
 
 export async function stopReplayWorker(runId: string): Promise<{ run_id: string; status: string } | null> {
   try {
-    const res = await fetch(`/api/runs/${runId}/replay/start-worker`, { method: 'DELETE' });
+    const token = getAuthToken();
+    const res = await fetch(`/api/runs/${runId}/replay/start-worker`, {
+      method: 'DELETE',
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    });
     if (res.ok) return res.json();
     return null;
   } catch {
@@ -246,7 +288,11 @@ export async function stopReplayWorker(runId: string): Promise<{ run_id: string;
 
 export async function stopReplay(runId: string): Promise<void> {
   try {
-    await fetch(`/api/runs/${runId}/replay`, { method: 'DELETE' });
+    const token = getAuthToken();
+    await fetch(`/api/runs/${runId}/replay`, {
+      method: 'DELETE',
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    });
   } catch {
     // best-effort
   }
@@ -254,7 +300,11 @@ export async function stopReplay(runId: string): Promise<void> {
 
 export async function startRtmp(runId: string): Promise<boolean> {
   try {
-    const res = await fetch(`/api/runs/${runId}/replay/rtmp/start`, { method: 'POST' });
+    const token = getAuthToken();
+    const res = await fetch(`/api/runs/${runId}/replay/rtmp/start`, {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    });
     return res.ok;
   } catch {
     return false;
@@ -263,7 +313,11 @@ export async function startRtmp(runId: string): Promise<boolean> {
 
 export async function stopRtmp(runId: string): Promise<boolean> {
   try {
-    const res = await fetch(`/api/runs/${runId}/replay/rtmp/stop`, { method: 'POST' });
+    const token = getAuthToken();
+    const res = await fetch(`/api/runs/${runId}/replay/rtmp/stop`, {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    });
     return res.ok;
   } catch {
     return false;

@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import BenchmarksList from './BenchmarksList';
 import TournamentCountdown from './TournamentCountdown';
-import LoginWidget from '@/components/Auth/LoginWidget';
+import NavHeader from '@/components/NavHeader';
 import type { TwitchStream, TwitchVideo } from '@/lib/twitch';
 import type { RunInfo } from '@/interfaces';
 
@@ -41,13 +41,7 @@ export default function HomePage({
 
   return (
     <main className="min-h-screen bg-surface-0 text-white font-[family-name:var(--font-body)]">
-      {/* Top bar */}
-      <header className="h-14 bg-surface-1 border-b border-surface-3 flex items-center justify-between px-8">
-        <span className="font-[family-name:var(--font-heading)] font-bold text-lg tracking-wide text-white">
-          CLAUDETORIO
-        </span>
-        <LoginWidget />
-      </header>
+      <NavHeader />
 
       <div className="px-10 py-8 pb-20 space-y-12">
         {/* STREAMS */}
