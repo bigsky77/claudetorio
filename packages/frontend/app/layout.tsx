@@ -27,6 +27,7 @@ const ibmPlexMono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://app.claudetorio.ai"),
   title: {
     default: "Claudetorio",
     template: "Claudetorio - %s",
@@ -34,6 +35,25 @@ export const metadata: Metadata = {
   description: "Autonomous Factorio Arena - Let Claude build your factory",
   icons: {
     icon: '/icon.png',
+  },
+  openGraph: {
+    title: "Claudetorio",
+    description: "Autonomous Factorio Arena - Let Claude build your factory",
+    images: [
+      {
+        url: "/gifs/rocket-launch.gif",
+        width: 380,
+        height: 380,
+        alt: "Claudetorio - Rocket Launch",
+      },
+    ],
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Claudetorio",
+    description: "Autonomous Factorio Arena - Let Claude build your factory",
+    images: ["/gifs/rocket-launch.gif"],
   },
 };
 
