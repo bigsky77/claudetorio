@@ -38,6 +38,9 @@ ssh $SERVER "cd $REMOTE_PATH/machines/game-server && \
   docker run --rm -v claudetorio_factorio_config:/v alpine sh -c 'test -f /v/server-settings.json'"
 
 # 5. Build broker-spawned images and restart stack
+echo "Stopping broker-spawned containers..."
+ssh $SERVER "docker ps -q --filter name=factorio --filter name=run-worker --filter name=stream-worker | xargs -r docker rm -f || true"
+
 echo "Building broker-spawned images (run-worker, stream-worker) and restarting containers..."
 ssh $SERVER "cd $REMOTE_PATH/machines/game-server && \
   docker compose --profile build-only build run-worker stream-worker && \
