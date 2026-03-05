@@ -26,24 +26,35 @@ jobs:
           - name: broker
             context: ./packages/broker
             dockerfile: Dockerfile
+            build_args: ""
           - name: frontend
             context: ./packages/frontend
             dockerfile: Dockerfile
+            build_args: |
+              NEXT_PUBLIC_API_URL=https://app.claudetorio.ai
+              NEXT_PUBLIC_STREAM_URL=https://stream.claudetorio.ai
+              NEXT_PUBLIC_TWITCH_EMBED_PARENT=app.claudetorio.ai
+              NEXT_PUBLIC_TWITCH_CHANNEL=claudetorio
           - name: run-worker
             context: ./packages
             dockerfile: run-worker/Dockerfile
+            build_args: ""
           - name: stream-agent
             context: ./packages/stream-agent
             dockerfile: Dockerfile
+            build_args: ""
           - name: stream-worker
             context: ./packages
             dockerfile: stream-worker/Dockerfile
+            build_args: ""
           - name: stream-client
             context: ./packages/stream-client
             dockerfile: Dockerfile
+            build_args: ""
           - name: vtuber-stream-client
             context: ./packages/vtuber-stream-client
             dockerfile: Dockerfile
+            build_args: ""
 
     steps:
       - uses: actions/checkout@v4
@@ -72,3 +83,4 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: ${{ matrix.build_args }}
