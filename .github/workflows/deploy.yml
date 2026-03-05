@@ -7,8 +7,41 @@ on:
     branches: [main]
 
 jobs:
-  deploy-game-server:
+  changes:
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    outputs:
+      game_server: ${{ steps.filter.outputs.game_server }}
+      stream_server: ${{ steps.filter.outputs.stream_server }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 2
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          base: HEAD~1
+          filters: |
+            game_server:
+              - 'packages/broker/**'
+              - 'packages/frontend/**'
+              - 'packages/run-worker/**'
+              - 'packages/stream-worker/**'
+              - 'packages/fle/**'
+              - 'packages/agent-runner/**'
+              - 'machines/game-server/**'
+              - 'config/**'
+            stream_server:
+              - 'packages/stream-agent/**'
+              - 'packages/stream-client/**'
+              - 'packages/stream-worker/**'
+              - 'packages/vtuber-stream-client/**'
+              - 'machines/stream-server/**'
+
+  deploy-game-server:
+    needs: changes
+    if: needs.changes.outputs.game_server == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Configure SSH
@@ -50,7 +83,8 @@ jobs:
           curl -fsS https://api.claudetorio.ai/health | grep -q '"healthy"'
 
   deploy-stream-server:
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    needs: changes
+    if: needs.changes.outputs.stream_server == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Configure SSH
