@@ -227,112 +227,58 @@ export async function createRun(body: {
   return data;
 }
 
-export async function startWorker(runId: string): Promise<{ run_id: string; status: string } | null> {
+async function proxyAction(url: string, method: 'POST' | 'DELETE' = 'POST'): Promise<any> {
+  const token = getAuthToken();
+  const res = await fetch(url, {
+    method,
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+  });
+  if (res.ok) return res.json();
+  // Surface the actual error from the broker/proxy
+  let detail = `HTTP ${res.status}`;
   try {
-    const token = getAuthToken();
-    const res = await fetch(`/api/runs/${runId}/start-worker`, {
-      method: 'POST',
-      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-    });
-    if (res.ok) return res.json();
-    return null;
+    const body = await res.json();
+    detail = body.detail || body.error || detail;
   } catch {
-    return null;
+    // response wasn't JSON
   }
+  throw new Error(detail);
 }
 
-export async function stopRun(runId: string): Promise<{ run_id: string; status: string } | null> {
-  try {
-    const token = getAuthToken();
-    const res = await fetch(`/api/runs/${runId}/stop`, {
-      method: 'POST',
-      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-    });
-    if (res.ok) return res.json();
-    return null;
-  } catch {
-    return null;
-  }
+export async function startWorker(runId: string) {
+  return proxyAction(`/api/runs/${runId}/start-worker`);
 }
 
-export async function startReplay(runId: string): Promise<{ stream_url: string } | null> {
-  try {
-    const token = getAuthToken();
-    const res = await fetch(`/api/runs/${runId}/replay`, {
-      method: 'POST',
-      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-    });
-    if (res.ok) return res.json();
-    return null;
-  } catch {
-    return null;
-  }
+export async function stopRun(runId: string) {
+  return proxyAction(`/api/runs/${runId}/stop`);
 }
 
-export async function startReplayWorker(runId: string): Promise<{ run_id: string; status: string } | null> {
-  try {
-    const token = getAuthToken();
-    const res = await fetch(`/api/runs/${runId}/replay/start-worker`, {
-      method: 'POST',
-      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-    });
-    if (res.ok) return res.json();
-    return null;
-  } catch {
-    return null;
-  }
+export async function startReplay(runId: string): Promise<{ stream_url: string }> {
+  return proxyAction(`/api/runs/${runId}/replay`);
 }
 
-export async function stopReplayWorker(runId: string): Promise<{ run_id: string; status: string } | null> {
-  try {
-    const token = getAuthToken();
-    const res = await fetch(`/api/runs/${runId}/replay/start-worker`, {
-      method: 'DELETE',
-      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-    });
-    if (res.ok) return res.json();
-    return null;
-  } catch {
-    return null;
-  }
+export async function startReplayWorker(runId: string) {
+  return proxyAction(`/api/runs/${runId}/replay/start-worker`);
+}
+
+export async function stopReplayWorker(runId: string) {
+  return proxyAction(`/api/runs/${runId}/replay/stop-worker`, 'POST');
 }
 
 export async function stopReplay(runId: string): Promise<void> {
   try {
-    const token = getAuthToken();
-    await fetch(`/api/runs/${runId}/replay`, {
-      method: 'DELETE',
-      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-    });
+    await proxyAction(`/api/runs/${runId}/replay`, 'DELETE');
   } catch {
     // best-effort
   }
 }
 
-export async function startRtmp(runId: string): Promise<boolean> {
-  try {
-    const token = getAuthToken();
-    const res = await fetch(`/api/runs/${runId}/replay/rtmp/start`, {
-      method: 'POST',
-      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-    });
-    return res.ok;
-  } catch {
-    return false;
-  }
+export async function startRtmp(runId: string) {
+  return proxyAction(`/api/runs/${runId}/replay/rtmp/start`);
 }
 
-export async function stopRtmp(runId: string): Promise<boolean> {
-  try {
-    const token = getAuthToken();
-    const res = await fetch(`/api/runs/${runId}/replay/rtmp/stop`, {
-      method: 'POST',
-      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-    });
-    return res.ok;
-  } catch {
-    return false;
-  }
+export async function stopRtmp(runId: string) {
+  return proxyAction(`/api/runs/${runId}/replay/rtmp/stop`);
 }
 
 // --- Chat ---

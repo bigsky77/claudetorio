@@ -366,37 +366,29 @@ export default function DashboardPage(props: {
       setBusyRun((m) => ({ ...m, [run.run_id]: true }));
       try {
         if (kind === 'start_stream') {
-          const res = await startReplay(run.run_id);
-          if (!res) throw new Error('Failed to start stream');
+          await startReplay(run.run_id);
           setToast({ kind: 'ok', msg: 'Stream started' });
         } else if (kind === 'stop_stream') {
-          // Stop live first (best-effort), then stop stream.
-          if (run.rtmp_active) await stopRtmp(run.run_id);
+          if (run.rtmp_active) await stopRtmp(run.run_id).catch(() => {});
           await stopReplay(run.run_id);
           setToast({ kind: 'ok', msg: 'Stream stopped' });
         } else if (kind === 'start_stream_worker') {
-          const res = await startReplayWorker(run.run_id);
-          if (!res) throw new Error('Failed to start worker');
+          await startReplayWorker(run.run_id);
           setToast({ kind: 'ok', msg: 'Worker started' });
         } else if (kind === 'stop_stream_worker') {
-          const res = await stopReplayWorker(run.run_id);
-          if (!res) throw new Error('Failed to stop worker');
+          await stopReplayWorker(run.run_id);
           setToast({ kind: 'ok', msg: 'Worker stopped' });
         } else if (kind === 'go_live') {
-          const ok = await startRtmp(run.run_id);
-          if (!ok) throw new Error('Failed to go live');
+          await startRtmp(run.run_id);
           setToast({ kind: 'ok', msg: 'Live' });
         } else if (kind === 'stop_live') {
-          const ok = await stopRtmp(run.run_id);
-          if (!ok) throw new Error('Failed to stop live');
+          await stopRtmp(run.run_id);
           setToast({ kind: 'ok', msg: 'Live stopped' });
         } else if (kind === 'stop_run') {
-          const res = await stopRun(run.run_id);
-          if (!res) throw new Error('Failed to stop run');
+          await stopRun(run.run_id);
           setToast({ kind: 'ok', msg: 'Run stopped' });
         } else if (kind === 'start_run_worker') {
-          const res = await startWorker(run.run_id);
-          if (!res) throw new Error('Failed to start run worker');
+          await startWorker(run.run_id);
           setToast({ kind: 'ok', msg: 'Worker started' });
         }
 

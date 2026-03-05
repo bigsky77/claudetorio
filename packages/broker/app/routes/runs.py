@@ -86,6 +86,13 @@ async def _monitor_replay(run_id: str, proc: asyncio.subprocess.Process, app_sta
     print(f"[replay] stream-worker-{run_id} exited (code {proc.returncode})", flush=True)
     if output:
         print(f"[replay] stream-worker-{run_id} output:\n{output}", flush=True)
+    replay = app_state.active_replays.get(run_id)
+    if replay and replay.get("keep_alive_on_worker_exit"):
+        # Manual stop-worker should not tear down the replay itself.
+        replay.pop("keep_alive_on_worker_exit", None)
+        replay["proc"] = None
+        print(f"[replay] stream-worker-{run_id} stopped manually; replay remains active", flush=True)
+        return
     replay = app_state.active_replays.pop(run_id, None)
     slot = replay["slot"] if replay else None
     await stop_replay_containers(run_id, slot)
@@ -627,6 +634,34 @@ async def start_replay_worker(
     asyncio.create_task(_monitor_replay(run_id, proc, app_state))
 
     return {"run_id": run_id, "status": "running"}
+
+
+@router.post("/api/runs/{run_id}/replay/stop-worker", dependencies=[Depends(require_admin_key)])
+async def stop_replay_worker(
+    run_id: str,
+    app_state: AppState = Depends(get_app_state),
+):
+    replay = app_state.active_replays.get(run_id)
+    if not replay:
+        raise HTTPException(404, "No active replay for this run")
+
+    proc = replay.get("proc")
+    if not proc or proc.returncode is not None:
+        raise HTTPException(409, "Replay worker is not running")
+
+    replay["keep_alive_on_worker_exit"] = True
+
+    # Stop the stream-worker container
+    container_name = f"stream-worker-{run_id}"
+    stop_proc = await asyncio.create_subprocess_exec(
+        "docker", "stop", "-t", "5", container_name,
+        stdout=asyncio.subprocess.DEVNULL,
+        stderr=asyncio.subprocess.DEVNULL,
+    )
+    await stop_proc.wait()
+    replay["proc"] = None
+
+    return {"run_id": run_id, "status": "stopped"}
 
 
 @router.delete("/api/runs/{run_id}/replay", dependencies=[Depends(require_admin_key)])
