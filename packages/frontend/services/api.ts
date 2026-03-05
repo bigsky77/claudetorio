@@ -26,7 +26,17 @@ export async function fetchStatus(baseUrl: string = API_BASE): Promise<SystemSta
   return res.json();
 }
 
-export async function fetchOpsSummary(): Promise<any | null> {
+export interface OpsSummary {
+  tokens_1h?: { total_tokens?: number };
+  stream_server?: {
+    gpu?: {
+      available?: boolean;
+      gpus?: { utilization_gpu?: number; memory_used_mib?: number; memory_total_mib?: number }[];
+    };
+  };
+}
+
+export async function fetchOpsSummary(): Promise<OpsSummary | null> {
   try {
     const token = getAuthToken();
     const res = await fetch('/api/ops/summary', {

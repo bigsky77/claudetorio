@@ -11,6 +11,7 @@ import {
   fetchRuns,
   fetchStatus,
   fetchOpsSummary,
+  type OpsSummary,
   startReplay,
   stopReplay,
   startReplayWorker,
@@ -263,7 +264,7 @@ export default function DashboardPage(props: {
 
   const [runs, setRuns] = useState<RunInfo[]>(initialRuns);
   const [status, setStatus] = useState<SystemStatus | null>(initialStatus);
-  const [ops, setOps] = useState<any | null>(null);
+  const [ops, setOps] = useState<OpsSummary | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   const [toast, setToast] = useState<{ kind: 'ok' | 'err'; msg: string } | null>(null);
