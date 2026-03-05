@@ -18,26 +18,21 @@ jobs:
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
           fetch-depth: 2
-      - uses: dorny/paths-filter@v3
+      - name: Detect changed paths
         id: filter
-        with:
-          base: HEAD~1
-          filters: |
-            game_server:
-              - 'packages/broker/**'
-              - 'packages/frontend/**'
-              - 'packages/run-worker/**'
-              - 'packages/stream-worker/**'
-              - 'packages/fle/**'
-              - 'packages/agent-runner/**'
-              - 'machines/game-server/**'
-              - 'config/**'
-            stream_server:
-              - 'packages/stream-agent/**'
-              - 'packages/stream-client/**'
-              - 'packages/stream-worker/**'
-              - 'packages/vtuber-stream-client/**'
-              - 'machines/stream-server/**'
+        run: |
+          CHANGED=$(git diff --name-only HEAD~1 HEAD)
+          echo "$CHANGED"
+          game_server=false
+          stream_server=false
+          if echo "$CHANGED" | grep -qE '^(packages/(broker|frontend|run-worker|stream-worker|fle|agent-runner)|machines/game-server|config)/'; then
+            game_server=true
+          fi
+          if echo "$CHANGED" | grep -qE '^(packages/(stream-agent|stream-client|stream-worker|vtuber-stream-client)|machines/stream-server)/'; then
+            stream_server=true
+          fi
+          echo "game_server=$game_server" >> $GITHUB_OUTPUT
+          echo "stream_server=$stream_server" >> $GITHUB_OUTPUT
 
   deploy-game-server:
     needs: changes
