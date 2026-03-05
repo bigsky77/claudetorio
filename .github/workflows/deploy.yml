@@ -42,7 +42,7 @@ jobs:
       - name: Health check
         run: |
           sleep 10
-          curl -fsS https://app.claudetorio.ai/api/status | grep -q '"run_count"'
+          curl -fsS https://api.claudetorio.ai/api/status | grep -q '"run_count"'
 
   deploy-stream-server:
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
