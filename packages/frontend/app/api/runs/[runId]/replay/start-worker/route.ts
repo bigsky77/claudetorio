@@ -14,11 +14,15 @@ async function proxyToBroker(
 
   try {
     const { runId } = await params;
-    const target = `${brokerUrl}/api/runs/${runId}/replay/start-worker`;
-    console.log(`[api/runs/replay/start-worker] ${method} ${target}`);
+    const target =
+      method === 'POST'
+        ? `${brokerUrl}/api/runs/${runId}/replay/start-worker`
+        : `${brokerUrl}/api/runs/${runId}/replay/stop-worker`;
+    const targetMethod = 'POST';
+    console.log(`[api/runs/replay/start-worker] ${method} ${targetMethod} ${target}`);
 
     const res = await fetch(target, {
-      method,
+      method: targetMethod,
       headers: { Authorization: `Bearer ${adminKey}` },
     });
 
