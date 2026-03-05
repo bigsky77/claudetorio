@@ -1,9 +1,10 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import type { RunInfo } from '@/interfaces';
 import { createRun } from '@/services/api';
+import { getApiKeys } from '@/utils/api-keys';
 
 type ProviderUi = 'claude' | 'chatgpt' | 'other';
 
@@ -26,6 +27,7 @@ export default function NewRunDrawer(props: {
   const [maxSteps, setMaxSteps] = useState(200);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [stepTimeoutSeconds, setStepTimeoutSeconds] = useState(60);
+  const [apiKey, setApiKey] = useState('');
   const [customApiUrl, setCustomApiUrl] = useState('');
   const [customApiKey, setCustomApiKey] = useState('');
 
@@ -34,12 +36,27 @@ export default function NewRunDrawer(props: {
 
   const providerApi = useMemo(() => providerToApi(providerUi), [providerUi]);
 
+  // Auto-fill from saved API keys on mount
+  useEffect(() => {
+    const saved = getApiKeys();
+    if (saved.anthropic && providerUi === 'claude') setApiKey(saved.anthropic);
+    else if (saved.openai && providerUi === 'chatgpt') setApiKey(saved.openai);
+    if (saved.custom.url) setCustomApiUrl(saved.custom.url);
+    if (saved.custom.key) setCustomApiKey(saved.custom.key);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   function applyProviderDefaults(next: ProviderUi) {
     setProviderUi(next);
     setError(null);
     if (next === 'claude') setModel('claude-sonnet-4-5-20250929');
     if (next === 'chatgpt') setModel('gpt-4.1');
     if (next === 'other') setModel('');
+    // Load the matching saved key for the selected provider
+    const saved = getApiKeys();
+    if (next === 'claude') setApiKey(saved.anthropic);
+    else if (next === 'chatgpt') setApiKey(saved.openai);
+    else setApiKey('');
   }
 
   async function onSubmit() {
@@ -58,6 +75,9 @@ export default function NewRunDrawer(props: {
         if (!customApiUrl) throw new Error('Custom API URL required');
         body.custom_api_url = customApiUrl;
         if (customApiKey) body.custom_api_key = customApiKey;
+      } else {
+        if (!apiKey) throw new Error('API key required — save one in your account settings');
+        body.api_key = apiKey;
       }
 
       const res = await createRun(body);
