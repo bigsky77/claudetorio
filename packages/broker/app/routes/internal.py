@@ -53,6 +53,10 @@ async def complete_run(
         raise HTTPException(404, "Run not found")
 
     run.final_score = req.final_score
+    # Backfill from steps if worker reported None
+    if run.final_score is None:
+        from .runs import _compute_final_score
+        run.final_score = await _compute_final_score(run_id, db)
     run.status = req.status
     run.error = req.error
     run.ended_at = datetime.utcnow()

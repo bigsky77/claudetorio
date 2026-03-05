@@ -41,6 +41,15 @@ def _normalize_openai_compatible_base_url(url: str) -> str:
     return normalized
 
 
+async def _compute_final_score(run_id: str, db: AsyncSession) -> float | None:
+    """Compute final_score from the max production_score across all steps."""
+    result = await db.execute(
+        select(func.max(RunStep.production_score)).where(RunStep.run_id == run_id)
+    )
+    max_score = result.scalar()
+    return max_score if max_score and max_score > 0 else None
+
+
 async def _monitor_run(run_id: str, proc: asyncio.subprocess.Process, app_state: AppState):
     """Monitor a run subprocess and update DB when it exits."""
     stdout_bytes, _ = await proc.communicate()
@@ -59,6 +68,10 @@ async def _monitor_run(run_id: str, proc: asyncio.subprocess.Process, app_state:
                     else:
                         output = full
                 run.error = f"Process exited with code {proc.returncode}\n{output}".strip()
+        # Backfill final_score from steps if worker didn't report it
+        if run and run.final_score is None:
+            run.final_score = await _compute_final_score(run_id, db)
+        if run:
             await db.commit()
         # Safety net: release slot lock if worker didn't
         if run and run.slot is not None:
@@ -515,6 +528,9 @@ async def stop_run(
 
     run.status = "stopped"
     run.ended_at = datetime.utcnow()
+    # Compute final_score from steps if worker didn't report it
+    if run.final_score is None:
+        run.final_score = await _compute_final_score(run_id, db)
     await db.commit()
 
     # Clean up pending env vars if worker was never started
