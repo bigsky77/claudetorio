@@ -11,6 +11,7 @@ STREAM_CLIENT_IMAGE = os.getenv("STREAM_CLIENT_IMAGE", "claudetorio-stream-clien
 FACTORIO_CLIENT_VOLUME = os.getenv("FACTORIO_CLIENT_VOLUME", "claudetorio_factorio_client")
 VTUBER_STREAM_CLIENT_IMAGE = os.getenv("VTUBER_STREAM_CLIENT_IMAGE", "claudetorio-vtuber-stream-client")
 VTUBER_MODELS_PATH = os.getenv("VTUBER_MODELS_PATH", "")
+RECORDINGS_BASE_PATH = os.getenv("RECORDINGS_BASE_PATH", "")
 HLS_READY_TIMEOUT_SECONDS = 180
 VTUBER_READY_TIMEOUT_SECONDS = 300
 
@@ -58,6 +59,11 @@ async def spawn_stream_client(req: SpawnRequest, _=Depends(require_auth)):
     # Merge any extra env vars from the request (e.g. stream keys)
     env_vars.update(req.env_vars)
 
+    if RECORDINGS_BASE_PATH:
+        recording_dir = f"{RECORDINGS_BASE_PATH}/{req.container_name}"
+        os.makedirs(recording_dir, exist_ok=True)
+        env_vars["RECORD_PATH"] = "/recordings"
+
     cmd = ["docker", "run", "-d", "--rm", "--name", req.container_name]
     if DOCKER_NETWORK:
         cmd += ["--network", DOCKER_NETWORK]
@@ -65,6 +71,8 @@ async def spawn_stream_client(req: SpawnRequest, _=Depends(require_auth)):
         cmd += ["-e", f"{k}={v}"]
     if client_volume:
         cmd += ["-v", f"{client_volume}:/opt/factorio"]
+    if RECORDINGS_BASE_PATH:
+        cmd += ["-v", f"{RECORDINGS_BASE_PATH}/{req.container_name}:/recordings"]
     cmd += ["-p", f"{req.host_port}:3000"]
     cmd += [image]
 

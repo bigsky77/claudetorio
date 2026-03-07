@@ -75,6 +75,7 @@ cleanup() {
         for _ in $(seq 1 10); do kill -0 "$RPID" 2>/dev/null || break; sleep 1; done
         rm -f /tmp/rtmp.pid
     fi
+    [ -n "${RECORD_PID:-}" ] && kill "${RECORD_PID}" 2>/dev/null || true
     kill "${FFMPEG_PID}" 2>/dev/null || true
     pkill -f "bin/x64/factorio" 2>/dev/null || true
     kill "${OPENBOX_PID}" 2>/dev/null || true
@@ -90,7 +91,23 @@ nginx
 log "=== Factorio Stream Client ==="
 log "HLS: http://localhost:3000/stream.m3u8"
 
-# 10. Monitor — exit if critical processes die
+# 10. Start recording if RECORD_PATH is set
+RECORD_PID=""
+if [ -n "${RECORD_PATH:-}" ]; then
+    mkdir -p "${RECORD_PATH}"
+    log "Starting recording to ${RECORD_PATH}"
+    ffmpeg -re -i http://localhost:3000/stream.m3u8 \
+        -c copy \
+        -f segment \
+        -segment_time 600 \
+        -segment_format mp4 \
+        -strftime 1 \
+        "${RECORD_PATH}/stream_%Y%m%d_%H%M%S.mp4" \
+        -loglevel warning &
+    RECORD_PID=$!
+fi
+
+# 11. Monitor — exit if critical processes die
 while true; do
     kill -0 "${XVFB_PID}" 2>/dev/null || { log "ERROR: Xvfb died"; cleanup; exit 1; }
     kill -0 "${FFMPEG_PID}" 2>/dev/null || { log "ERROR: FFmpeg died"; cleanup; exit 1; }
