@@ -60,9 +60,13 @@ async def spawn_stream_client(req: SpawnRequest, _=Depends(require_auth)):
     env_vars.update(req.env_vars)
 
     if RECORDINGS_BASE_PATH:
-        recording_dir = f"{RECORDINGS_BASE_PATH}/{req.container_name}"
-        os.makedirs(recording_dir, exist_ok=True)
-        env_vars["RECORD_PATH"] = "/recordings"
+        os.makedirs(RECORDINGS_BASE_PATH, exist_ok=True)
+        run_id = req.container_name
+        for prefix in ("stream-client-replay-", "stream-client-"):
+            if run_id.startswith(prefix):
+                run_id = run_id[len(prefix):]
+                break
+        env_vars["RECORD_FILE"] = f"/recordings/{run_id}.mp4"
 
     cmd = ["docker", "run", "-d", "--rm", "--name", req.container_name]
     if DOCKER_NETWORK:
@@ -72,7 +76,7 @@ async def spawn_stream_client(req: SpawnRequest, _=Depends(require_auth)):
     if client_volume:
         cmd += ["-v", f"{client_volume}:/opt/factorio"]
     if RECORDINGS_BASE_PATH:
-        cmd += ["-v", f"{RECORDINGS_BASE_PATH}/{req.container_name}:/recordings"]
+        cmd += ["-v", f"{RECORDINGS_BASE_PATH}:/recordings"]
     cmd += ["-p", f"{req.host_port}:3000"]
     cmd += [image]
 

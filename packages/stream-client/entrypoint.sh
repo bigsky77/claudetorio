@@ -91,18 +91,14 @@ nginx
 log "=== Factorio Stream Client ==="
 log "HLS: http://localhost:3000/stream.m3u8"
 
-# 10. Start recording if RECORD_PATH is set
+# 10. Start recording if RECORD_FILE is set
 RECORD_PID=""
-if [ -n "${RECORD_PATH:-}" ]; then
-    mkdir -p "${RECORD_PATH}"
-    log "Starting recording to ${RECORD_PATH}"
+if [ -n "${RECORD_FILE:-}" ]; then
+    mkdir -p "$(dirname "${RECORD_FILE}")"
+    log "Starting recording to ${RECORD_FILE}"
     ffmpeg -re -i http://localhost:3000/stream.m3u8 \
         -c copy \
-        -f segment \
-        -segment_time 600 \
-        -segment_format mp4 \
-        -strftime 1 \
-        "${RECORD_PATH}/stream_%Y%m%d_%H%M%S.mp4" \
+        "${RECORD_FILE}" \
         -loglevel warning &
     RECORD_PID=$!
 fi
