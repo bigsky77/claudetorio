@@ -743,6 +743,7 @@ async def run(steps: int, broker_url: str, username: str):
             result_text = info["result"]
             production_score = info["production_score"]
             cumulative_score = production_score
+            achievements = info.get("achievements")
 
             if error_occurred:
                 last_result = f"ERROR: {result_text}"
@@ -771,6 +772,7 @@ async def run(steps: int, broker_url: str, username: str):
                     error_occurred=error_occurred,
                     reward=reward,
                     production_score=production_score,
+                    achievements=achievements,
                 )
 
     except KeyboardInterrupt:
