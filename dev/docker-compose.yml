@@ -128,6 +128,7 @@ services:
         - NEXT_PUBLIC_STREAM_URL=http://localhost:3002
         - NEXT_PUBLIC_TWITCH_CHANNEL=${TWITCH_CHANNEL:-}
         - NEXT_PUBLIC_TWITCH_EMBED_PARENT=localhost
+        - NEXT_PUBLIC_DASHBOARD_PUBLIC_CONTROL=true
     ports:
       - "3000:3000"
     environment:
