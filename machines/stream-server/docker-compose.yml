@@ -28,6 +28,7 @@ services:
       - "8090:8090"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+      - /srv/claudetorio/recordings:/srv/claudetorio/recordings
     environment:
       - STREAM_AGENT_KEY=${STREAM_AGENT_KEY}
       - STREAM_CLIENT_IMAGE=claudetorio-stream-client
@@ -35,6 +36,7 @@ services:
       - FACTORIO_CLIENT_VOLUME=claudetorio_factorio_client
       - DOCKER_NETWORK=stream-network
       - VTUBER_MODELS_PATH=/opt/claudetorio/packages/vtuber-stream-client/models
+      - RECORDINGS_BASE_PATH=/srv/claudetorio/recordings
     networks:
       - stream-network
 

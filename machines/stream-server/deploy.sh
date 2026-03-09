@@ -23,7 +23,8 @@ rsync -avz \
 
 # 3. Validate env, build images, populate volume, restart stack
 echo "Building images, refreshing Factorio client volume, and restarting containers..."
-ssh $SERVER "cd $REMOTE_PATH/machines/stream-server && \
+ssh $SERVER "mkdir -p /srv/claudetorio/recordings && \
+  cd $REMOTE_PATH/machines/stream-server && \
   test -f .env && \
   export FACTORIO_CLIENT_PATH=\$(grep -E '^FACTORIO_CLIENT_PATH=' .env | tail -n1 | cut -d= -f2-) && \
   test -n \"\$FACTORIO_CLIENT_PATH\" && \
