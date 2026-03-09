@@ -33,6 +33,19 @@ export function useGenerativeMusic({ status, latestStep, score, stepCount }: Use
   // Create engine on mount, destroy on unmount
   useEffect(() => {
     engineRef.current = new FactorioAudioEngine();
+
+    // Auto-start if ?music=auto is present (e.g. VTuber iframe context where
+    // Chrome runs with --autoplay-policy=no-user-gesture-required)
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('music') === 'auto') {
+      Tone.start().then(() => {
+        engineRef.current?.start();
+        setReady(true);
+      }).catch((err) => {
+        console.warn('Tone.js auto-start failed:', err);
+      });
+    }
+
     return () => {
       engineRef.current?.dispose();
       engineRef.current = null;
