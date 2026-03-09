@@ -657,7 +657,7 @@ async def start_replay_rtmp(
     # Factorio stream URL visible inside Docker network (internal)
     factorio_stream_url = f"http://stream-client-replay-{slot}:3000/stream.m3u8"
 
-    frontend_url = f"{config.FRONTEND_BASE_URL}/run/{run_id}?stream_url={replay['stream_url']}"
+    frontend_url = f"{config.FRONTEND_BASE_URL}/run/{run_id}?stream_url={replay['stream_url']}&music=auto"
     ok = await spawn_vtuber_stream_client(run_id, slot, factorio_stream_url, frontend_url)
     if not ok:
         raise HTTPException(500, "Failed to spawn VTuber stream client")

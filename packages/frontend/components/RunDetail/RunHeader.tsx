@@ -36,6 +36,9 @@ export default function RunHeader({
   onStopReplay,
   onGoLive,
   onStopLive,
+  musicEnabled,
+  musicReady,
+  onMusicToggle,
 }: {
   run: RunInfo;
   isActive?: boolean;
@@ -46,6 +49,9 @@ export default function RunHeader({
   onStopReplay?: () => Promise<void>;
   onGoLive?: () => Promise<void>;
   onStopLive?: () => Promise<void>;
+  musicEnabled?: boolean;
+  musicReady?: boolean;
+  onMusicToggle?: () => Promise<void>;
 }) {
   const badgeClass = STATUS_COLORS[run.status] ?? 'bg-gray-700 text-gray-300';
   const [stopping, setStopping] = useState(false);
@@ -122,6 +128,19 @@ export default function RunHeader({
           {run.status}
         </span>
         <div className="ml-auto flex flex-wrap justify-end gap-2">
+          {onMusicToggle && (
+            <button
+              onClick={onMusicToggle}
+              title={musicEnabled ? 'Music ON — click to turn off' : 'Music OFF — click to turn on'}
+              className={`px-2.5 py-1.5 rounded text-xs border transition-colors ${
+                musicEnabled
+                  ? 'bg-emerald-900/50 border-emerald-500/40 text-emerald-300'
+                  : 'bg-black/40 border-white/10 text-gray-500 hover:text-gray-300'
+              } ${!musicReady && musicEnabled ? 'animate-pulse' : ''}`}
+            >
+              {musicEnabled ? '♪ ON' : '♪ OFF'}
+            </button>
+          )}
           {onStartWorker && (
             <button
               onClick={handleStartWorker}
