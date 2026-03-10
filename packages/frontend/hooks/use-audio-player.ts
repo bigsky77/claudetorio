@@ -18,6 +18,7 @@ export function useAudioPlayer() {
   useEffect(() => {
     const audio = new Audio();
     audio.loop = true;
+    audio.volume = 0.25;
     audioRef.current = audio;
 
     const params = new URLSearchParams(window.location.search);

@@ -63,6 +63,8 @@ def play_audio(audio_bytes: bytes):
                 "warning",
                 "-i",
                 tmp_path,
+                "-af",
+                "volume=0.75",
                 "-f",
                 "pulse",
                 "-device",
