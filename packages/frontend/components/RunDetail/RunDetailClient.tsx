@@ -3,7 +3,7 @@
 import { useCallback, useState } from 'react';
 import type { RunInfo, RunStepInfo } from '@/interfaces';
 import { useRunPolling } from '@/hooks/use-run-polling';
-import { useGenerativeMusic } from '@/hooks/use-generative-music';
+import { useAudioPlayer } from '@/hooks/use-audio-player';
 import { stopRun, startReplay, startReplayWorker, stopReplay, stopReplayWorker, startRtmp, stopRtmp } from '@/services/api';
 import RunHeader from './RunHeader';
 import StreamPanel from './StreamPanel';
@@ -19,13 +19,7 @@ export default function RunDetailClient({
   streamUrl: string;
 }) {
   const { run, steps, isActive, refetch } = useRunPolling(initialRun, initialSteps);
-  const latestStep = steps[steps.length - 1] ?? null;
-  const { enabled: musicEnabled, ready: musicReady, toggle: toggleMusic } = useGenerativeMusic({
-    status: run.status,
-    latestStep,
-    score: run.final_score ?? null,
-    stepCount: steps.length,
-  });
+  const { enabled: musicEnabled, toggle: toggleMusic } = useAudioPlayer();
   const [replayUrl, setReplayUrl] = useState<string | null>(run.stream_url ?? initialStreamUrl ?? null);
   const [isLive, setIsLive] = useState(run.rtmp_active ?? false);
   const [runtimeDisplay, setRuntimeDisplay] = useState<{
@@ -101,7 +95,6 @@ export default function RunDetailClient({
               onGoLive={replayUrl && !isLive ? handleGoLive : undefined}
               onStopLive={isLive ? handleStopLive : undefined}
               musicEnabled={musicEnabled}
-              musicReady={musicReady}
               onMusicToggle={toggleMusic}
             />
           </div>

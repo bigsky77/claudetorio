@@ -37,7 +37,6 @@ export default function RunHeader({
   onGoLive,
   onStopLive,
   musicEnabled,
-  musicReady,
   onMusicToggle,
 }: {
   run: RunInfo;
@@ -50,8 +49,7 @@ export default function RunHeader({
   onGoLive?: () => Promise<void>;
   onStopLive?: () => Promise<void>;
   musicEnabled?: boolean;
-  musicReady?: boolean;
-  onMusicToggle?: () => Promise<void>;
+  onMusicToggle?: () => void;
 }) {
   const badgeClass = STATUS_COLORS[run.status] ?? 'bg-gray-700 text-gray-300';
   const [stopping, setStopping] = useState(false);
@@ -136,7 +134,7 @@ export default function RunHeader({
                 musicEnabled
                   ? 'bg-emerald-900/50 border-emerald-500/40 text-emerald-300'
                   : 'bg-black/40 border-white/10 text-gray-500 hover:text-gray-300'
-              } ${!musicReady && musicEnabled ? 'animate-pulse' : ''}`}
+              }`}
             >
               {musicEnabled ? '♪ ON' : '♪ OFF'}
             </button>
