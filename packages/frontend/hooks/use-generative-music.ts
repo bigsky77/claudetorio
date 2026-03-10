@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import * as Tone from 'tone';
 import type { RunInfo, RunStepInfo } from '@/interfaces';
 import { FactorioAudioEngine, MusicMood } from '@/lib/audioEngine';
@@ -13,22 +13,19 @@ interface UseGenerativeMusicOptions {
 }
 
 export function useGenerativeMusic({ status, latestStep, score, stepCount }: UseGenerativeMusicOptions) {
-  const [enabled, setEnabled] = useState(true);
+  const [enabled, setEnabled] = useState(() => {
+    if (typeof window === 'undefined') return true;
+    try {
+      return localStorage.getItem('claudetorio_music') !== 'false';
+    } catch {
+      return true;
+    }
+  });
   const [ready, setReady] = useState(false);
   const engineRef = useRef<FactorioAudioEngine | null>(null);
   const previousScoreRef = useRef<number | null>(null);
   const errorStreakRef = useRef(0);
   const previousStatusRef = useRef(status);
-
-  // Read localStorage on mount (layout effect to avoid flicker)
-  useLayoutEffect(() => {
-    try {
-      const stored = localStorage.getItem('claudetorio_music');
-      if (stored === 'false') setEnabled(false);
-    } catch {
-      // localStorage unavailable
-    }
-  }, []);
 
   // Create engine on mount, destroy on unmount
   useEffect(() => {
