@@ -1,4 +1,9 @@
+import glob
+import os
+import random
+
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import FileResponse
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -44,6 +49,14 @@ async def get_status(
         total_users=total_users,
         total_sessions_all_time=total_sessions,
     )
+
+
+@router.get("/api/music/random")
+async def get_random_music():
+    files = glob.glob("/opt/data/*.mp3")
+    if not files:
+        raise HTTPException(status_code=404, detail="No music files found")
+    return FileResponse(random.choice(files), media_type="audio/mpeg")
 
 
 @router.get("/health")
