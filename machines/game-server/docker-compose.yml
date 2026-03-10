@@ -78,6 +78,7 @@ services:
     restart: unless-stopped
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+      - /opt/data:/opt/data:ro
     environment:
       - POSTGRES_HOST=postgres
       - POSTGRES_DB=claudetorio
