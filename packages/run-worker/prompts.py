@@ -46,6 +46,7 @@ your_code_here
 - Track entities across different inventories
 - Monitor missing requirements
 - Preserve working automated structures
+- ALWAYS call `get_entities()` at the start of each policy to check what is already on the map. Never place an entity (lab, furnace, miner, etc.) that already exists at that location.
 ### Error Handling
 - Fix errors as they occur
 - Don't repeat previous steps

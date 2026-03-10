@@ -6,7 +6,6 @@ import traceback
 from fle.agents.llm.parsing import parse_response
 from fle.commons.models.conversation import Conversation
 from fle.commons.models.game_state import GameState
-from fle.env.gym_env.observation import Observation
 from fle.env.gym_env.action import Action
 
 import config
@@ -63,7 +62,6 @@ async def run(steps: int, broker_url: str, username: str):
     conversation.set_system_message(system_prompt)
 
     last_result: str | None = None
-    observation: Observation | None = None
     cumulative_score = 0.0
     consecutive_fle_errors = 0
     MAX_CONSECUTIVE_FLE_ERRORS = 5
@@ -77,15 +75,13 @@ async def run(steps: int, broker_url: str, username: str):
 
             # ── Observe ──────────────────────────────────────────────
             try:
-                if observation is None:
-                    observation = gym_env.get_observation(agent_idx=0)
+                observation = gym_env.get_observation(agent_idx=0)
                 formatted_obs = obs_formatter.format(observation)
                 obs_text = formatted_obs.raw_str
             except Exception as obs_err:
                 consecutive_fle_errors += 1
                 print(f"ERROR: observation failed ({consecutive_fle_errors}/{MAX_CONSECUTIVE_FLE_ERRORS}): {obs_err}")
                 traceback.print_exc()
-                observation = None
                 if config.RUN_ID:
                     report_step(broker_url, config.RUN_ID, step_idx=step,
                                 code="# observation failed", result=str(obs_err),
@@ -139,13 +135,11 @@ async def run(steps: int, broker_url: str, username: str):
                 print("ERROR: LLM call timed out after 120s")
                 conversation.add_agent_message("# LLM call timed out")
                 last_result = "ERROR: LLM call timed out — check API key, rate limits, or context size"
-                observation = None
                 continue
             except Exception as api_err:
                 print(f"ERROR: LLM API call failed after retries: {type(api_err).__name__}: {api_err}")
                 conversation.add_agent_message("# LLM API call failed")
                 last_result = f"ERROR: API call failed: {api_err}"
-                observation = None
                 continue
 
             policy = parse_response(response)
@@ -153,7 +147,6 @@ async def run(steps: int, broker_url: str, username: str):
                 conversation.add_agent_message("# No valid code generated")
                 last_result = "ERROR: no valid Python in LLM response"
                 print("Warning: LLM response contained no valid Python code")
-                observation = None
                 continue
 
             code = policy.code
@@ -215,13 +208,11 @@ async def run(steps: int, broker_url: str, username: str):
             action = Action(code=exec_code, agent_idx=0)
             try:
                 obs_dict, reward, terminated, truncated, info = gym_env.step(action)
-                observation = Observation.from_dict(obs_dict)
             except Exception as step_err:
                 consecutive_fle_errors += 1
                 print(f"ERROR: step execution crashed ({consecutive_fle_errors}/{MAX_CONSECUTIVE_FLE_ERRORS}): {step_err}")
                 traceback.print_exc()
                 last_result = f"ERROR: Step crashed: {step_err}"
-                observation = None
                 if config.RUN_ID:
                     report_step(broker_url, config.RUN_ID, step_idx=step,
                                 code=code, result=str(step_err),
