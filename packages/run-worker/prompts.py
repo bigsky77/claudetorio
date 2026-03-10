@@ -47,12 +47,14 @@ your_code_here
 - Monitor missing requirements
 - Preserve working automated structures
 - ALWAYS call `get_entities()` at the start of each policy to check what is already on the map. Never place an entity (lab, furnace, miner, etc.) that already exists at that location.
+- NEVER hardcode coordinates for placement. Use `place_entity_next_to()` relative to an existing entity, or use `nearest_buildable()` to find a free area. If `place_entity` returns an error "could not place", the tile is occupied or invalid — do NOT retry the same position.
 ### Error Handling
 - Fix errors as they occur
 - Don't repeat previous steps
 - Continue from last successful execution
 - Avoid unnecessary state changes
 - Analyze the root cause of entities that aren't working, and prioritize automated solutions (like transport belts) above manual triage
+- If you see "could not place X at (a, b)": that position is blocked. Call `get_entities()` to see what is there, then use `place_entity_next_to()` or `nearest_buildable()` to find a free spot. Never retry the same coordinates.
 ### Code Structure
 - Write code as direct Python interpreter commands
 - Only encapsulate reusable utility code into functions
