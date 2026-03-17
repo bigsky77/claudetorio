@@ -16,7 +16,7 @@ async def _volume_has_content(volume_name: str) -> bool:
     return bool(stdout.decode().strip())
 
 
-async def spawn_factorio(slot: int) -> str | None:
+async def spawn_factorio(slot: int, publish_rcon: bool = False) -> str | None:
     """Spawn a Factorio server container for the given slot.
 
     Creates a vanilla save and starts the server. FLE scripts are loaded
@@ -61,6 +61,11 @@ async def spawn_factorio(slot: int) -> str | None:
 
     # Expose UDP port to host so stream-clients on stream-server can connect
     cmd += ["-p", f"{udp_port}:{udp_port}/udp"]
+
+    # Optionally publish RCON port to host for external direct access
+    if publish_rcon:
+        host_rcon_port = config.BASE_RCON_PORT + slot
+        cmd += ["-p", f"{host_rcon_port}:{config.BASE_RCON_PORT}/tcp"]
 
     cmd += [config.FACTORIO_IMAGE]
 

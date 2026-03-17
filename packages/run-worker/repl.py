@@ -91,14 +91,23 @@ def emit_json(data: dict):
 # Main
 # ---------------------------------------------------------------------------
 
+def _fetch_step_idx(broker_url: str, run_id: str) -> int:
+    """Fetch the current step count from the broker to use as next step_idx."""
+    try:
+        resp = httpx.get(f"{broker_url}/api/runs/{run_id}", timeout=5)
+        if resp.status_code == 200:
+            return resp.json().get("step_count", 0)
+    except Exception as e:
+        print(f"Warning: could not fetch step_idx from broker: {e}", file=sys.stderr)
+    return 0
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Single-shot Factorio REPL: reads Python from stdin, executes one step, emits JSON to stdout"
     )
     parser.add_argument("run_id", nargs="?", default=os.getenv("RUN_ID"),
                         help="Run ID for broker reporting (falls back to RUN_ID env)")
-    parser.add_argument("--step-idx", type=int, default=0,
-                        help="Step index to report (caller-supplied; default 0)")
     parser.add_argument("--broker-url", type=str,
                         default=os.getenv("BROKER_URL", "http://localhost:8080"),
                         help="Broker API URL")
@@ -111,10 +120,14 @@ def main():
     args = parser.parse_args()
 
     run_id: str | None = args.run_id
-    step_idx: int = args.step_idx
     broker_url: str = args.broker_url
     server_host: str = args.server_host
     rcon_port: int = args.rcon_port
+
+    # Fetch step_idx from broker
+    step_idx = _fetch_step_idx(broker_url, run_id) if run_id else 0
+
+    print(f"Step idx: {step_idx}", file=sys.stderr)
 
     # FLE reads this env var at module import time; we set it here too just in case
     # it's used by later lazy imports.

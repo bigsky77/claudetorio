@@ -67,6 +67,7 @@ class CreateRunRequest(BaseModel):
     max_steps: int = 200
     step_timeout_seconds: int = 60
     enable_streaming: bool = False  # Opt-in: stream-client adds significant resource overhead
+    manual: bool = False  # Skip LLM worker; return RCON details for direct access
     # Provider credentials (sent per-run from frontend)
     api_key: Optional[str] = None
     custom_api_url: Optional[str] = None
@@ -75,6 +76,10 @@ class CreateRunRequest(BaseModel):
 class CreateRunResponse(BaseModel):
     run_id: str
     status: str
+    # Only populated for manual runs:
+    rcon_host: Optional[str] = None
+    rcon_port: Optional[int] = None
+    rcon_password: Optional[str] = None
 
 class RunInfo(BaseModel):
     run_id: str

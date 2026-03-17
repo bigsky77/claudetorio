@@ -417,7 +417,7 @@ async def create_run(
         raise HTTPException(503, "Broker misconfigured: FACTORIO_IMAGE is not set")
 
     # Spawn Factorio server for this slot
-    await spawn_factorio(slot)
+    await spawn_factorio(slot, publish_rcon=req.manual)
     ready = await wait_for_factorio(slot)
     if not ready:
         await stop_factorio(slot)
@@ -433,6 +433,20 @@ async def create_run(
     if seed is not None:
         run.map_seed = seed
         await db.commit()
+
+    if req.manual:
+        run.status = "running"
+        run.started_at = datetime.utcnow()
+        await db.commit()
+        rcon_host = config.GAME_SERVER_PUBLIC_HOST or f"factorio-{slot}"
+        rcon_port = config.BASE_RCON_PORT + slot
+        return CreateRunResponse(
+            run_id=run_id,
+            status="running",
+            rcon_host=rcon_host,
+            rcon_port=rcon_port,
+            rcon_password=config.RCON_PASSWORD,
+        )
 
     factorio_host = f"factorio-{slot}"
 
