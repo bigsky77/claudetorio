@@ -1,0 +1,12 @@
+[project]
+name = "fle-mcp"
+version = "0.1.0"
+description = "Custom FLE MCP server with broker step reporting"
+requires-python = ">=3.11"
+dependencies = [
+    "factorio-learning-environment",
+    "fastmcp",
+    "httpx",
+    "dulwich",
+    "factorio-rcon-py",
+]
