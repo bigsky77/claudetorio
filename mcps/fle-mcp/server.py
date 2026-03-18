@@ -208,6 +208,29 @@ def _require_instance():
         raise Exception("No active Factorio connection. Server may still be starting.")
 
 
+def _do_reconnect():
+    """Re-create the FactorioInstance RCON connection in-place."""
+    global instance, vcs_repo
+    _log(f"Reconnecting to Factorio at {SERVER_HOST}:{RCON_PORT}...")
+
+    # RCON warmup
+    from factorio_rcon import RCONClient as _WarmupRCON
+    _w = _WarmupRCON(SERVER_HOST, RCON_PORT, RCON_PASSWORD)
+    _w.send_command("/sc rcon.print('warmup')")
+    _w.send_command("/sc rcon.print('warmup')")
+    _w.close()
+
+    instance = FactorioInstance(
+        address=SERVER_HOST,
+        tcp_port=RCON_PORT,
+        fast=True,
+        all_technologies_researched=False,
+        clear_entities=False,
+    )
+    vcs_repo = FactorioMCPRepository(instance)
+    _log("Reconnected OK")
+
+
 @mcp.tool()
 async def execute(code: str) -> str:
     """
@@ -222,7 +245,16 @@ async def execute(code: str) -> str:
     global step_counter
     _require_instance()
 
-    result_text, score, response = instance.eval(code, timeout=60)
+    try:
+        result_text, score, response = instance.eval(code, timeout=60)
+    except Exception as e:
+        # RCON connection likely dropped — try to reconnect once
+        _log(f"eval failed ({e}), attempting reconnect...")
+        try:
+            _do_reconnect()
+            result_text, score, response = instance.eval(code, timeout=60)
+        except Exception as e2:
+            return f"Error: execution failed after reconnect attempt: {e2}"
 
     # VCS auto-commit
     error_occurred = False
@@ -281,7 +313,14 @@ async def render(center_x: float = 0, center_y: float = 0) -> ImageContent:
         center_y: Y coordinate to center on
     """
     _require_instance()
-    img = instance.namespace._render(position=Position(center_x, center_y))
+    try:
+        img = instance.namespace._render(position=Position(center_x, center_y))
+    except Exception:
+        try:
+            _do_reconnect()
+            img = instance.namespace._render(position=Position(center_x, center_y))
+        except Exception as e2:
+            raise Exception(f"Render failed after reconnect attempt: {e2}")
     if img is None:
         raise Exception("Failed to render: Game state not initialized or player entity invalid")
     return Image(data=img._repr_png_(), format="png").to_image_content()
@@ -290,10 +329,12 @@ async def render(center_x: float = 0, center_y: float = 0) -> ImageContent:
 @mcp.tool()
 async def reconnect() -> str:
     """Re-establish RCON connection to the Factorio server."""
-    _require_instance()
-    vcs = vcs_repo
-    commits = len(vcs.undo_stack) if vcs else 0
-    return f"Connected to Factorio at {SERVER_HOST}:{RCON_PORT}\nCommit history: {commits} commits"
+    try:
+        _do_reconnect()
+        commits = len(vcs_repo.undo_stack) if vcs_repo else 0
+        return f"Reconnected to Factorio at {SERVER_HOST}:{RCON_PORT}\nCommit history: {commits} commits"
+    except Exception as e:
+        return f"Reconnect failed: {e}"
 
 
 @mcp.tool()
@@ -304,18 +345,21 @@ async def undo() -> str:
     if not vcs_repo:
         return "VCS not initialized."
 
-    prev_commit_id = vcs_repo.undo()
-    if not prev_commit_id:
-        return "Nothing to undo. Already at initial state."
+    try:
+        prev_commit_id = vcs_repo.undo()
+        if not prev_commit_id:
+            return "Nothing to undo. Already at initial state."
 
-    success = vcs_repo.apply_to_instance(prev_commit_id)
-    if success:
-        _report_step(step_idx=step_counter, code="# VCS: UNDO",
-                     result=f"Undone to commit {prev_commit_id[:8]}",
-                     error_occurred=False, reward=0.0, production_score=0.0, achievements={})
-        step_counter += 1
-        return f"Undid last operation. Restored to commit {prev_commit_id[:8]}"
-    return "Failed to restore previous state"
+        success = vcs_repo.apply_to_instance(prev_commit_id)
+        if success:
+            _report_step(step_idx=step_counter, code="# VCS: UNDO",
+                         result=f"Undone to commit {prev_commit_id[:8]}",
+                         error_occurred=False, reward=0.0, production_score=0.0, achievements={})
+            step_counter += 1
+            return f"Undid last operation. Restored to commit {prev_commit_id[:8]}"
+        return "Failed to restore previous state"
+    except Exception as e:
+        return f"Error during undo: {e}"
 
 
 @mcp.tool()
@@ -369,15 +413,18 @@ async def restore(ref: str) -> str:
         else:
             commit_id = ref
 
-    success = vcs_repo.apply_to_instance(commit_id)
-    if success:
-        vcs_repo.checkout(commit_id)
-        _report_step(step_idx=step_counter, code=f"# VCS: RESTORE {ref}",
-                     result=f"Restored to {ref} (commit {commit_id[:8]})",
-                     error_occurred=False, reward=0.0, production_score=0.0, achievements={})
-        step_counter += 1
-        return f"Restored to {ref} (commit {commit_id[:8]})"
-    return f"Failed to restore: no state data in commit {commit_id[:8]}"
+    try:
+        success = vcs_repo.apply_to_instance(commit_id)
+        if success:
+            vcs_repo.checkout(commit_id)
+            _report_step(step_idx=step_counter, code=f"# VCS: RESTORE {ref}",
+                         result=f"Restored to {ref} (commit {commit_id[:8]})",
+                         error_occurred=False, reward=0.0, production_score=0.0, achievements={})
+            step_counter += 1
+            return f"Restored to {ref} (commit {commit_id[:8]})"
+        return f"Failed to restore: no state data in commit {commit_id[:8]}"
+    except Exception as e:
+        return f"Error restoring checkpoint: {e}"
 
 
 @mcp.tool()
@@ -450,26 +497,35 @@ async def view_code(ref: str) -> str:
 async def res_inventory() -> Dict:
     """Get your current inventory."""
     _require_instance()
-    return instance.namespace.inspect_inventory()
+    try:
+        return instance.namespace.inspect_inventory()
+    except Exception as e:
+        return {"error": str(e)}
 
 
 @mcp.resource("fle://position")
 async def res_position() -> Dict[str, float]:
     """Get your current position in the Factorio world."""
     _require_instance()
-    pos = instance.namespace.player_location
-    return {"x": pos.x, "y": pos.y}
+    try:
+        pos = instance.namespace.player_location
+        return {"x": pos.x, "y": pos.y}
+    except Exception as e:
+        return {"error": str(e)}
 
 
 @mcp.resource("fle://entities/{cx}/{cy}/{radius}")
 async def res_entities(cx: str, cy: str, radius: str) -> List[Dict]:
     """Get all entities near a position."""
     _require_instance()
-    x = float(cx) if cx != "default" else 0
-    y = float(cy) if cy != "default" else 0
-    r = float(radius) if radius != "default" else 500
-    entities = instance.namespace.get_entities(position=Position(x, y), radius=r)
-    return [e.model_dump() for e in entities]
+    try:
+        x = float(cx) if cx != "default" else 0
+        y = float(cy) if cy != "default" else 0
+        r = float(radius) if radius != "default" else 500
+        entities = instance.namespace.get_entities(position=Position(x, y), radius=r)
+        return [e.model_dump() for e in entities]
+    except Exception as e:
+        return [{"error": str(e)}]
 
 
 @mcp.resource("fle://metrics")
@@ -487,7 +543,10 @@ async def res_metrics() -> Dict:
 async def res_warnings() -> list:
     """Get active game warnings."""
     _require_instance()
-    return instance.get_warnings()
+    try:
+        return instance.get_warnings()
+    except Exception as e:
+        return [f"error: {e}"]
 
 
 @mcp.resource("fle://status")
