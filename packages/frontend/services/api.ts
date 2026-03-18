@@ -217,10 +217,11 @@ export async function createRun(body: {
   max_steps?: number;
   step_timeout_seconds?: number;
   enable_streaming?: boolean;
+  manual?: boolean;
   api_key?: string;
   custom_api_url?: string;
   custom_api_key?: string;
-}): Promise<{ run_id: string; status: string; error?: string }> {
+}): Promise<{ run_id: string; status: string; rcon_host?: string; rcon_port?: number; rcon_password?: string; error?: string }> {
   const token = getAuthToken();
   const res = await fetch('/api/runs', {
     method: 'POST',

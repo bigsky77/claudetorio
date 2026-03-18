@@ -14,3 +14,4 @@ dependencies = [
 
 [project.scripts]
 run-worker = "main:main"
+run-worker-repl = "repl:main"

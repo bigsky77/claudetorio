@@ -31,6 +31,9 @@ export default function NewRunDrawer(props: {
   const [customApiUrl, setCustomApiUrl] = useState('');
   const [customApiKey, setCustomApiKey] = useState('');
 
+  const [manual, setManual] = useState(false);
+  const [rconResult, setRconResult] = useState<{ run_id: string; rcon_host: string; rcon_port: number; rcon_password: string } | null>(null);
+
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -64,25 +67,33 @@ export default function NewRunDrawer(props: {
     setError(null);
     try {
       const body: Parameters<typeof createRun>[0] = {
-        provider: providerApi,
-        model: model || undefined,
         task_key: taskKey || 'open_play',
         max_steps: Number.isFinite(maxSteps) ? maxSteps : 200,
         step_timeout_seconds: Number.isFinite(stepTimeoutSeconds) ? stepTimeoutSeconds : 60,
+        manual,
       };
 
-      if (providerApi === 'custom') {
-        if (!customApiUrl) throw new Error('Custom API URL required');
-        body.custom_api_url = customApiUrl;
-        if (customApiKey) body.custom_api_key = customApiKey;
-      } else {
-        if (!apiKey) throw new Error('API key required — save one in your account settings');
-        body.api_key = apiKey;
+      if (!manual) {
+        body.provider = providerApi;
+        body.model = model || undefined;
+        if (providerApi === 'custom') {
+          if (!customApiUrl) throw new Error('Custom API URL required');
+          body.custom_api_url = customApiUrl;
+          if (customApiKey) body.custom_api_key = customApiKey;
+        } else {
+          if (!apiKey) throw new Error('API key required — save one in your account settings');
+          body.api_key = apiKey;
+        }
       }
 
       const res = await createRun(body);
       onCreated({ run_id: res.run_id, status: res.status });
-      onClose();
+
+      if (manual && res.rcon_host && res.rcon_port && res.rcon_password) {
+        setRconResult({ run_id: res.run_id, rcon_host: res.rcon_host, rcon_port: res.rcon_port, rcon_password: res.rcon_password });
+      } else {
+        onClose();
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -115,6 +126,39 @@ export default function NewRunDrawer(props: {
           </div>
 
           <div className="flex-1 overflow-auto px-6 py-5 space-y-5">
+            {/* Manual mode toggle */}
+            <label className="flex items-center gap-3 cursor-pointer select-none">
+              <div
+                onClick={() => { setManual((v) => !v); setError(null); setRconResult(null); }}
+                className={`relative w-9 h-5 rounded-full transition-colors ${manual ? 'bg-accent-green' : 'bg-surface-3'}`}
+              >
+                <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${manual ? 'translate-x-4' : ''}`} />
+              </div>
+              <div>
+                <div className="text-white/90 text-xs font-semibold tracking-wide">Manual mode</div>
+                <div className="text-white/40 text-xs">Skip AI worker — connect directly via RCON</div>
+              </div>
+            </label>
+
+            {/* RCON result for manual runs */}
+            {rconResult && (
+              <div className="bg-surface-2 border border-accent-green/30 px-4 py-3 space-y-2">
+                <div className="text-accent-green text-xs font-semibold tracking-widest">RCON Credentials</div>
+                {[
+                  ['Run ID', rconResult.run_id],
+                  ['Host', rconResult.rcon_host],
+                  ['Port', String(rconResult.rcon_port)],
+                  ['Password', rconResult.rcon_password],
+                ].map(([label, value]) => (
+                  <div key={label} className="flex justify-between gap-4 text-xs">
+                    <span className="text-white/50">{label}</span>
+                    <span className="text-white/90 font-mono break-all text-right">{value}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {!manual && (<>
             {/* Provider */}
             <div className="space-y-2">
               <div className="text-white/60 text-xs font-semibold tracking-widest font-[family-name:var(--font-heading)]">
@@ -242,6 +286,7 @@ export default function NewRunDrawer(props: {
                 )}
               </div>
             )}
+            </>)}
 
             {error && (
               <div className="bg-red-500/10 border border-red-500/20 px-3 py-2 text-red-200 text-xs">
@@ -251,13 +296,22 @@ export default function NewRunDrawer(props: {
           </div>
 
           <div className="px-6 py-4 border-t border-surface-3">
-            <button
-              onClick={onSubmit}
-              disabled={submitting}
-              className="w-full h-11 bg-accent-green text-black font-[family-name:var(--font-heading)] font-bold tracking-wide text-sm hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-opacity"
-            >
-              {submitting ? 'Creating...' : 'Create run'}
-            </button>
+            {rconResult ? (
+              <button
+                onClick={onClose}
+                className="w-full h-11 bg-surface-2 border border-surface-3 text-white/80 font-[family-name:var(--font-heading)] font-bold tracking-wide text-sm hover:text-white transition-colors"
+              >
+                Close
+              </button>
+            ) : (
+              <button
+                onClick={onSubmit}
+                disabled={submitting}
+                className="w-full h-11 bg-accent-green text-black font-[family-name:var(--font-heading)] font-bold tracking-wide text-sm hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-opacity"
+              >
+                {submitting ? 'Creating...' : 'Create run'}
+              </button>
+            )}
           </div>
         </div>
       </div>

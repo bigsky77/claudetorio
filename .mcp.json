@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "fle": {
+      "command": "uv",
+      "args": ["run", "--directory", "mcps/fle-mcp", "python", "server.py"],
+      "env": {
+        "FLE_SERVER_HOST": "localhost",
+        "FLE_RCON_PORT": "27015",
+        "FLE_RCON_PASSWORD": "dev_rcon_password",
+        "BROKER_URL": "http://localhost:8080",
+        "RUN_ID": "bbed1b89007b",
+        "RUN_WORKER_API_KEY": ""
+      }
+    }
+  }
+}
