@@ -6,11 +6,12 @@ tracking/observability through the existing dashboard. When RUN_ID is unset,
 step reporting is silently skipped (still usable for casual play).
 """
 
+import asyncio
 import importlib.util as _ilu
 import logging
 import os
 import sys
-import time
+import traceback
 from contextlib import asynccontextmanager
 from collections.abc import AsyncIterator
 from typing import Dict, List
@@ -32,7 +33,7 @@ log.setLevel(logging.INFO)
 
 
 def _log(msg: str):
-    print(msg, file=sys.stderr)
+    print(msg, file=sys.stderr, flush=True)
 
 
 # ---------------------------------------------------------------------------
@@ -126,6 +127,88 @@ def _fetch_step_idx() -> int:
 instance: FactorioInstance | None = None
 vcs_repo: FactorioMCPRepository | None = None
 step_counter: int = 0
+_rcon_patched = False
+
+# ---------------------------------------------------------------------------
+# Connection helpers
+# ---------------------------------------------------------------------------
+
+def _rcon_warmup():
+    """Dismiss the 'achievements disabled' warning. Retries 3 times."""
+    from factorio_rcon import RCONClient as _WarmupRCON
+    import time
+    for attempt in range(3):
+        try:
+            _w = _WarmupRCON(SERVER_HOST, RCON_PORT, RCON_PASSWORD)
+            _w.send_command("/sc rcon.print('warmup')")
+            _w.send_command("/sc rcon.print('warmup')")
+            _w.close()
+            _log("RCON warmup OK")
+            return
+        except Exception as e:
+            _log(f"RCON warmup attempt {attempt + 1} failed: {e}")
+            time.sleep(2)
+    _log("Warning: RCON warmup failed after 3 attempts, continuing anyway")
+
+
+def _patch_rcon_client():
+    """Patch RCONClient to prevent double-connect. Idempotent."""
+    global _rcon_patched
+    if _rcon_patched:
+        return
+    from factorio_rcon import RCONClient as _OrigRCON
+    _orig_init = _OrigRCON.__init__
+
+    def _patched_init(self, ip_address, port, password, timeout=None, connect_on_init=False):
+        _orig_init(self, ip_address, port, password, timeout=timeout, connect_on_init=connect_on_init)
+
+    _OrigRCON.__init__ = _patched_init
+    _rcon_patched = True
+
+
+def _do_connect():
+    """Create a fresh FactorioInstance + VCS repo."""
+    global instance, vcs_repo
+    _log(f"Connecting to Factorio at {SERVER_HOST}:{RCON_PORT}...")
+    _rcon_warmup()
+    _patch_rcon_client()
+    instance = FactorioInstance(
+        address=SERVER_HOST,
+        tcp_port=RCON_PORT,
+        fast=True,
+        all_technologies_researched=False,
+        clear_entities=False,
+    )
+    vcs_repo = FactorioMCPRepository(instance)
+    _log("Connected OK")
+
+
+def _do_reconnect():
+    """Re-create the FactorioInstance RCON connection in-place."""
+    global instance
+    # Try to close old connection gracefully
+    if instance is not None:
+        try:
+            instance.reset()
+        except Exception:
+            pass
+        instance = None
+    _do_connect()
+
+
+def _ensure_connected():
+    """Ensure we have a live connection — reconnect if needed."""
+    global instance
+    if instance is None:
+        _do_connect()
+        return
+    # Quick liveness check
+    try:
+        instance.rcon_client.send_command("/sc rcon.print('ping')")
+    except Exception:
+        _log("Connection lost, reconnecting...")
+        _do_reconnect()
+
 
 # ---------------------------------------------------------------------------
 # MCP server
@@ -135,65 +218,29 @@ mcp = FastMCP("Factorio Learning Environment")
 
 @asynccontextmanager
 async def fle_lifespan(server) -> AsyncIterator[None]:
-    """RCON warmup → patch RCONClient → init FactorioInstance → init VCS."""
-    global instance, vcs_repo, step_counter
+    """Init connection at startup. Non-blocking."""
+    global step_counter
 
-    # Set env so FLE picks up the password at import time
-    if RCON_PASSWORD:
-        os.environ["FLE_RCON_PASSWORD"] = RCON_PASSWORD
-
-    # ── RCON warmup (dismiss "achievements disabled" warning) ──────────
-    from factorio_rcon import RCONClient as _WarmupRCON
-    for attempt in range(3):
-        try:
-            _warmup = _WarmupRCON(SERVER_HOST, RCON_PORT, RCON_PASSWORD)
-            _warmup.send_command("/sc rcon.print('warmup')")
-            _warmup.send_command("/sc rcon.print('warmup')")
-            _warmup.close()
-            _log("RCON warmup OK")
-            break
-        except Exception as e:
-            _log(f"RCON warmup attempt {attempt + 1} failed: {e}")
-            time.sleep(2)
-
-    # ── Patch RCONClient to prevent double-connect ─────────────────────
-    from factorio_rcon import RCONClient as _OrigRCON
-    _orig_init = _OrigRCON.__init__
-
-    def _patched_init(self, ip_address, port, password, timeout=None, connect_on_init=False):
-        _orig_init(self, ip_address, port, password, timeout=timeout, connect_on_init=connect_on_init)
-
-    _OrigRCON.__init__ = _patched_init
-
-    # ── FactorioInstance ───────────────────────────────────────────────
-    _log(f"Connecting to Factorio at {SERVER_HOST}:{RCON_PORT}...")
-    instance = FactorioInstance(
-        address=SERVER_HOST,
-        tcp_port=RCON_PORT,
-        fast=True,
-        all_technologies_researched=False,
-        clear_entities=False,
-    )
-    _log("FactorioInstance connected")
-
-    # ── VCS ────────────────────────────────────────────────────────────
-    vcs_repo = FactorioMCPRepository(instance)
-    _log("VCS repository initialized")
-
-    # ── Step counter from broker ──────────────────────────────────────
-    step_counter = _fetch_step_idx()
-    _log(f"Step counter starts at {step_counter}")
+    try:
+        # Run blocking RCON setup in a thread to avoid blocking the event loop
+        await asyncio.to_thread(_do_connect)
+        step_counter = _fetch_step_idx()
+        _log(f"Step counter starts at {step_counter}")
+    except Exception as e:
+        # Don't crash the MCP server if initial connection fails —
+        # tools will reconnect lazily on first call
+        _log(f"Warning: initial connection failed ({e}), will retry on first tool call")
+        traceback.print_exc(file=sys.stderr)
 
     try:
         yield
     finally:
         _log("Shutting down FLE MCP server")
-        try:
-            instance.reset()
-        except Exception:
-            pass
-        instance = None
-        vcs_repo = None
+        if instance is not None:
+            try:
+                instance.reset()
+            except Exception:
+                pass
 
 
 mcp._lifespan = fle_lifespan
@@ -202,34 +249,6 @@ mcp._lifespan = fle_lifespan
 # ---------------------------------------------------------------------------
 # Tools
 # ---------------------------------------------------------------------------
-
-def _require_instance():
-    if instance is None:
-        raise Exception("No active Factorio connection. Server may still be starting.")
-
-
-def _do_reconnect():
-    """Re-create the FactorioInstance RCON connection in-place."""
-    global instance, vcs_repo
-    _log(f"Reconnecting to Factorio at {SERVER_HOST}:{RCON_PORT}...")
-
-    # RCON warmup
-    from factorio_rcon import RCONClient as _WarmupRCON
-    _w = _WarmupRCON(SERVER_HOST, RCON_PORT, RCON_PASSWORD)
-    _w.send_command("/sc rcon.print('warmup')")
-    _w.send_command("/sc rcon.print('warmup')")
-    _w.close()
-
-    instance = FactorioInstance(
-        address=SERVER_HOST,
-        tcp_port=RCON_PORT,
-        fast=True,
-        all_technologies_researched=False,
-        clear_entities=False,
-    )
-    vcs_repo = FactorioMCPRepository(instance)
-    _log("Reconnected OK")
-
 
 @mcp.tool()
 async def execute(code: str) -> str:
@@ -243,7 +262,11 @@ async def execute(code: str) -> str:
         code: Python code to execute
     """
     global step_counter
-    _require_instance()
+
+    try:
+        await asyncio.to_thread(_ensure_connected)
+    except Exception as e:
+        return f"Error: could not connect to Factorio: {e}"
 
     try:
         result_text, score, response = instance.eval(code, timeout=60)
@@ -298,7 +321,7 @@ async def execute(code: str) -> str:
     except Exception:
         pass
 
-    commit_id = vcs_repo.undo_stack[-1] if vcs_repo.undo_stack else "unknown"
+    commit_id = vcs_repo.undo_stack[-1] if vcs_repo and vcs_repo.undo_stack else "unknown"
     short_id = commit_id[:8] if isinstance(commit_id, str) else "unknown"
     return f"[step {step_counter - 1}, commit {short_id}] - stdio:\n{response}"
 
@@ -312,8 +335,8 @@ async def render(center_x: float = 0, center_y: float = 0) -> ImageContent:
         center_x: X coordinate to center on
         center_y: Y coordinate to center on
     """
-    _require_instance()
     try:
+        await asyncio.to_thread(_ensure_connected)
         img = instance.namespace._render(position=Position(center_x, center_y))
     except Exception:
         try:
@@ -330,7 +353,7 @@ async def render(center_x: float = 0, center_y: float = 0) -> ImageContent:
 async def reconnect() -> str:
     """Re-establish RCON connection to the Factorio server."""
     try:
-        _do_reconnect()
+        await asyncio.to_thread(_do_reconnect)
         commits = len(vcs_repo.undo_stack) if vcs_repo else 0
         return f"Reconnected to Factorio at {SERVER_HOST}:{RCON_PORT}\nCommit history: {commits} commits"
     except Exception as e:
@@ -341,7 +364,10 @@ async def reconnect() -> str:
 async def undo() -> str:
     """Undo the last code execution by restoring the previous game state."""
     global step_counter
-    _require_instance()
+    try:
+        await asyncio.to_thread(_ensure_connected)
+    except Exception as e:
+        return f"Error: could not connect: {e}"
     if not vcs_repo:
         return "VCS not initialized."
 
@@ -371,18 +397,23 @@ async def commit(tag_name: str, message: str = "") -> str:
         tag_name: Name for this checkpoint
         message: Optional description
     """
-    _require_instance()
+    try:
+        await asyncio.to_thread(_ensure_connected)
+    except Exception as e:
+        return f"Error: could not connect: {e}"
     if not vcs_repo:
         return "VCS not initialized."
 
-    commit_id = vcs_repo.tag_commit(tag_name)
-    if message:
-        gs = GameState.from_instance(instance)
-        policy = vcs_repo.get_policy(commit_id)
-        commit_id = vcs_repo.commit(gs, message, policy)
-        vcs_repo.tag_commit(tag_name, commit_id)
-
-    return f"Tagged current state as '{tag_name}' (commit {commit_id[:8]})"
+    try:
+        commit_id = vcs_repo.tag_commit(tag_name)
+        if message:
+            gs = GameState.from_instance(instance)
+            policy = vcs_repo.get_policy(commit_id)
+            commit_id = vcs_repo.commit(gs, message, policy)
+            vcs_repo.tag_commit(tag_name, commit_id)
+        return f"Tagged current state as '{tag_name}' (commit {commit_id[:8]})"
+    except Exception as e:
+        return f"Error tagging checkpoint: {e}"
 
 
 @mcp.tool()
@@ -394,26 +425,29 @@ async def restore(ref: str) -> str:
         ref: Tag name or commit ID (can be abbreviated)
     """
     global step_counter
-    _require_instance()
+    try:
+        await asyncio.to_thread(_ensure_connected)
+    except Exception as e:
+        return f"Error: could not connect: {e}"
     if not vcs_repo:
         return "VCS not initialized."
 
-    tag_commit = vcs_repo.get_tag(ref)
-    if tag_commit:
-        commit_id = tag_commit
-    else:
-        if len(ref) < 40:
-            history = vcs_repo.get_history(max_count=100)
-            for c in history:
-                if c["id"].startswith(ref):
-                    commit_id = c["id"]
-                    break
-            else:
-                return f"No commit found matching '{ref}'"
-        else:
-            commit_id = ref
-
     try:
+        tag_commit = vcs_repo.get_tag(ref)
+        if tag_commit:
+            commit_id = tag_commit
+        else:
+            if len(ref) < 40:
+                history = vcs_repo.get_history(max_count=100)
+                for c in history:
+                    if c["id"].startswith(ref):
+                        commit_id = c["id"]
+                        break
+                else:
+                    return f"No commit found matching '{ref}'"
+            else:
+                commit_id = ref
+
         success = vcs_repo.apply_to_instance(commit_id)
         if success:
             vcs_repo.checkout(commit_id)
@@ -435,26 +469,32 @@ async def view_history(limit: int = 10) -> str:
     Args:
         limit: Maximum number of commits to show
     """
-    _require_instance()
+    try:
+        await asyncio.to_thread(_ensure_connected)
+    except Exception as e:
+        return f"Error: could not connect: {e}"
     if not vcs_repo:
         return "VCS not initialized."
 
-    history = vcs_repo.get_history(max_count=limit)
-    tags = vcs_repo.list_tags()
-    commit_to_tags = {}
-    for tag_name, cid in tags.items():
-        commit_to_tags.setdefault(cid, []).append(tag_name)
+    try:
+        history = vcs_repo.get_history(max_count=limit)
+        tags = vcs_repo.list_tags()
+        commit_to_tags = {}
+        for tag_name, cid in tags.items():
+            commit_to_tags.setdefault(cid, []).append(tag_name)
 
-    if not history:
-        return "No commit history found."
+        if not history:
+            return "No commit history found."
 
-    result = "Checkpoint History:\n"
-    for i, c in enumerate(history):
-        cid = c["id"]
-        tag_str = f" [{', '.join(commit_to_tags[cid])}]" if cid in commit_to_tags else ""
-        has_policy = "Y" if c["has_policy"] else " "
-        result += f"{i + 1}. [{cid[:8]}]{tag_str} {has_policy} {c['message']}\n"
-    return result
+        result = "Checkpoint History:\n"
+        for i, c in enumerate(history):
+            cid = c["id"]
+            tag_str = f" [{', '.join(commit_to_tags[cid])}]" if cid in commit_to_tags else ""
+            has_policy = "Y" if c["has_policy"] else " "
+            result += f"{i + 1}. [{cid[:8]}]{tag_str} {has_policy} {c['message']}\n"
+        return result
+    except Exception as e:
+        return f"Error reading history: {e}"
 
 
 @mcp.tool()
@@ -465,39 +505,47 @@ async def view_code(ref: str) -> str:
     Args:
         ref: Tag name or commit ID
     """
-    _require_instance()
+    try:
+        await asyncio.to_thread(_ensure_connected)
+    except Exception as e:
+        return f"Error: could not connect: {e}"
     if not vcs_repo:
         return "VCS not initialized."
 
-    if ref in vcs_repo.list_tags():
-        commit_id = vcs_repo.get_tag(ref)
-    else:
-        if len(ref) < 40:
-            history = vcs_repo.get_history(max_count=100)
-            for c in history:
-                if c["id"].startswith(ref):
-                    commit_id = c["id"]
-                    break
-            else:
-                return f"No commit found matching '{ref}'"
+    try:
+        if ref in vcs_repo.list_tags():
+            commit_id = vcs_repo.get_tag(ref)
         else:
-            commit_id = ref
+            if len(ref) < 40:
+                history = vcs_repo.get_history(max_count=100)
+                for c in history:
+                    if c["id"].startswith(ref):
+                        commit_id = c["id"]
+                        break
+                else:
+                    return f"No commit found matching '{ref}'"
+            else:
+                commit_id = ref
 
-    policy = vcs_repo.get_policy(commit_id)
-    if not policy:
-        return f"No code found for {ref} (commit {commit_id[:8]})"
-    return f"Code for {ref} (commit {commit_id[:8]}):\n\n```python\n{policy}\n```"
+        policy = vcs_repo.get_policy(commit_id)
+        if not policy:
+            return f"No code found for {ref} (commit {commit_id[:8]})"
+        return f"Code for {ref} (commit {commit_id[:8]}):\n\n```python\n{policy}\n```"
+    except Exception as e:
+        return f"Error reading code: {e}"
 
 
 # ---------------------------------------------------------------------------
 # Resources (read-only, no broker reporting)
+# All resources return error values instead of raising — raising kills the
+# MCP process.
 # ---------------------------------------------------------------------------
 
 @mcp.resource("fle://inventory")
 async def res_inventory() -> Dict:
     """Get your current inventory."""
-    _require_instance()
     try:
+        _ensure_connected()
         return instance.namespace.inspect_inventory()
     except Exception as e:
         return {"error": str(e)}
@@ -506,8 +554,8 @@ async def res_inventory() -> Dict:
 @mcp.resource("fle://position")
 async def res_position() -> Dict[str, float]:
     """Get your current position in the Factorio world."""
-    _require_instance()
     try:
+        _ensure_connected()
         pos = instance.namespace.player_location
         return {"x": pos.x, "y": pos.y}
     except Exception as e:
@@ -517,8 +565,8 @@ async def res_position() -> Dict[str, float]:
 @mcp.resource("fle://entities/{cx}/{cy}/{radius}")
 async def res_entities(cx: str, cy: str, radius: str) -> List[Dict]:
     """Get all entities near a position."""
-    _require_instance()
     try:
+        _ensure_connected()
         x = float(cx) if cx != "default" else 0
         y = float(cy) if cy != "default" else 0
         r = float(radius) if radius != "default" else 500
@@ -531,8 +579,8 @@ async def res_entities(cx: str, cy: str, radius: str) -> List[Dict]:
 @mcp.resource("fle://metrics")
 async def res_metrics() -> Dict:
     """Production throughput statistics."""
-    _require_instance()
     try:
+        _ensure_connected()
         stats = instance.namespace.get_production_stats()
         return stats
     except Exception as e:
@@ -542,8 +590,8 @@ async def res_metrics() -> Dict:
 @mcp.resource("fle://warnings")
 async def res_warnings() -> list:
     """Get active game warnings."""
-    _require_instance()
     try:
+        _ensure_connected()
         return instance.get_warnings()
     except Exception as e:
         return [f"error: {e}"]
@@ -552,12 +600,12 @@ async def res_warnings() -> list:
 @mcp.resource("fle://status")
 async def res_status() -> str:
     """Check connection status and step counter."""
-    if instance is None:
-        return "Not connected to Factorio server."
-    commits = len(vcs_repo.undo_stack) if vcs_repo else 0
+    connected = instance is not None
+    commits = len(vcs_repo.undo_stack) if vcs_repo and hasattr(vcs_repo, 'undo_stack') else 0
     reporting = f"reporting to run {RUN_ID}" if RUN_ID else "no broker reporting"
+    status = "connected" if connected else "disconnected"
     return (
-        f"Connected to Factorio at {SERVER_HOST}:{RCON_PORT}\n"
+        f"Status: {status} ({SERVER_HOST}:{RCON_PORT})\n"
         f"Step counter: {step_counter}, Commits: {commits}\n"
         f"Broker: {reporting}"
     )
@@ -566,53 +614,68 @@ async def res_status() -> str:
 @mcp.resource("fle://api/schema")
 async def res_schema() -> str:
     """Get the full API object model for writing Factorio code."""
-    import importlib.resources
-    from fle.env.utils.controller_loader.system_prompt_generator import SystemPromptGenerator
-    execution_path = importlib.resources.files("fle") / "env"
-    generator = SystemPromptGenerator(str(execution_path))
-    return f"\n\n{generator.types()}\n\n{generator.entities()}"
+    try:
+        import importlib.resources
+        from fle.env.utils.controller_loader.system_prompt_generator import SystemPromptGenerator
+        execution_path = importlib.resources.files("fle") / "env"
+        generator = SystemPromptGenerator(str(execution_path))
+        return f"\n\n{generator.types()}\n\n{generator.entities()}"
+    except Exception as e:
+        return f"Error loading schema: {e}"
 
 
 @mcp.resource("fle://api/manual", mime_type="application/json")
 async def res_manuals() -> dict:
     """List available API tool manuals."""
-    import importlib.resources
-    execution_path = importlib.resources.files("fle") / "env"
-    agent_tools_path = execution_path / "tools" / "agent"
-    if not agent_tools_path.exists() or not agent_tools_path.is_dir():
-        return {"error": "Agent tools directory not found"}
-    return {"tools": [d.name for d in agent_tools_path.iterdir() if d.is_dir()]}
+    try:
+        import importlib.resources
+        execution_path = importlib.resources.files("fle") / "env"
+        agent_tools_path = execution_path / "tools" / "agent"
+        if not agent_tools_path.exists() or not agent_tools_path.is_dir():
+            return {"error": "Agent tools directory not found"}
+        return {"tools": [d.name for d in agent_tools_path.iterdir() if d.is_dir()]}
+    except Exception as e:
+        return {"error": str(e)}
 
 
 @mcp.resource("fle://api/manual/{method}")
 async def res_manual(method: str) -> str:
     """Get API documentation for a specific method."""
-    import importlib.resources
-    from fle.env.utils.controller_loader.system_prompt_generator import SystemPromptGenerator
-    execution_path = importlib.resources.files("fle") / "env"
-    generator = SystemPromptGenerator(str(execution_path))
-    return generator.manual(method)
+    try:
+        import importlib.resources
+        from fle.env.utils.controller_loader.system_prompt_generator import SystemPromptGenerator
+        execution_path = importlib.resources.files("fle") / "env"
+        generator = SystemPromptGenerator(str(execution_path))
+        return generator.manual(method)
+    except Exception as e:
+        return f"Error loading manual: {e}"
 
 
 @mcp.resource("fle://prototypes")
 async def res_prototypes() -> List[str]:
     """Get the names of all entity prototypes available in the game."""
-    from fle.env.protocols._mcp.state import FactorioMCPState
-    recipes = FactorioMCPState.load_recipes_from_file(None)
-    return [r.name for r in recipes.values()]
+    try:
+        from fle.env.protocols._mcp.state import FactorioMCPState
+        recipes = FactorioMCPState.load_recipes_from_file(None)
+        return [r.name for r in recipes.values()]
+    except Exception as e:
+        return [f"error: {e}"]
 
 
 @mcp.resource("fle://recipe/{prototype}")
 async def res_recipe(prototype: str) -> str:
     """Get recipe details for a specific prototype."""
-    import json as _json
-    from fle.env.protocols._mcp.state import FactorioMCPState
-    recipes = FactorioMCPState.load_recipes_from_file(None)
-    if prototype not in recipes:
-        return f"Recipe '{prototype}' not found."
-    r = recipes[prototype]
-    return _json.dumps({"name": r.name, "ingredients": r.ingredients,
-                        "results": r.results, "energy_required": r.energy_required}, indent=2)
+    try:
+        import json as _json
+        from fle.env.protocols._mcp.state import FactorioMCPState
+        recipes = FactorioMCPState.load_recipes_from_file(None)
+        if prototype not in recipes:
+            return f"Recipe '{prototype}' not found."
+        r = recipes[prototype]
+        return _json.dumps({"name": r.name, "ingredients": r.ingredients,
+                            "results": r.results, "energy_required": r.energy_required}, indent=2)
+    except Exception as e:
+        return f"Error loading recipe: {e}"
 
 
 # ---------------------------------------------------------------------------

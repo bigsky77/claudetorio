@@ -68,6 +68,7 @@ class CreateRunRequest(BaseModel):
     step_timeout_seconds: int = 60
     enable_streaming: bool = False  # Opt-in: stream-client adds significant resource overhead
     manual: bool = False  # Skip LLM worker; return RCON details for direct access
+    scenario: Optional[str] = None  # e.g. "open_world", "default_lab_scenario"; None = vanilla save
     # Provider credentials (sent per-run from frontend)
     api_key: Optional[str] = None
     custom_api_url: Optional[str] = None
