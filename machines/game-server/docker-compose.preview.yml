@@ -1,0 +1,11 @@
+services:
+  caddy:
+    profiles: ["disabled"]
+
+  broker:
+    ports:
+      - "8080:8080"
+
+  frontend:
+    ports:
+      - "3000:3000"
