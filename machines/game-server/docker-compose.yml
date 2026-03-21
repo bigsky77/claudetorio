@@ -90,15 +90,15 @@ services:
       - FACTORIO_CONFIG_VOLUME=claudetorio_factorio_config
       - FACTORIO_SCENARIOS_VOLUME=claudetorio_factorio_scenarios
       # Stream server configuration
-      - STREAM_URL=${STREAM_URL:-https://stream.claudetorio.ai}
-      - STREAM_PUBLIC_HOST=${STREAM_PUBLIC_HOST:-157.254.222.104}
+      - STREAM_URL=${STREAM_URL-https://stream.claudetorio.ai}
+      - STREAM_PUBLIC_HOST=${STREAM_PUBLIC_HOST-157.254.222.104}
       - STREAM_BASE_PORT=${STREAM_BASE_PORT:-3003}
       # Two-server deployment: stream-agent on stream-server spawns stream-clients
-      - STREAM_AGENT_URL=${STREAM_AGENT_URL:-http://157.254.222.104:8090}
+      - STREAM_AGENT_URL=${STREAM_AGENT_URL-http://157.254.222.104:8090}
       - STREAM_AGENT_KEY=${STREAM_AGENT_KEY}
-      - STREAM_DOMAIN=${STREAM_DOMAIN:-stream.claudetorio.ai}
-      - GAME_SERVER_PUBLIC_HOST=${GAME_SERVER_PUBLIC_HOST:-157.254.222.103}
-      - STREAM_SERVER_PUBLIC_HOST=${STREAM_SERVER_PUBLIC_HOST:-157.254.222.104}
+      - STREAM_DOMAIN=${STREAM_DOMAIN-stream.claudetorio.ai}
+      - GAME_SERVER_PUBLIC_HOST=${GAME_SERVER_PUBLIC_HOST-157.254.222.103}
+      - STREAM_SERVER_PUBLIC_HOST=${STREAM_SERVER_PUBLIC_HOST-157.254.222.104}
       # Docker settings for run-worker containers
       - DOCKER_NETWORK=claudetorio_game
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
