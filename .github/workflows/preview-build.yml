@@ -137,35 +137,8 @@ jobs:
 
   # ─── Deploy to preview servers ──────────────────────────────────────────
 
-  deploy-changes:
-    needs: build
-    runs-on: ubuntu-latest
-    outputs:
-      game_server: ${{ steps.filter.outputs.game_server }}
-      stream_server: ${{ steps.filter.outputs.stream_server }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 2
-      - name: Detect changed paths
-        id: filter
-        run: |
-          CHANGED=$(git diff --name-only HEAD~1 HEAD)
-          echo "$CHANGED"
-          game_server=false
-          stream_server=false
-          if echo "$CHANGED" | grep -qE '^(packages/(broker|frontend|run-worker|stream-worker|fle|agent-runner)|machines/game-server|config)/'; then
-            game_server=true
-          fi
-          if echo "$CHANGED" | grep -qE '^(packages/(stream-agent|stream-client|stream-worker|vtuber-stream-client)|machines/stream-server)/'; then
-            stream_server=true
-          fi
-          echo "game_server=$game_server" >> $GITHUB_OUTPUT
-          echo "stream_server=$stream_server" >> $GITHUB_OUTPUT
-
   deploy-game-server:
-    needs: deploy-changes
-    if: needs.deploy-changes.outputs.game_server == 'true'
+    needs: build
     runs-on: ubuntu-latest
     steps:
       - name: Configure SSH
@@ -207,8 +180,7 @@ jobs:
           ssh -o ServerAliveInterval=10 -o ServerAliveCountMax=6 root@${{ secrets.PREVIEW_GAME_SERVER_HOST }} 'curl -sf http://localhost:8080/health' | grep -q '"healthy"'
 
   deploy-stream-server:
-    needs: deploy-changes
-    if: needs.deploy-changes.outputs.stream_server == 'true'
+    needs: build
     runs-on: ubuntu-latest
     steps:
       - name: Configure SSH
