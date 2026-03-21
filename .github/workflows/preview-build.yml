@@ -68,6 +68,7 @@ jobs:
               NEXT_PUBLIC_STREAM_URL=
               NEXT_PUBLIC_TWITCH_EMBED_PARENT=
               NEXT_PUBLIC_TWITCH_CHANNEL=
+              NEXT_PUBLIC_DASHBOARD_PUBLIC_CONTROL=true
           - name: run-worker
             context: ./packages
             dockerfile: run-worker/Dockerfile
@@ -157,8 +158,13 @@ jobs:
             echo "$GHCR_PAT" | docker login ghcr.io -u bigsky77 --password-stdin
             for img in broker frontend run-worker stream-worker; do
               echo "Pulling $img (preview)..."
-              docker pull ghcr.io/bigsky77/claudetorio-${img}:preview
-              docker tag ghcr.io/bigsky77/claudetorio-${img}:preview claudetorio-${img}:latest
+              if docker pull ghcr.io/bigsky77/claudetorio-${img}:preview; then
+                docker tag ghcr.io/bigsky77/claudetorio-${img}:preview claudetorio-${img}:latest
+              else
+                echo "No preview tag for $img, falling back to latest..."
+                docker pull ghcr.io/bigsky77/claudetorio-${img}:latest
+                docker tag ghcr.io/bigsky77/claudetorio-${img}:latest claudetorio-${img}:latest
+              fi
             done
             git -C /opt/claudetorio fetch origin staging
             git -C /opt/claudetorio reset --hard origin/staging
@@ -199,8 +205,13 @@ jobs:
             echo "$GHCR_PAT" | docker login ghcr.io -u bigsky77 --password-stdin
             for img in stream-agent stream-client stream-worker vtuber-stream-client; do
               echo "Pulling $img (preview)..."
-              docker pull ghcr.io/bigsky77/claudetorio-${img}:preview
-              docker tag ghcr.io/bigsky77/claudetorio-${img}:preview claudetorio-${img}:latest
+              if docker pull ghcr.io/bigsky77/claudetorio-${img}:preview; then
+                docker tag ghcr.io/bigsky77/claudetorio-${img}:preview claudetorio-${img}:latest
+              else
+                echo "No preview tag for $img, falling back to latest..."
+                docker pull ghcr.io/bigsky77/claudetorio-${img}:latest
+                docker tag ghcr.io/bigsky77/claudetorio-${img}:latest claudetorio-${img}:latest
+              fi
             done
             git -C /opt/claudetorio fetch origin staging
             git -C /opt/claudetorio reset --hard origin/staging
