@@ -123,6 +123,7 @@ class Run(Base):
     error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     final_score: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     map_seed: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    scenario: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     github_user_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("github_users.id"), nullable=True)
 
     steps: Mapped[List["RunStep"]] = relationship(back_populates="run")

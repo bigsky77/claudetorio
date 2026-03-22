@@ -32,6 +32,7 @@ export default function NewRunDrawer(props: {
   const [customApiKey, setCustomApiKey] = useState('');
 
   const [manual, setManual] = useState(false);
+  const [scenario, setScenario] = useState<string>('');
   const [rconResult, setRconResult] = useState<{ run_id: string; rcon_host: string; rcon_port: number; rcon_password: string } | null>(null);
 
   const [submitting, setSubmitting] = useState(false);
@@ -71,7 +72,12 @@ export default function NewRunDrawer(props: {
         max_steps: Number.isFinite(maxSteps) ? maxSteps : 200,
         step_timeout_seconds: Number.isFinite(stepTimeoutSeconds) ? stepTimeoutSeconds : 60,
         manual,
+        scenario: scenario || undefined,
       };
+
+      if (manual) {
+        body.model = 'external';
+      }
 
       if (!manual) {
         body.provider = providerApi;
@@ -158,6 +164,46 @@ export default function NewRunDrawer(props: {
               </div>
             )}
 
+            {/* Task, Steps, Scenario — visible in both modes */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <div className="text-white/60 text-xs font-semibold tracking-widest font-[family-name:var(--font-heading)]">
+                  Task
+                </div>
+                <input
+                  value={taskKey}
+                  onChange={(e) => setTaskKey(e.target.value)}
+                  className="w-full h-10 px-3 bg-surface-2 border border-surface-3 text-white/90 text-sm outline-none focus:border-accent-green/40"
+                />
+              </div>
+              <div className="space-y-2">
+                <div className="text-white/60 text-xs font-semibold tracking-widest font-[family-name:var(--font-heading)]">
+                  Steps
+                </div>
+                <input
+                  type="number"
+                  value={maxSteps}
+                  onChange={(e) => setMaxSteps(parseInt(e.target.value || '0', 10))}
+                  className="w-full h-10 px-3 bg-surface-2 border border-surface-3 text-white/90 text-sm outline-none focus:border-accent-green/40"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <div className="text-white/60 text-xs font-semibold tracking-widest font-[family-name:var(--font-heading)]">
+                Scenario
+              </div>
+              <select
+                value={scenario}
+                onChange={(e) => setScenario(e.target.value)}
+                className="w-full h-10 px-3 bg-surface-2 border border-surface-3 text-white/90 text-sm outline-none focus:border-accent-green/40"
+              >
+                <option value="">Vanilla (default)</option>
+                <option value="open_world">open_world</option>
+                <option value="default_lab_scenario">default_lab_scenario</option>
+              </select>
+            </div>
+
             {!manual && (<>
             {/* Provider */}
             <div className="space-y-2">
@@ -209,30 +255,6 @@ export default function NewRunDrawer(props: {
                 placeholder={providerUi === 'other' ? 'model-id' : ''}
                 className="w-full h-10 px-3 bg-surface-2 border border-surface-3 text-white/90 text-sm outline-none focus:border-accent-green/40"
               />
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-2">
-                <div className="text-white/60 text-xs font-semibold tracking-widest font-[family-name:var(--font-heading)]">
-                  Task
-                </div>
-                <input
-                  value={taskKey}
-                  onChange={(e) => setTaskKey(e.target.value)}
-                  className="w-full h-10 px-3 bg-surface-2 border border-surface-3 text-white/90 text-sm outline-none focus:border-accent-green/40"
-                />
-              </div>
-              <div className="space-y-2">
-                <div className="text-white/60 text-xs font-semibold tracking-widest font-[family-name:var(--font-heading)]">
-                  Steps
-                </div>
-                <input
-                  type="number"
-                  value={maxSteps}
-                  onChange={(e) => setMaxSteps(parseInt(e.target.value || '0', 10))}
-                  className="w-full h-10 px-3 bg-surface-2 border border-surface-3 text-white/90 text-sm outline-none focus:border-accent-green/40"
-                />
-              </div>
             </div>
 
             <div className="flex items-center justify-between">

@@ -1,0 +1,228 @@
+name: Preview Build and Deploy
+
+on:
+  push:
+    branches: [staging]
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  validate-game-compose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate game-server compose
+        run: docker compose --env-file machines/game-server/.env.example -f machines/game-server/docker-compose.yml config
+
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      broker: ${{ steps.filter.outputs.broker }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+      run_worker: ${{ steps.filter.outputs.run_worker }}
+      stream_agent: ${{ steps.filter.outputs.stream_agent }}
+      stream_worker: ${{ steps.filter.outputs.stream_worker }}
+      stream_client: ${{ steps.filter.outputs.stream_client }}
+      vtuber_stream_client: ${{ steps.filter.outputs.vtuber_stream_client }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            broker:
+              - 'packages/broker/**'
+              - 'packages/fle/**'
+            frontend:
+              - 'packages/frontend/**'
+            run_worker:
+              - 'packages/run-worker/**'
+              - 'packages/fle/**'
+            stream_agent:
+              - 'packages/stream-agent/**'
+            stream_worker:
+              - 'packages/stream-worker/**'
+            stream_client:
+              - 'packages/stream-client/**'
+            vtuber_stream_client:
+              - 'packages/vtuber-stream-client/**'
+
+  build:
+    needs: [validate-game-compose, changes]
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: broker
+            context: ./packages/broker
+            dockerfile: Dockerfile
+            build_args: ""
+          - name: frontend
+            context: ./packages/frontend
+            dockerfile: Dockerfile
+            build_args: |
+              NEXT_PUBLIC_API_URL=
+              NEXT_PUBLIC_STREAM_URL=
+              NEXT_PUBLIC_TWITCH_EMBED_PARENT=
+              NEXT_PUBLIC_TWITCH_CHANNEL=
+              NEXT_PUBLIC_DASHBOARD_PUBLIC_CONTROL=true
+          - name: run-worker
+            context: ./packages
+            dockerfile: run-worker/Dockerfile
+            build_args: ""
+          - name: stream-agent
+            context: ./packages/stream-agent
+            dockerfile: Dockerfile
+            build_args: ""
+          - name: stream-worker
+            context: ./packages
+            dockerfile: stream-worker/Dockerfile
+            build_args: ""
+          - name: stream-client
+            context: ./packages/stream-client
+            dockerfile: Dockerfile
+            build_args: ""
+          - name: vtuber-stream-client
+            context: ./packages/vtuber-stream-client
+            dockerfile: Dockerfile
+            build_args: ""
+
+    steps:
+      - name: Check if this image changed
+        id: should_build
+        run: |
+          case "${{ matrix.name }}" in
+            broker)               echo "build=${{ needs.changes.outputs.broker }}" >> $GITHUB_OUTPUT ;;
+            frontend)             echo "build=${{ needs.changes.outputs.frontend }}" >> $GITHUB_OUTPUT ;;
+            run-worker)           echo "build=${{ needs.changes.outputs.run_worker }}" >> $GITHUB_OUTPUT ;;
+            stream-agent)         echo "build=${{ needs.changes.outputs.stream_agent }}" >> $GITHUB_OUTPUT ;;
+            stream-worker)        echo "build=${{ needs.changes.outputs.stream_worker }}" >> $GITHUB_OUTPUT ;;
+            stream-client)        echo "build=${{ needs.changes.outputs.stream_client }}" >> $GITHUB_OUTPUT ;;
+            vtuber-stream-client) echo "build=${{ needs.changes.outputs.vtuber_stream_client }}" >> $GITHUB_OUTPUT ;;
+          esac
+
+      - uses: actions/checkout@v4
+        if: steps.should_build.outputs.build == 'true'
+
+      - name: Log in to GHCR
+        if: steps.should_build.outputs.build == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate image metadata
+        id: meta
+        if: steps.should_build.outputs.build == 'true'
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/bigsky77/claudetorio-${{ matrix.name }}
+          tags: |
+            type=raw,value=preview
+            type=sha
+
+      - name: Build and push
+        if: steps.should_build.outputs.build == 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.context }}/${{ matrix.dockerfile }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: ${{ matrix.build_args }}
+
+  # ─── Deploy to preview servers ──────────────────────────────────────────
+
+  deploy-game-server:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          echo "${{ secrets.KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+
+      - name: Pull images and sync repo
+        timeout-minutes: 5
+        run: |
+          ssh -o ServerAliveInterval=10 -o ServerAliveCountMax=6 root@${{ secrets.PREVIEW_GAME_SERVER_HOST }} bash -s << 'ENDSSH'
+            set -euo pipefail
+            set -a; source /opt/claudetorio/machines/game-server/.env; set +a
+            echo "$GHCR_PAT" | docker login ghcr.io -u bigsky77 --password-stdin
+            for img in broker frontend run-worker stream-worker; do
+              echo "Pulling $img (preview)..."
+              if docker pull ghcr.io/bigsky77/claudetorio-${img}:preview; then
+                docker tag ghcr.io/bigsky77/claudetorio-${img}:preview claudetorio-${img}:latest
+              else
+                echo "No preview tag for $img, falling back to latest..."
+                docker pull ghcr.io/bigsky77/claudetorio-${img}:latest
+                docker tag ghcr.io/bigsky77/claudetorio-${img}:latest claudetorio-${img}:latest
+              fi
+            done
+            git -C /opt/claudetorio fetch origin staging
+            git -C /opt/claudetorio reset --hard origin/staging
+          ENDSSH
+
+      - name: Stop broker-spawned containers
+        timeout-minutes: 2
+        run: |
+          ssh -o ServerAliveInterval=10 -o ServerAliveCountMax=6 root@${{ secrets.PREVIEW_GAME_SERVER_HOST }} 'docker ps -q --filter name=factorio --filter name=run-worker --filter name=stream-worker | xargs -r docker rm -f || true'
+
+      - name: Restart containers
+        timeout-minutes: 5
+        run: |
+          ssh -o ServerAliveInterval=10 -o ServerAliveCountMax=6 root@${{ secrets.PREVIEW_GAME_SERVER_HOST }} 'cd /opt/claudetorio/machines/game-server && docker compose -f docker-compose.yml -f docker-compose.preview.yml run --rm factorio-config-init && docker compose -f docker-compose.yml -f docker-compose.preview.yml run --rm factorio-scenarios-init && docker compose -f docker-compose.yml -f docker-compose.preview.yml up -d --remove-orphans'
+
+      - name: Health check
+        run: |
+          sleep 10
+          ssh -o ServerAliveInterval=10 -o ServerAliveCountMax=6 root@${{ secrets.PREVIEW_GAME_SERVER_HOST }} 'curl -sf http://localhost:8080/health' | grep -q '"healthy"'
+
+  deploy-stream-server:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          echo "${{ secrets.KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+
+      - name: Pull images and sync repo
+        timeout-minutes: 5
+        run: |
+          ssh -o ServerAliveInterval=10 -o ServerAliveCountMax=6 root@${{ secrets.PREVIEW_STREAM_SERVER_HOST }} bash -s << 'ENDSSH'
+            set -euo pipefail
+            set -a; source /opt/claudetorio/machines/stream-server/.env; set +a
+            echo "$GHCR_PAT" | docker login ghcr.io -u bigsky77 --password-stdin
+            for img in stream-agent stream-client stream-worker vtuber-stream-client; do
+              echo "Pulling $img (preview)..."
+              if docker pull ghcr.io/bigsky77/claudetorio-${img}:preview; then
+                docker tag ghcr.io/bigsky77/claudetorio-${img}:preview claudetorio-${img}:latest
+              else
+                echo "No preview tag for $img, falling back to latest..."
+                docker pull ghcr.io/bigsky77/claudetorio-${img}:latest
+                docker tag ghcr.io/bigsky77/claudetorio-${img}:latest claudetorio-${img}:latest
+              fi
+            done
+            git -C /opt/claudetorio fetch origin staging
+            git -C /opt/claudetorio reset --hard origin/staging
+          ENDSSH
+
+      - name: Restart containers
+        timeout-minutes: 5
+        run: |
+          ssh -o ServerAliveInterval=10 -o ServerAliveCountMax=6 root@${{ secrets.PREVIEW_STREAM_SERVER_HOST }} 'cd /opt/claudetorio/machines/stream-server && docker compose run --rm factorio-client-init && docker compose up -d --remove-orphans'
+
+      - name: Health check
+        run: |
+          sleep 10
+          ssh root@${{ secrets.PREVIEW_STREAM_SERVER_HOST }} 'curl -sf http://localhost:8090/health'

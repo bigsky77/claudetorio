@@ -17,11 +17,12 @@ def allocate_replay_slot(active_replays: dict) -> int | None:
     return None
 
 
-async def spawn_replay_factorio(run_id: str, slot: int, map_seed: int | None = None) -> bool:
+async def spawn_replay_factorio(run_id: str, slot: int, map_seed: int | None = None, scenario: str | None = None) -> bool:
     """Spawn a Factorio container for replay of run_id on replay slot.
 
     If map_seed is provided, the save is created with that seed so the replay
-    uses the same map as the original run.
+    uses the same map as the original run.  If scenario is provided, the server
+    loads from the scenario directory instead of creating a vanilla save.
     Returns True if the container started successfully.
     """
     if not config.FACTORIO_IMAGE:
@@ -64,32 +65,46 @@ async def spawn_replay_factorio(run_id: str, slot: int, map_seed: int | None = N
     factorio_bin = "/opt/factorio/bin/x64/factorio"
     save_path = "/factorio/saves/game.zip"
 
-    if map_seed is not None:
-        create_cmd = (
-            f"{factorio_bin} --create {save_path}"
-            f" --map-gen-settings /opt/factorio/config/map-gen-settings.json"
-            f" --map-settings /opt/factorio/config/map-settings.json"
-            f" --map-gen-seed {map_seed}"
+    if scenario:
+        # Load directly from the scenario directory (no --create needed)
+        print(f"[replay] Using scenario {scenario} for {run_id}", flush=True)
+        shell_cmd = (
+            f"{factorio_bin}"
+            f" --start-server-load-scenario {scenario}"
+            f" --port {udp_port}"
+            f" --rcon-port {rcon_port}"
+            f" --rcon-password {config.RCON_PASSWORD}"
+            f" --server-settings /opt/factorio/config/server-settings.json"
+            f" --server-adminlist /opt/factorio/config/server-adminlist.json"
+            f" --server-banlist /opt/factorio/config/server-banlist.json"
         )
-        print(f"[replay] Using seed {map_seed} for {run_id}", flush=True)
     else:
-        create_cmd = (
-            f"{factorio_bin} --create {save_path}"
-            f" --map-gen-settings /opt/factorio/config/map-gen-settings.json"
-            f" --map-settings /opt/factorio/config/map-settings.json"
-        )
+        if map_seed is not None:
+            create_cmd = (
+                f"{factorio_bin} --create {save_path}"
+                f" --map-gen-settings /opt/factorio/config/map-gen-settings.json"
+                f" --map-settings /opt/factorio/config/map-settings.json"
+                f" --map-gen-seed {map_seed}"
+            )
+            print(f"[replay] Using seed {map_seed} for {run_id}", flush=True)
+        else:
+            create_cmd = (
+                f"{factorio_bin} --create {save_path}"
+                f" --map-gen-settings /opt/factorio/config/map-gen-settings.json"
+                f" --map-settings /opt/factorio/config/map-settings.json"
+            )
 
-    shell_cmd = (
-        f"{create_cmd}"
-        f" && {factorio_bin}"
-        f" --start-server {save_path}"
-        f" --port {udp_port}"
-        f" --rcon-port {rcon_port}"
-        f" --rcon-password {config.RCON_PASSWORD}"
-        f" --server-settings /opt/factorio/config/server-settings.json"
-        f" --server-adminlist /opt/factorio/config/server-adminlist.json"
-        f" --server-banlist /opt/factorio/config/server-banlist.json"
-    )
+        shell_cmd = (
+            f"{create_cmd}"
+            f" && {factorio_bin}"
+            f" --start-server {save_path}"
+            f" --port {udp_port}"
+            f" --rcon-port {rcon_port}"
+            f" --rcon-password {config.RCON_PASSWORD}"
+            f" --server-settings /opt/factorio/config/server-settings.json"
+            f" --server-adminlist /opt/factorio/config/server-adminlist.json"
+            f" --server-banlist /opt/factorio/config/server-banlist.json"
+        )
     cmd += ["sh", "-c", shell_cmd]
 
     print(f"[replay] Spawning {container_name} (slot={slot}, udp={udp_port}, rcon={rcon_port})", flush=True)

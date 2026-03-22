@@ -2,7 +2,7 @@ name: PR Checks
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, staging]
 
 jobs:
   # ─── 1. Frontend: lint + typecheck + production build ────────────────────

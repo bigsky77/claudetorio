@@ -218,6 +218,7 @@ export async function createRun(body: {
   step_timeout_seconds?: number;
   enable_streaming?: boolean;
   manual?: boolean;
+  scenario?: string;
   api_key?: string;
   custom_api_url?: string;
   custom_api_key?: string;

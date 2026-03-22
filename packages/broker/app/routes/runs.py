@@ -403,6 +403,7 @@ async def create_run(
         model=req.model,
         max_steps=req.max_steps,
         step_timeout_seconds=req.step_timeout_seconds,
+        scenario=req.scenario or None,
         github_user_id=github_user_id,
     )
     db.add(run)
@@ -417,7 +418,7 @@ async def create_run(
         raise HTTPException(503, "Broker misconfigured: FACTORIO_IMAGE is not set")
 
     # Spawn Factorio server for this slot
-    await spawn_factorio(slot, publish_rcon=req.manual)
+    await spawn_factorio(slot, publish_rcon=req.manual, scenario=req.scenario or None)
     ready = await wait_for_factorio(slot)
     if not ready:
         await stop_factorio(slot)
@@ -594,7 +595,7 @@ async def start_replay(
         raise HTTPException(503, "No replay slots available (max 5 concurrent replays)")
 
     # Spawn replay Factorio server (use stored map seed for map fidelity)
-    ok = await spawn_replay_factorio(run_id, slot, map_seed=run.map_seed)
+    ok = await spawn_replay_factorio(run_id, slot, map_seed=run.map_seed, scenario=run.scenario)
     if not ok:
         raise HTTPException(503, "Failed to spawn replay Factorio server")
 

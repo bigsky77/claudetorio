@@ -16,7 +16,7 @@ async def _volume_has_content(volume_name: str) -> bool:
     return bool(stdout.decode().strip())
 
 
-async def spawn_factorio(slot: int, publish_rcon: bool = False) -> str | None:
+async def spawn_factorio(slot: int, publish_rcon: bool = False, scenario: str | None = None) -> str | None:
     """Spawn a Factorio server container for the given slot.
 
     Creates a vanilla save and starts the server. FLE scripts are loaded
@@ -82,21 +82,34 @@ async def spawn_factorio(slot: int, publish_rcon: bool = False) -> str | None:
     # connected peers as input actions — matching the MCP-era setup that
     # worked without desyncs.
     factorio_bin = "/opt/factorio/bin/x64/factorio"
-    save_path = "/factorio/saves/game.zip"
-    shell_cmd = (
-        f"{factorio_bin}"
-        f" --create {save_path}"
-        f" --map-gen-settings /opt/factorio/config/map-gen-settings.json"
-        f" --map-settings /opt/factorio/config/map-settings.json"
-        f" && {factorio_bin}"
-        f" --start-server {save_path}"
-        f" --port {udp_port}"
-        f" --rcon-port {config.BASE_RCON_PORT}"
-        f" --rcon-password {config.RCON_PASSWORD}"
-        f" --server-settings /opt/factorio/config/server-settings.json"
-        f" --server-adminlist /opt/factorio/config/server-adminlist.json"
-        f" --server-banlist /opt/factorio/config/server-banlist.json"
-    )
+    if scenario:
+        # Load from /factorio/scenarios/{scenario}/ (mounted via scenarios volume)
+        shell_cmd = (
+            f"{factorio_bin}"
+            f" --start-server-load-scenario {scenario}"
+            f" --port {udp_port}"
+            f" --rcon-port {config.BASE_RCON_PORT}"
+            f" --rcon-password {config.RCON_PASSWORD}"
+            f" --server-settings /opt/factorio/config/server-settings.json"
+            f" --server-adminlist /opt/factorio/config/server-adminlist.json"
+            f" --server-banlist /opt/factorio/config/server-banlist.json"
+        )
+    else:
+        save_path = "/factorio/saves/game.zip"
+        shell_cmd = (
+            f"{factorio_bin}"
+            f" --create {save_path}"
+            f" --map-gen-settings /opt/factorio/config/map-gen-settings.json"
+            f" --map-settings /opt/factorio/config/map-settings.json"
+            f" && {factorio_bin}"
+            f" --start-server {save_path}"
+            f" --port {udp_port}"
+            f" --rcon-port {config.BASE_RCON_PORT}"
+            f" --rcon-password {config.RCON_PASSWORD}"
+            f" --server-settings /opt/factorio/config/server-settings.json"
+            f" --server-adminlist /opt/factorio/config/server-adminlist.json"
+            f" --server-banlist /opt/factorio/config/server-banlist.json"
+        )
     cmd += ["sh", "-c", shell_cmd]
 
     print(f"[factorio] Spawning {container_name}: {' '.join(cmd)}", flush=True)
