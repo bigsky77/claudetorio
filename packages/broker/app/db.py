@@ -34,6 +34,11 @@ async def init_db():
         )
         await conn.execute(
             __import__("sqlalchemy").text(
+                "ALTER TABLE runs ADD COLUMN IF NOT EXISTS scenario VARCHAR"
+            )
+        )
+        await conn.execute(
+            __import__("sqlalchemy").text(
                 "ALTER TABLE runs ADD COLUMN IF NOT EXISTS github_user_id INTEGER REFERENCES github_users(id)"
             )
         )

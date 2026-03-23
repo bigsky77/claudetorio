@@ -286,3 +286,72 @@ def _sync_get_entities_list(slot: int, radius: int = 50) -> dict:
     except Exception as e:
         print(f"Entities list error for slot {slot}: {e}")
         return {"entities": [], "total": 0, "error": str(e)}
+
+
+def _sync_capture_observation(slot: int, radius: int = 100) -> dict | None:
+    """Capture full game state snapshot for anticheat validation.
+
+    Single RCON session: tick + inventory + research + entities.
+    """
+    try:
+        rcon = MCRcon(f"factorio-{slot}", config.RCON_PASSWORD, port=config.BASE_RCON_PORT)
+        rcon.connect()
+        try:
+            tick_resp = rcon.command("/silent-command rcon.print(game.tick)")
+            inv_resp = rcon.command(
+                "/silent-command rcon.print(game.table_to_json("
+                "game.players[1].get_main_inventory().get_contents()))"
+            )
+            research_resp = rcon.command(
+                "/silent-command local t={} "
+                "for name,tech in pairs(game.forces.player.technologies) do "
+                "if tech.researched then table.insert(t, name) end end "
+                "rcon.print(game.table_to_json(t))"
+            )
+            entities_resp = rcon.command(
+                f"/silent-command rcon.print(game.table_to_json("
+                f"global.actions.render(1, true, {radius}, 'none')))"
+            )
+        finally:
+            rcon.disconnect()
+
+        result: dict = {"tick": 0, "inventory": {}, "research": [], "entities": []}
+
+        try:
+            result["tick"] = int(tick_resp.strip())
+        except (ValueError, AttributeError):
+            pass
+
+        try:
+            if inv_resp and "Error" not in inv_resp:
+                result["inventory"] = json.loads(inv_resp)
+        except json.JSONDecodeError:
+            pass
+
+        try:
+            if research_resp:
+                result["research"] = json.loads(research_resp)
+        except json.JSONDecodeError:
+            pass
+
+        try:
+            if entities_resp and "Error" not in entities_resp:
+                data = json.loads(entities_resp)
+                for e in data.get("entities", [])[:500]:
+                    result["entities"].append({
+                        "name": e.get("name", "unknown").strip('"'),
+                        "position": e.get("position", {}),
+                        "direction": e.get("direction", 0),
+                    })
+        except json.JSONDecodeError:
+            pass
+
+        return result
+    except Exception as e:
+        print(f"Observation capture error for slot {slot}: {e}")
+        return None
+
+
+async def capture_observation(slot: int) -> dict | None:
+    """Async wrapper for observation capture."""
+    return _sync_capture_observation(slot)
