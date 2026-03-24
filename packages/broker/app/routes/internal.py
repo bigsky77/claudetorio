@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..dependencies import get_db, get_app_state, require_worker_key
 from ..models import Run, RunStep
 from ..schemas import RunStepCreate, CompleteRunRequest
+from ..services.rcon import capture_observation
 from ..services.slots import release_slot_lock
 from ..state import AppState
 
@@ -23,6 +24,11 @@ async def record_step(
     if not run:
         raise HTTPException(404, "Run not found")
 
+    # Independently capture game state via RCON (don't trust reporter)
+    observation = None
+    if run.slot is not None:
+        observation = await capture_observation(run.slot)
+
     step = RunStep(
         run_id=run_id,
         step_idx=req.step_idx,
@@ -34,7 +40,7 @@ async def record_step(
         ticks=req.ticks,
         token_usage=req.token_usage,
         achievements=req.achievements,
-        observation_summary=req.observation_summary,
+        observation_summary=observation,
     )
     db.add(step)
     await db.commit()
